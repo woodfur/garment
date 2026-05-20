@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Polar Butterfly project are documented here.
+All notable changes to the Garment platform are recorded here.
 
 ---
 
