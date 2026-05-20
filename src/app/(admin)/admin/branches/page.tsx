@@ -6,6 +6,9 @@ import type { Metadata } from "next";
 import type { Branch } from "@/types/database";
 import BranchCard from "@/components/admin/BranchCard";
 
+// Admin pages require auth — never statically prerender
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = { title: "Branches" };
 
 const getBranchesList = unstable_cache(

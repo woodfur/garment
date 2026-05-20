@@ -8,6 +8,9 @@ import InviteLeaderForm from "@/components/admin/InviteLeaderForm";
 import type { Metadata } from "next";
 import type { Branch, Profile, Invitation } from "@/types/database";
 
+// Admin pages require auth — never statically prerender
+export const dynamic = "force-dynamic";
+
 interface PageProps {
   params: Promise<{ branchId: string }>;
 }

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { formatDate } from "@/lib/utils";
 import type { Branch } from "@/types/database";
 
+// Admin pages require auth — never statically prerender
+export const dynamic = "force-dynamic";
+
 const getDashboardStats = unstable_cache(
   async () => {
     const supabase = createAdminClient();
