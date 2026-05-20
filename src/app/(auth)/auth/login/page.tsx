@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { Profile } from "@/types/database";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -32,17 +31,9 @@ export default function LoginPage() {
     }
 
     if (data.user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .single() as { data: Pick<Profile, "role"> | null };
-
-      if (profile?.role === "super_admin") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/branch/dashboard");
-      }
+      // Redirect to root — it handles role-based routing server-side
+      router.push("/");
+      router.refresh();
     }
   }
 

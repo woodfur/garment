@@ -1,24 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/types/database";
+import { getAuthContext } from "@/lib/auth";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const auth = await getAuthContext();
 
-  if (!user) {
-    redirect("/auth/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single() as { data: Pick<Profile, "role"> | null };
-
-  if (profile?.role === "super_admin") {
-    redirect("/admin/dashboard");
-  }
+  if (!auth) redirect("/auth/login");
+  if (auth.role === "super_admin") redirect("/admin/dashboard");
 
   redirect("/branch/dashboard");
 }

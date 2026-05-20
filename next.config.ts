@@ -11,11 +11,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Allow @imgly/background-removal WASM to load
-  webpack: (config) => {
-    config.resolve.fallback = { ...config.resolve.fallback, fs: false };
-    return config;
-  },
+  // Turbopack config (Next.js 16+ default)
+  turbopack: {},
 };
 
 export default nextConfig;
