@@ -24,6 +24,7 @@ export interface Database {
           role: UserRole;
           branch_id: string | null;
           avatar_url: string | null;
+          must_change_password: boolean;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["profiles"]["Row"], "created_at">;

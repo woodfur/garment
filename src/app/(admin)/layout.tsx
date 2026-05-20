@@ -7,7 +7,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const auth = await getAuthContext();
 
   if (!auth) redirect("/auth/login");
-  if (auth.role !== "super_admin") redirect("/auth/login");
+  if (auth.role !== "super_admin") redirect("/branch/dashboard");
 
   // Profile shape expected by AdminTopbar
   const profile = {
@@ -18,6 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     branch_id: auth.branchId,
     avatar_url: null,
     created_at: "",
+    must_change_password: false,
   };
 
   return (

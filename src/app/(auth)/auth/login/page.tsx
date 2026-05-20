@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const reason = searchParams.get("reason");
   const supabase = createClient();
 
   const [email, setEmail] = useState("");
@@ -57,9 +59,26 @@ export default function LoginPage() {
           Welcome back
         </h1>
         <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
-          Sign in to your Polar account
+          Sign in to your Garment account
         </p>
       </div>
+
+      {/* Reason banner */}
+      {reason === "unauthorized" && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: "0.625rem",
+          background: "rgba(33,150,243,0.08)",
+          border: "1px solid rgba(33,150,243,0.25)",
+          borderRadius: "var(--radius-md)",
+          padding: "0.75rem 0.875rem",
+          marginBottom: "1rem",
+          fontSize: "0.82rem",
+          color: "#90CAF9",
+        }}>
+          <Info size={15} style={{ flexShrink: 0 }} />
+          You don&apos;t have permission to access that page.
+        </div>
+      )}
 
       {/* Card */}
       <div className="card p-8">

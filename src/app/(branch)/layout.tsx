@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth";
 
+// Guards: session required + must_change_password must be false.
+// The change-password page is in (branch-auth) route group, NOT here,
+// so no pathname exclusion is needed — no infinite redirect risk.
 export default async function BranchLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const auth = await getAuthContext();
 
-  if (!session) redirect("/auth/login");
+  if (!auth) redirect("/auth/login");
+  if (auth.mustChangePassword) redirect("/branch/change-password");
 
-  // Both super_admin and branch_leader can access branch routes
   return <>{children}</>;
 }

@@ -7,6 +7,34 @@ All notable changes to the Garment platform are recorded here.
 ## [Unreleased] — 2026-05-20
 
 ### Added
+- **Branch leader account provisioning** — replaced broken `inviteUserByEmail` flow (required SMTP) with admin-provisioned accounts
+  - Super admin creates branch leader accounts directly from the branch detail page
+  - System generates a secure 12-character password (bias-free, excludes ambiguous chars)
+  - Password displayed once in a blocking modal with copy button — never stored
+  - New `POST /api/admin/create-leader` route with auth validation, branch existence check, and partial failure rollback
+  - `CreateLeaderForm` component replaces `InviteLeaderForm`
+- **Forced first-login password change**
+  - New `must_change_password` boolean column on `profiles` table (migration `garment_004`)
+  - Branch leaders redirected to `/branch/change-password` on first login — cannot be skipped
+  - Password strength indicator (Weak / Fair / Strong / Very Strong) with show/hide toggle
+  - New `POST /api/branch/change-password` route
+  - New `(branch-auth)` route group housing the change-password page (avoids Server Component pathname conflict)
+- **Role-based routing improvements**
+  - Root page (`/`) now resolves `must_change_password` directly — avoids double redirect on first login
+  - Branch leaders hitting admin routes now redirected to `/branch/dashboard` (not login page)
+  - Login page shows contextual banner for `?reason=unauthorized`
+- **Auth context updated** — `getAuthContext()` always reads full profile from DB including `must_change_password`
+
+### Removed
+- `InviteLeaderForm` component (replaced by `CreateLeaderForm`)
+- `POST /api/admin/invite` route (replaced by `POST /api/admin/create-leader`)
+- Invitation History table from branch detail page (stale — new flow does not use invitations table)
+
+### Fixed
+- Invite route "Forbidden" error — added DB fallback for role check when JWT hook is not active
+
+
+### Added
 - Branch dashboard placeholder page (`/branch/dashboard`) — resolves 404 for non-super-admin users
 - `(branch)` route group layout with session guard
 - `CHANGELOG.md` created

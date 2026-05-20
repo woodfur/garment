@@ -51,6 +51,7 @@ export async function POST(request: Request) {
     full_name: fullName || "Super Admin",
     role: "super_admin",
     branch_id: null,
+    must_change_password: false,
   });
 
   return NextResponse.json({ success: true, userId: authUser.user.id });
