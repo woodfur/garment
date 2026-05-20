@@ -11,13 +11,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email and branch are required" }, { status: 400 });
     }
 
-    // Verify caller is authenticated and is super_admin via JWT claims (no network call)
+    // Verify caller is authenticated and is super_admin
+    // Fast path: JWT claims (requires Supabase hook to be registered + re-login)
+    // Fallback: DB query for sessions predating the JWT hook
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const meta = session.user.app_metadata as Record<string, string> | undefined;
-    const callerRole = meta?.user_role;
+    let callerRole = meta?.user_role;
+
+    if (!callerRole) {
+      // JWT hook not active yet — fall back to DB
+      const admin = createAdminClient();
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+      callerRole = (profile as { role: string } | null)?.role;
+    }
+
     const callerId = session.user.id;
 
     if (callerRole !== "super_admin") {
