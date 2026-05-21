@@ -68,8 +68,8 @@ function LoginForm() {
           <Image
             src="/kharis-church-purple.png"
             alt="Kharis Church"
-            width={180}
-            height={90}
+            width={140}
+            height={70}
             style={{ objectFit: "contain" }}
             priority
           />
@@ -79,16 +79,13 @@ function LoginForm() {
         <div style={{ marginBottom: "2rem", textAlign: "center" }}>
           <h1 style={{
             fontFamily: "var(--font-heading)",
-            fontSize: "2rem",
+            fontSize: "1.5rem",
             fontWeight: 400,
             color: "var(--color-text-primary)",
-            marginBottom: "0.4rem",
+            marginBottom: 0,
           }}>
-            Welcome back
+            Garment
           </h1>
-          <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
-            Sign in to your Garment account
-          </p>
         </div>
 
         {/* Reason banner */}
