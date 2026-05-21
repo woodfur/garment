@@ -1,6 +1,12 @@
 export type UserRole = "super_admin" | "branch_leader";
 export type InvitationStatus = "pending" | "accepted" | "expired";
 export type UniformCategory = "top" | "bottom" | "footwear" | "accessory" | "outer" | "head";
+export type PreviewStatus = "none" | "processing" | "ready" | "failed";
+export type Gender = "male" | "female";
+export type BodyZone =
+  | "head" | "top" | "outer" | "bottom" | "footwear"
+  | "accessory_neck" | "accessory_wrist_left" | "accessory_wrist_right"
+  | "accessory_belt" | "accessory_chest_pin" | "accessory_bag";
 
 export interface Database {
   public: {
@@ -82,11 +88,57 @@ export interface Database {
           description: string | null;
           canvas_data: Record<string, unknown> | null;
           preview_url: string | null;
+          // AI preview columns (Phase 1 migration)
+          male_composite_url: string | null;
+          female_composite_url: string | null;
+          male_gif_url: string | null;
+          female_gif_url: string | null;
+          preview_status: PreviewStatus;
           created_by: string | null;
           created_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["combinations"]["Row"], "id" | "created_at">;
+        Insert: Omit<Database["public"]["Tables"]["combinations"]["Row"], "id" | "created_at" | "preview_status"> & { preview_status?: PreviewStatus };
         Update: Partial<Database["public"]["Tables"]["combinations"]["Insert"]>;
+      };
+      combination_zone_items: {
+        Row: {
+          id: string;
+          combination_id: string;
+          gender: Gender;
+          zone: BodyZone;
+          uniform_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["combination_zone_items"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["combination_zone_items"]["Insert"]>;
+      };
+      replicate_jobs: {
+        Row: {
+          id: string;
+          combination_id: string | null;
+          prediction_id: string;
+          job_type: string;
+          gender: Gender | null;
+          sequence_index: number;
+          total_steps: number;
+          current_image_url: string | null;
+          next_uniform_id: string | null;
+          status: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["replicate_jobs"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["replicate_jobs"]["Insert"]>;
+      };
+      schedule_assignments: {
+        Row: {
+          id: string;
+          schedule_id: string;
+          department_id: string;
+          combination_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["schedule_assignments"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["schedule_assignments"]["Insert"]>;
       };
       department_members: {
         Row: {
@@ -185,7 +237,9 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
-    Enums: Record<string, never>;
+    Enums: {
+      body_zone: BodyZone;
+    };
   };
 }
 
@@ -198,7 +252,10 @@ export type DepartmentMember = Database["public"]["Tables"]["department_members"
 export type Uniform = Database["public"]["Tables"]["uniforms"]["Row"];
 export type Combination = Database["public"]["Tables"]["combinations"]["Row"];
 export type CombinationItem = Database["public"]["Tables"]["combination_items"]["Row"];
+export type CombinationZoneItem = Database["public"]["Tables"]["combination_zone_items"]["Row"];
+export type ReplicateJob = Database["public"]["Tables"]["replicate_jobs"]["Row"];
 export type Schedule = Database["public"]["Tables"]["schedules"]["Row"];
+export type ScheduleAssignment = Database["public"]["Tables"]["schedule_assignments"]["Row"];
 export type InventoryItem = Database["public"]["Tables"]["inventory_items"]["Row"];
 export type InventoryTransaction = Database["public"]["Tables"]["inventory_transactions"]["Row"];
 export type Announcement = Database["public"]["Tables"]["announcements"]["Row"];
@@ -209,4 +266,17 @@ export type DepartmentWithCounts = Department & {
   uniform_count: number;
   combination_count: number;
   member_count: number;
+};
+
+// Zone item with joined uniform data
+export type CombinationZoneItemWithUniform = CombinationZoneItem & {
+  uniform: Uniform;
+};
+
+// Schedule with nested assignments
+export type ScheduleWithAssignments = Schedule & {
+  assignments: Array<ScheduleAssignment & {
+    department: Department;
+    combination: Combination;
+  }>;
 };

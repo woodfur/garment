@@ -4,7 +4,86 @@ All notable changes to the Garment platform are recorded here.
 
 ---
 
+## [Unreleased] — 2026-05-21 (Combination_Builder_Redesign — Phases 1–8 & CSS)
+
+### Added — Database Migration (Phase 1)
+- `combinations`: Added `male_composite_url`, `female_composite_url`, `male_gif_url`, `female_gif_url`, `preview_status` columns.
+- `combination_zone_items` table: Zone-based outfit assignment (ENUM `body_zone`, one-per-zone-per-gender UNIQUE, ON DELETE CASCADE).
+- `replicate_jobs` table: Async AI pipeline state tracking (composite chain + animation jobs).
+- `schedule_assignments` table: Multi-department schedule assignment junction table.
+- `body_zone` PostgreSQL ENUM: extensible via `ALTER TYPE ... ADD VALUE`.
+
+### Added — TypeScript Types (Phase 2)
+- `PreviewStatus`, `Gender`, `BodyZone` types in `database.ts`.
+- `CombinationZoneItem`, `ReplicateJob`, `ScheduleAssignment` row types.
+- `src/types/zones.ts`: `ZONE_POSITIONS`, `ZONE_CATEGORIES`, `ZONE_LAYER_ORDER`, `STANDARD_ZONES`, `ACCESSORY_ZONES`.
+
+### Added — AI Pipeline (Phases 3–4)
+- `src/lib/mannequin-config.ts`: Env-backed mannequin character URLs.
+- `src/lib/replicate.ts`: Replicate service — CatVTON composite chain, SVD animation, Flux Dev character generation. Dev polling fallback; production webhook-driven.
+
+### Added — API Routes (Phases 5–6)
+- `GET/POST /api/branch/combinations/[id]/zones` + `DELETE .../zones/[gender]/[zone]` + `GET .../preview-status`
+- `POST /api/branch/combinations/[id]/generate-preview` — parallel male+female chains, 409/429 guards, force param
+- `POST /api/webhooks/replicate` — chain continuation + video finalisation
+- `POST /api/admin/generate-mannequins` — super_admin-only character generation
+
+### Changed — Hybrid Builder UI (Phase 7)
+- `CombinationBuilderClient.tsx` fully replaced: 3-step flow (Department → Zone Assignment → Save & Generate).
+- Step 2: Dual mannequin silhouettes with absolute-positioned zone hotspots, HTML5 DnD, click-to-assign panel, accessory expand.
+- Step 3: Zone summary, bg-removal warnings, Save & Generate AI Preview / Save without Preview.
+
+### Changed — Combinations List + Detail (Phase 8)
+- `CombinationsPageClient.tsx`: Preview status badges, dual-video cards, per-card polling (5s, 10-min timeout), Generate/Retry/Regenerate.
+- `CombinationDetailClient.tsx` + `[combinationId]/page.tsx` (new): Zone assignment table, AI preview section, delete/regenerate.
+
+### Added — CSS
+- `globals.css`: Builder/viewer utility classes (`.builder-*`, `.zone-*`, `.mannequin-*`, `.uniform-panel-*`, `.viewer-*`).
+
+---
+
+## [Unreleased] — 2026-05-21 (Phases 9 & 10: Schedules API, Public Viewer & Admin Mannequin Route)
+
+### Added — Schedules API
+- `GET/POST /api/branch/schedules` — list and create service date schedules scoped to the authenticated branch leader's branch.
+- `PATCH/DELETE /api/branch/schedules/[scheduleId]` — update title/date/notes or delete a schedule (branch-scoped guard on every mutation).
+- `POST/DELETE /api/branch/schedules/[scheduleId]/assignments` — assign (upsert on `schedule_id,department_id`) or remove a combination-to-department assignment for a schedule.
+
+### Added — Public Viewer (`/view/[code]`)
+- Server-rendered public page accessible via a branch's `view_code`. No authentication required.
+- Displays all upcoming service dates with department assignments; shows male/female video previews (autoplay, loop, muted) with download links when `preview_status === 'ready'`, otherwise shows a "coming soon" placeholder.
+- `loading.tsx` — shimmer skeleton while page fetches.
+- `not-found.tsx` — user-friendly 404 when `view_code` is invalid.
+
+### Added — Admin Mannequin Generation Route
+- `POST /api/admin/generate-mannequins` — super_admin-only route. Calls Replicate Flux Dev to generate male/female character images, uploads them to the `mannequins` Supabase storage bucket, and returns public URLs with the corresponding env var names to paste.
+
+### Added — Schedule UI
+- `src/components/branch/SchedulePageClient.tsx` — full `'use client'` schedule management page:
+  - Create service date form (date, title, optional notes).
+  - Per-schedule assignment form: selects department then loads matching combinations (filtered client-side to `department_id`).
+  - Department assignments shown inline with thumbnail video previews (male/female) when ready, status badge otherwise.
+  - Delete schedule and remove individual assignments.
+  - Dark lavender glassmorphism design consistent with rest of the app.
+- `src/app/(branch)/branch/schedule/page.tsx` updated — now renders `SchedulePageClient` (was a placeholder).
+- `src/app/(branch)/branch/schedule/loading.tsx` — skeleton loading state.
+
+### Files Changed
+`src/app/api/admin/generate-mannequins/route.ts` *(new)*
+`src/app/api/branch/schedules/route.ts` *(new)*
+`src/app/api/branch/schedules/[scheduleId]/route.ts` *(new)*
+`src/app/api/branch/schedules/[scheduleId]/assignments/route.ts` *(new)*
+`src/app/view/[code]/page.tsx` *(new)*
+`src/app/view/[code]/loading.tsx` *(new)*
+`src/app/view/[code]/not-found.tsx` *(new)*
+`src/app/(branch)/branch/schedule/page.tsx` *(updated)*
+`src/app/(branch)/branch/schedule/loading.tsx` *(new)*
+`src/components/branch/SchedulePageClient.tsx` *(new)*
+
+---
+
 ## [Unreleased] — 2026-05-21 (Departments, Uniforms, Combinations Feature)
+
 
 ### Added — Departments
 - **Departments page** (`/branch/departments`): Branch leaders can create, edit, and delete departments scoped to their branch.
