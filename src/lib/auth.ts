@@ -25,15 +25,20 @@ export interface AuthClaims {
 export const getAuthContext = cache(async (): Promise<AuthClaims | null> => {
   try {
     const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { user }, error: sessionError } = await supabase.auth.getUser();
 
-    if (!session) return null;
+    if (sessionError || !user) {
+      if (sessionError) {
+        console.warn("[getAuthContext] session error (stale token):", sessionError.message);
+      }
+      return null;
+    }
 
     const admin = createAdminClient();
     const { data: profile } = await admin
       .from("profiles")
       .select("role, branch_id, must_change_password, full_name")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     if (!profile) return null;
@@ -46,14 +51,15 @@ export const getAuthContext = cache(async (): Promise<AuthClaims | null> => {
     };
 
     return {
-      userId: session.user.id,
-      email: session.user.email ?? "",
+      userId: user.id,
+      email: user.email ?? "",
       role: p.role as AuthClaims["role"],
       branchId: p.branch_id,
       mustChangePassword: p.must_change_password,
       fullName: p.full_name,
     };
-  } catch {
+  } catch (err) {
+    console.error("[getAuthContext] failed:", err);
     return null;
   }
 });

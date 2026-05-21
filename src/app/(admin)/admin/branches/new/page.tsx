@@ -68,7 +68,7 @@ export default function NewBranchPage() {
         New Branch
       </h1>
       <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", marginBottom: "2rem" }}>
-        Create a new church branch on the Polar platform.
+        Create a new church branch on the Garment platform.
       </p>
 
       <form onSubmit={handleSubmit} id="new-branch-form" className="card" style={{ padding: "2rem" }}>
@@ -102,7 +102,7 @@ export default function NewBranchPage() {
                 position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)",
                 color: "var(--color-text-disabled)", fontSize: "0.85rem", pointerEvents: "none",
               }}>
-                polar.app/view/
+                garment.app/view/
               </span>
               <input
                 id="branch-slug"
@@ -174,7 +174,7 @@ export default function NewBranchPage() {
             disabled={loading}
             style={{
               background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-              color: "#0D0F14", fontWeight: 600, fontSize: "0.9rem",
+              color: "#FFFFFF", fontWeight: 600, fontSize: "0.9rem",
               padding: "0.75rem", borderRadius: "var(--radius-md)", border: "none",
               cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
               display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",

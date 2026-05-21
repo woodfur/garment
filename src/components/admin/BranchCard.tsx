@@ -32,7 +32,7 @@ export default function BranchCard({ branch }: { branch: Branch }) {
             display: "flex", alignItems: "center", justifyContent: "center",
             flexShrink: 0,
           }}>
-            <Building2 size={20} color="#0D0F14" />
+            <Building2 size={20} color="#FFFFFF" />
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{branch.name}</div>

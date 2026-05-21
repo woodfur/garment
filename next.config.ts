@@ -1,3 +1,4 @@
+import path from "path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -12,7 +13,11 @@ const nextConfig: NextConfig = {
     ],
   },
   // Turbopack config (Next.js 16+ default)
-  turbopack: {},
+  // root: explicitly set to prevent Turbopack from misdetecting the workspace
+  // root as the parent directory when multiple package-lock.json files exist.
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
 };
 
 export default nextConfig;

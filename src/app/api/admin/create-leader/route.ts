@@ -43,12 +43,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email and branch are required" }, { status: 400 });
     }
 
-    // Authenticate caller — JWT fast path with DB fallback
+    // Authenticate caller — getUser() verifies the JWT against Supabase Auth server
     const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const meta = session.user.app_metadata as Record<string, string> | undefined;
+    const meta = user.app_metadata as Record<string, string> | undefined;
     let callerRole = meta?.user_role;
 
     if (!callerRole) {
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       const { data: profile } = await admin
         .from("profiles")
         .select("role")
-        .eq("id", session.user.id)
+        .eq("id", user.id)
         .single();
       callerRole = (profile as { role: string } | null)?.role;
     }

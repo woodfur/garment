@@ -87,9 +87,9 @@ export default function BranchSidebar({ branchName, leaderName }: BranchSidebarP
                 textDecoration: "none",
                 fontSize: "0.875rem",
                 fontWeight: active ? 600 : 400,
-                color: active ? "var(--color-gold)" : "var(--color-text-muted)",
-                background: active ? "rgba(201,168,76,0.08)" : "transparent",
-                border: active ? "1px solid rgba(201,168,76,0.15)" : "1px solid transparent",
+                color: active ? "var(--color-primary-dark)" : "var(--color-text-muted)",
+                background: active ? "var(--color-primary-light)" : "transparent",
+                border: active ? "1px solid rgba(155,135,245,0.25)" : "1px solid transparent",
                 transition: "all 0.15s",
               }}
             >

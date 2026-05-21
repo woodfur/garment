@@ -4,7 +4,46 @@ All notable changes to the Garment platform are recorded here.
 
 ---
 
+## [Unreleased] — 2026-05-21 (Light Lavender Theme)
+
+### Changed — UI/UX Redesign
+- **Full light lavender theme**: Replaced dark charcoal + gold theme with a soft lavender light theme across the entire application. Primary interactive colour is `#7C5CBF` (mid-violet, WCAG AA on white: 5.2:1), decorative tint accent is `#9B87F5` (light lavender).
+- **Typography**: Replaced Outfit + Inter with `DM Serif Display` (headings, 400 weight only) + `DM Sans` (body/UI, 400/500/600/700). Updated `h1–h6` base font-weight from 600 to 400 for DM Serif Display compatibility.
+- **Split-panel login**: Login page redesigned with a lavender gradient left panel (SVG fabric illustration + Garment wordmark) and a clean white right panel. Mobile-responsive: left panel hidden on ≤768px. Suspense boundary preserved in correct position.
+- **Brand name**: Updated "Polar" → "Garment" across all user-facing metadata, page text, and URL prefixes (`polar.app/view/` → `garment.app/view/`).
+- **Globals.css overhaul**: Complete `@theme` token replacement — new backgrounds, borders, text, semantic colours (warning now `#D97706` amber-600 for WCAG AA), shadows, and scrollbar styles. Added `.btn-primary`, `.btn-secondary`, `.primary-gradient`, `.text-primary-gradient` utility classes.
+- **Backward-compatible alias strategy**: `--color-gold` → `var(--color-primary-dark)` (= `#7C5CBF`), `--color-gold-light` → `var(--color-primary)` (= `#9B87F5`), `--color-gold-muted` → `var(--color-primary-light)` (= `#EDE9F8`). All existing `var(--color-gold)` references cascade automatically.
+- **Button text**: All 14 instances of hardcoded `#0D0F14` (dark) button text updated to `#FFFFFF` (white) for contrast against lavender gradient buttons.
+- **Hardcoded rgba tints**: All 26 instances of `rgba(201,168,76,*)` (gold tints) replaced with `rgba(155,135,245,*)` (lavender tints) across AdminSidebar, BranchSidebar, QuickActionsGrid, CreateLeaderForm, all dashboards, and all 5 branch feature pages.
+- **Sidebar active state**: Active nav pill background `#EDE9F8`, border `rgba(155,135,245,0.25)`, text `var(--color-primary-dark)`.
+- **Avatar initials**: AdminTopbar and BranchTopbar avatar text changed from dark to white.
+- **Auth layout**: `(auth)/layout.tsx` converted to a passthrough `<>{children}</>` to support split-panel login layout.
+- **Password strength colours**: "Strong" now uses `var(--color-success)` (was hardcoded `#4CAF50`); "Fair" now uses `var(--color-warning)` = `#D97706` (was `var(--color-gold)` which would have resolved to lavender — semantically incorrect for a warning).
+- **Modal shadows**: `CreateLeaderForm` credential modal box-shadow lightened from `rgba(0,0,0,0.5)` to `rgba(155,135,245,0.15)` for light theme.
+- **Theme-color meta**: Added `<meta name="theme-color" content="#7C5CBF">` for mobile browser chrome.
+
+### Files Changed
+`src/app/layout.tsx` · `src/app/globals.css` · `src/app/(auth)/layout.tsx` · `src/app/(auth)/auth/login/page.tsx` · `src/app/(branch-auth)/branch/change-password/page.tsx` · `src/app/(admin)/admin/dashboard/page.tsx` · `src/app/(admin)/admin/branches/page.tsx` · `src/app/(admin)/admin/branches/new/page.tsx` · `src/app/(admin)/admin/branches/[branchId]/page.tsx` · `src/app/(branch)/branch/dashboard/page.tsx` · `src/app/(branch)/branch/uniforms/page.tsx` · `src/app/(branch)/branch/combinations/page.tsx` · `src/app/(branch)/branch/schedule/page.tsx` · `src/app/(branch)/branch/inventory/page.tsx` · `src/app/(branch)/branch/announcements/page.tsx` · `src/components/admin/AdminSidebar.tsx` · `src/components/admin/AdminTopbar.tsx` · `src/components/admin/BranchCard.tsx` · `src/components/admin/CreateLeaderForm.tsx` · `src/components/branch/BranchSidebar.tsx` · `src/components/branch/BranchTopbar.tsx` · `src/components/branch/QuickActionsGrid.tsx`
+
+---
+
 ## [Unreleased] — 2026-05-21
+
+### Fixed
+- **404 on `localhost:3000`** — Turbopack was misdetecting the workspace root as `/Users/media/` (home dir) instead of the project directory due to multiple `package-lock.json` files on the machine. Fixed by explicitly setting `turbopack.root: path.resolve(__dirname)` in `next.config.ts`.
+- **Silent auth errors** — `getAuthContext()` catch block now logs errors via `console.error("[getAuthContext] failed:", err)` so Supabase/cookie failures surface in the dev terminal instead of disappearing silently.
+- **Duplicate `auth/` segment ambiguity** — `src/app/auth/callback/route.ts` (bare directory) was coexisting with `src/app/(auth)/auth/` (route group), creating routing ambiguity in Next.js 16 + Turbopack. Moved `auth/callback/route.ts` into the `(auth)` route group. URL `/auth/callback` is unchanged.
+- **Stale refresh token infinite loop** — `proxy.ts` was redirecting users from `/auth/login` back to `/` whenever a Supabase session cookie was **present** — but it only checked cookie existence, not validity. An expired/invalid token looked authenticated to the proxy, so any user with a stale cookie was permanently bounced between `/` and `/auth/login`. Fixed by removing the proxy-level login redirect entirely; the login page's own server-side auth check already handles redirecting valid sessions away from login.
+- **`getAuthContext()` stale token handling** — Simplified: now logs a warning and returns `null` (which routes to login). Removed the earlier overcomplicated `redirect("/api/auth/signout")` approach that was unnecessary once the proxy loop was fixed.
+- **`CreateLeaderForm` crash** — `handleSubmit` had no try/catch: if the API returned a non-JSON body or a JSON body with missing fields, `data.password` threw an uncaught TypeError. Fixed by wrapping the fetch in try/catch, adding a nested guard around `res.json()`, and validating `data.email`/`data.password` before calling `setCredentials`. `handleCopy` also now guards against null `credentials` and unavailable Clipboard API.
+- **"Database error creating new user"** — `must_change_password` was added to `profiles` as `NOT NULL` with no `DEFAULT`. The `handle_new_user` trigger (fires on every `auth.users` INSERT) didn't include this column, causing a NOT NULL constraint violation that rolled back the entire user creation. Fixed via migration: added `DEFAULT false` to the column and updated the trigger to explicitly insert `must_change_password = false`.
+- **`getSession()` security warnings** — `getAuthContext()` and `create-leader` API route were using `supabase.auth.getSession()` (reads unverified cookie) instead of `supabase.auth.getUser()` (validates against Supabase Auth server). Replaced both with `getUser()` to eliminate the warning and properly validate tokens.
+- **RSC event handler crash on branch dashboard** — `BranchDashboardPage` is a Server Component but contained `onMouseEnter`/`onMouseLeave` on `<Link>` elements in the Quick Actions grid. Extracted the grid into `src/components/branch/QuickActionsGrid.tsx` (a `"use client"` component) so event handlers are legal.
+
+### Added
+- **`GET /api/auth/signout`** — Route Handler for explicit sign-out. Properly clears Supabase `sb-*` cookies (Route Handlers can write cookies; Server Components cannot) then redirects to `/auth/login`. Used by sidebar sign-out buttons.
+
+
 
 ### Added
 - **Branch Dashboard** — full data-driven overview page replacing the placeholder

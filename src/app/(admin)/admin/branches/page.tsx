@@ -39,7 +39,7 @@ export default async function BranchesPage() {
         </div>
         <Link href="/admin/branches/new" id="create-branch-btn" style={{
           background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-          color: "#0D0F14",
+          color: "#FFFFFF",
           fontWeight: 600,
           fontSize: "0.875rem",
           padding: "0.65rem 1.25rem",
@@ -61,7 +61,7 @@ export default async function BranchesPage() {
           </p>
           <Link href="/admin/branches/new" style={{
             background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-            color: "#0D0F14", fontWeight: 600, padding: "0.65rem 1.5rem",
+            color: "#FFFFFF", fontWeight: 600, padding: "0.65rem 1.5rem",
             borderRadius: "var(--radius-md)", textDecoration: "none", fontSize: "0.875rem",
           }}>
             Create Branch

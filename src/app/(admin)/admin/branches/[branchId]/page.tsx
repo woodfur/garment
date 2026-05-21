@@ -60,7 +60,7 @@ export default async function BranchDetailPage({ params }: PageProps) {
           background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
           borderRadius: "var(--radius-lg)", display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <Building2 size={26} color="#0D0F14" />
+          <Building2 size={26} color="#FFFFFF" />
         </div>
         <div>
           <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem", marginBottom: "0.2rem" }}>
@@ -69,7 +69,7 @@ export default async function BranchDetailPage({ params }: PageProps) {
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>/{branch.slug}</span>
             <span style={{
-              background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.2)",
+              background: "rgba(155,135,245,0.1)", border: "1px solid rgba(155,135,245,0.2)",
               color: "var(--color-gold)", padding: "0.2rem 0.7rem",
               borderRadius: "var(--radius-full)", fontSize: "0.78rem", fontWeight: 700, letterSpacing: "0.06em",
             }}>
@@ -108,7 +108,7 @@ export default async function BranchDetailPage({ params }: PageProps) {
                     width: 36, height: 36, borderRadius: "var(--radius-full)",
                     background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontWeight: 700, fontSize: "0.8rem", color: "#0D0F14", flexShrink: 0,
+                    fontWeight: 700, fontSize: "0.8rem", color: "#FFFFFF", flexShrink: 0,
                   }}>
                     {(leader.full_name || leader.email)[0].toUpperCase()}
                   </div>

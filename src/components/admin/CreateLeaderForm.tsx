@@ -26,28 +26,54 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/admin/create-leader", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, fullName, branchId }),
-    });
+    try {
+      const res = await fetch("/api/admin/create-leader", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, fullName, branchId }),
+      });
 
-    const data = await res.json();
+      // Parse JSON safely — non-JSON bodies (HTML error pages) would throw here
+      let data: { email?: string; password?: string; error?: string } | null = null;
+      try {
+        data = await res.json();
+      } catch {
+        setError("Unexpected server response. Please try again.");
+        setLoading(false);
+        return;
+      }
 
-    if (!res.ok) {
-      setError(data.error || "Failed to create account");
+      if (!res.ok) {
+        setError(data?.error || "Failed to create account");
+        setLoading(false);
+        return;
+      }
+
+      // Guard: validate the expected fields are present before using them
+      if (!data?.email || !data?.password) {
+        setError("Server returned incomplete credentials. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      setCredentials({ email: data.email, password: data.password });
       setLoading(false);
-      return;
+    } catch (err) {
+      console.error("[CreateLeaderForm] handleSubmit error:", err);
+      setError("An unexpected error occurred. Please try again.");
+      setLoading(false);
     }
-
-    setCredentials({ email: data.email, password: data.password });
-    setLoading(false);
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(credentials!.password);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    if (!credentials) return;
+    try {
+      await navigator.clipboard.writeText(credentials.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Clipboard API unavailable (non-HTTPS or browser restriction) — silently ignore
+    }
   }
 
   function handleDone() {
@@ -91,14 +117,14 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
             padding: "2rem",
             maxWidth: 460,
             width: "100%",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+            boxShadow: "0 8px 32px rgba(155,135,245,0.15)",
           }}>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
               <div style={{
                 width: 42, height: 42,
-                background: "rgba(201,168,76,0.15)",
-                border: "1px solid rgba(201,168,76,0.3)",
+                background: "rgba(155,135,245,0.15)",
+                border: "1px solid rgba(155,135,245,0.3)",
                 borderRadius: "var(--radius-md)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0,
@@ -201,7 +227,7 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
               style={{
                 width: "100%",
                 background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-                color: "#0D0F14",
+                color: "#FFFFFF",
                 fontWeight: 700,
                 fontSize: "0.9rem",
                 padding: "0.75rem",
@@ -278,7 +304,7 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
           disabled={loading}
           style={{
             background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-            color: "#0D0F14", fontWeight: 600, fontSize: "0.875rem",
+            color: "#FFFFFF", fontWeight: 600, fontSize: "0.875rem",
             padding: "0.65rem", borderRadius: "var(--radius-md)", border: "none",
             cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
             display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",

@@ -8,7 +8,7 @@ export default function CombinationsPage() {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center" }}>
       <div style={{
         width: 64, height: 64, borderRadius: "var(--radius-lg)",
-        background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.2)",
+        background: "rgba(155,135,245,0.1)", border: "1px solid rgba(155,135,245,0.2)",
         display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.5rem",
       }}>
         <Layers size={28} color="var(--color-gold)" />

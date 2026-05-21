@@ -77,7 +77,7 @@ export default async function AdminDashboardPage() {
           </h2>
           <Link href="/admin/branches/new" id="new-branch-link" style={{
             background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-            color: "#0D0F14",
+            color: "#FFFFFF",
             fontWeight: 600,
             fontSize: "0.8rem",
             padding: "0.5rem 1rem",
@@ -114,8 +114,8 @@ export default async function AdminDashboardPage() {
                   <td style={{ padding: "0.875rem 0", color: "var(--color-text-muted)", fontSize: "0.8rem" }}>{branch.slug}</td>
                   <td style={{ padding: "0.875rem 0" }}>
                     <span style={{
-                      background: "rgba(201,168,76,0.1)",
-                      border: "1px solid rgba(201,168,76,0.2)",
+                      background: "rgba(155,135,245,0.1)",
+                      border: "1px solid rgba(155,135,245,0.2)",
                       color: "var(--color-gold)",
                       padding: "0.2rem 0.6rem",
                       borderRadius: "var(--radius-full)",

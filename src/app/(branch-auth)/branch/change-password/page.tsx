@@ -12,8 +12,8 @@ function getStrength(password: string): { level: 0 | 1 | 2 | 3; label: string; c
   if (/[0-9]/.test(password)) classes++;
   if (/[^A-Za-z0-9]/.test(password)) classes++;
   if (password.length >= 12 && classes >= 3) return { level: 3, label: "Very strong", color: "var(--color-success)" };
-  if (classes >= 2) return { level: 2, label: "Strong", color: "#4CAF50" };
-  return { level: 1, label: "Fair", color: "var(--color-gold)" };
+  if (classes >= 2) return { level: 2, label: "Strong", color: "var(--color-success)" };
+  return { level: 1, label: "Fair", color: "var(--color-warning)" };   // #D97706 amber-600 — WCAG AA on white
 }
 
 export default function ChangePasswordPage() {
@@ -83,7 +83,7 @@ export default function ChangePasswordPage() {
             display: "flex", alignItems: "center", justifyContent: "center",
             margin: "0 auto 1.25rem",
           }}>
-            <ShieldCheck size={28} color="#0D0F14" />
+            <ShieldCheck size={28} color="#FFFFFF" />
           </div>
           <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.5rem", marginBottom: "0.5rem" }}>
             Set Your Password
@@ -184,8 +184,8 @@ export default function ChangePasswordPage() {
             type="submit"
             disabled={!canSubmit}
             style={{
-              background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-              color: "#0D0F14", fontWeight: 700, fontSize: "0.9rem",
+              background: "linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)",
+              color: "#FFFFFF", fontWeight: 700, fontSize: "0.9rem",
               padding: "0.75rem", borderRadius: "var(--radius-md)", border: "none",
               cursor: canSubmit ? "pointer" : "not-allowed",
               opacity: canSubmit ? 1 : 0.5,

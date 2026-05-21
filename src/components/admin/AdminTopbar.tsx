@@ -31,7 +31,7 @@ export default function AdminTopbar({ profile }: AdminTopbarProps) {
           justifyContent: "center",
           fontWeight: 700,
           fontSize: "0.8rem",
-          color: "#0D0F14",
+          color: "#FFFFFF",
           flexShrink: 0,
         }}>
           {getInitials(profile?.full_name || profile?.email || "A")}

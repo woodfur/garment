@@ -52,7 +52,7 @@ export default function BranchTopbar({ branchName, leaderName, email }: BranchTo
             borderRadius: "50%",
             background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontWeight: 700, fontSize: "0.75rem", color: "#0D0F14",
+            fontWeight: 700, fontSize: "0.75rem", color: "#FFFFFF",
             flexShrink: 0,
           }}>
             {initials}

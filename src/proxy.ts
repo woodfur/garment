@@ -30,10 +30,6 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // ── Auth login: redirect already-logged-in users ──────────────────────────
-  if (pathname === "/auth/login" && isAuthenticated(request)) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
 
   // ── Viewer routes: require branch session cookie ───────────────────────────
   if (pathname.match(/^\/view\/.+/)) {

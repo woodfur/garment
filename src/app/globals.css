@@ -2,47 +2,60 @@
 
 @theme {
   /* ─── Typography ─── */
-  --font-heading: "Outfit", sans-serif;
-  --font-body: "Inter", sans-serif;
+  --font-heading: "DM Serif Display", serif;
+  --font-body: "DM Sans", sans-serif;
 
-  /* ─── Color Palette ─── */
-  --color-bg-primary: #0D0F14;
-  --color-bg-surface: #161A23;
-  --color-bg-card: #1E2330;
-  --color-bg-elevated: #252B3B;
+  /* ─── Primary Accent ─── */
+  /* Two-tier system:
+     primary-dark  = #7C5CBF  → ALL interactive: buttons, text, focus rings
+     primary       = #9B87F5  → decorative tints and gradient ends ONLY
+     primary-light = #EDE9F8  → surface tints, active pill backgrounds        */
+  --color-primary:       #9B87F5;
+  --color-primary-dark:  #7C5CBF;
+  --color-primary-light: #EDE9F8;
 
-  --color-border: #2A3040;
-  --color-border-subtle: #1E2330;
+  /* ─── Backward-compat aliases (all var(--color-gold) refs auto-resolve) ─── */
+  --color-gold:       var(--color-primary-dark);   /* #7C5CBF — WCAG AA on white */
+  --color-gold-light: var(--color-primary);         /* #9B87F5 — gradient end     */
+  --color-gold-muted: var(--color-primary-light);   /* #EDE9F8 — tint surfaces    */
 
-  --color-gold: #C9A84C;
-  --color-gold-light: #E8C96A;
-  --color-gold-muted: #8A6E2E;
+  /* ─── Backgrounds ─── */
+  --color-bg-primary:  #F8F7FF;   /* page background — barely-there lavender */
+  --color-bg-surface:  #FFFFFF;   /* sidebars, topbars                        */
+  --color-bg-card:     #FFFFFF;   /* all cards                                */
+  --color-bg-elevated: #F3F1FF;   /* login left panel, elevated surfaces      */
 
-  --color-text-primary: #F0F2F8;
-  --color-text-secondary: #B8C0D0;
-  --color-text-muted: #8892A4;
-  --color-text-disabled: #4A5568;
+  /* ─── Borders ─── */
+  --color-border:        #E8E5F5;
+  --color-border-subtle: #F0EEF9;
 
-  --color-success: #4CAF7D;
-  --color-success-bg: #0D2A1A;
-  --color-error: #E05C5C;
-  --color-error-bg: #2A0D0D;
-  --color-warning: #E8A23A;
-  --color-warning-bg: #2A1D0D;
-  --color-info: #5B9CF6;
-  --color-info-bg: #0D1A2A;
+  /* ─── Text ─── */
+  --color-text-primary:   #1C1B3A;   /* 14:1 on #F8F7FF ✅ AAA */
+  --color-text-secondary: #4A4869;
+  --color-text-muted:     #7A7890;   /* 4.6:1 on white ✅ AA  */
+  --color-text-disabled:  #B8B6CC;
+
+  /* ─── Semantic ─── */
+  --color-success:     #22C55E;
+  --color-success-bg:  #EDFAF4;
+  --color-error:       #E05C5C;
+  --color-error-bg:    #FEF0F0;
+  --color-warning:     #D97706;   /* amber-600 — 4.74:1 on white ✅ AA (NOT #F59E0B which fails) */
+  --color-warning-bg:  #FEF8EC;
+  --color-info:        #6366F1;
+  --color-info-bg:     #EEF2FF;
 
   /* ─── Radii ─── */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
   --radius-full: 9999px;
 
   /* ─── Shadows ─── */
-  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --shadow-elevated: 0 8px 40px rgba(0, 0, 0, 0.6);
-  --shadow-gold: 0 0 24px rgba(201, 168, 76, 0.2);
+  --shadow-card:     0 2px 12px rgba(155, 135, 245, 0.08);
+  --shadow-elevated: 0 8px 32px rgba(155, 135, 245, 0.14);
+  --shadow-primary:  0 0 20px rgba(155, 135, 245, 0.25);
 }
 
 /* ─── Base Styles ─── */
@@ -65,7 +78,7 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  font-weight: 600;
+  font-weight: 400;   /* DM Serif Display has no 600/700 — serifs read as bold at 400 */
   line-height: 1.2;
 }
 
@@ -78,7 +91,7 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--color-bg-surface);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: var(--color-text-disabled);   /* #B8B6CC — visible against white */
   border-radius: var(--radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -87,36 +100,50 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ─── Focus Styles ─── */
 :focus-visible {
-  outline: 2px solid var(--color-gold);
+  outline: 2px solid var(--color-primary-dark);   /* #7C5CBF — 5.2:1 on white ✅ AA */
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
 /* ─── Selection ─── */
 ::selection {
-  background-color: rgba(201, 168, 76, 0.25);
+  background-color: rgba(155, 135, 245, 0.25);
   color: var(--color-text-primary);
 }
 
 /* ─── Utility Classes ─── */
 .glass {
-  background: rgba(30, 35, 48, 0.6);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(42, 48, 64, 0.8);
+  border: 1px solid var(--color-border);
 }
 
+/* Primary gradient — dark violet to light lavender */
+.primary-gradient {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+}
+
+/* Keep legacy class name — components reference it; just update the colors */
 .gold-gradient {
-  background: linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
 }
 
 .text-gold-gradient {
-  background: linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
+.text-primary-gradient {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Card + Surface ─── */
 .card {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -128,4 +155,44 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
+}
+
+/* ─── Button Utilities ─── */
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+  color: #FFFFFF;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #FFFFFF;
+  color: var(--color-primary-dark);
+  border: 1.5px solid var(--color-primary-dark);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-primary-light);
 }

@@ -1,27 +1,29 @@
 import type { Metadata } from "next";
-import { Outfit, Inter } from "next/font/google";
+import { DM_Serif_Display, DM_Sans } from "next/font/google";
 import "./globals.css";
 
-const outfit = Outfit({
+const dm_serif = DM_Serif_Display({
   subsets: ["latin"],
+  weight: ["400"],            // only weight available in DM Serif Display
   variable: "--font-heading",
   display: "swap",
 });
 
-const inter = Inter({
+const dm_sans = DM_Sans({
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
   variable: "--font-body",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "Polar — Uniform Planning Platform",
-    template: "%s | Polar",
+    default: "Garment — Uniform Management Platform",
+    template: "%s | Garment",
   },
   description:
-    "Polar is a visual uniform planning and operations platform for churches and uniform-based organizations.",
-  keywords: ["uniform planning", "church uniforms", "outfit scheduler", "uniform management"],
+    "Garment is a visual uniform management platform for churches and uniform-based organisations.",
+  keywords: ["uniform management", "church uniforms", "outfit scheduler", "uniform planning"],
 };
 
 export default function RootLayout({
@@ -30,7 +32,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${outfit.variable} ${inter.variable}`}>
+    <html lang="en" className={`${dm_serif.variable} ${dm_sans.variable}`}>
+      <head>
+        <meta name="theme-color" content="#7C5CBF" />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );
