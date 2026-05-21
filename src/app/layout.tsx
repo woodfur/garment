@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { DM_Serif_Display, DM_Sans } from "next/font/google";
+import { Nunito, DM_Sans } from "next/font/google";
 import "./globals.css";
 
-const dm_serif = DM_Serif_Display({
+const dm_serif = Nunito({
   subsets: ["latin"],
-  weight: ["400"],            // only weight available in DM Serif Display
+  weight: ["400", "500", "600", "700", "800"],
   variable: "--font-heading",
   display: "swap",
 });

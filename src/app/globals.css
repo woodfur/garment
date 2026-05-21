@@ -2,7 +2,7 @@
 
 @theme {
   /* ─── Typography ─── */
-  --font-heading: "DM Serif Display", serif;
+  --font-heading: "Nunito", sans-serif;
   --font-body: "DM Sans", sans-serif;
 
   /* ─── Primary Accent ─── */
@@ -78,7 +78,7 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  font-weight: 400;   /* DM Serif Display has no 600/700 — serifs read as bold at 400 */
+  font-weight: 700;   /* Nunito looks best bold — rounded letterforms shine at 700 */
   line-height: 1.2;
 }
 
