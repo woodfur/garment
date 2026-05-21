@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  experimental: {
+    staleTimes: {
+      dynamic: 30,   // cache dynamic page RSC payloads 30s client-side
+      static: 180,   // cache static pages 3 minutes
+    },
+  },
   images: {
     remotePatterns: [
       {

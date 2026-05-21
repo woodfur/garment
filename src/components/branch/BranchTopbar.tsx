@@ -20,6 +20,7 @@ export default function BranchTopbar({ branchName, leaderName, email }: BranchTo
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/auth/login");
+    router.refresh();   // clear client router cache
   }
 
   return (

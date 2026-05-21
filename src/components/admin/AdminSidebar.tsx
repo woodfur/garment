@@ -19,6 +19,7 @@ export default function AdminSidebar() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/auth/login");
+    router.refresh();   // clear client router cache
   }
 
   return (
@@ -64,6 +65,7 @@ export default function AdminSidebar() {
             <Link
               key={href}
               href={href}
+              prefetch={true}
               id={`admin-nav-${label.toLowerCase()}`}
               style={{
                 display: "flex",

@@ -29,6 +29,7 @@ export default function BranchSidebar({ branchName, leaderName }: BranchSidebarP
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/auth/login");
+    router.refresh();   // clear client router cache — prevents stale RSC exposure
   }
 
   return (
@@ -77,6 +78,7 @@ export default function BranchSidebar({ branchName, leaderName }: BranchSidebarP
             <Link
               key={href}
               href={href}
+              prefetch={true}
               id={`branch-nav-${label.toLowerCase()}`}
               style={{
                 display: "flex",
