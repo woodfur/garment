@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, category, department_id, description, storage_path, image_url, raw_image_url } = body;
+    const { name, category, department_id, description, storage_path, image_url, raw_image_url, bg_removed } = body;
 
     if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (!category?.trim()) return NextResponse.json({ error: "Category is required" }, { status: 400 });
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
         raw_image_url: raw_image_url || null,
         branch_id: auth.branchId,
         is_archived: false,
-        bg_removed: false,
+        bg_removed: bg_removed === true,
       })
       .select()
       .single();

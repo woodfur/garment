@@ -4,6 +4,34 @@ All notable changes to the Garment platform are recorded here.
 
 ---
 
+## [Unreleased] — 2026-05-21 (Bugfix: Uniform Background Removal & Storage)
+
+### Fixed — Background Removal Too Slow / Not Working
+- **Root cause**: `@imgly/background-removal` was running a 100MB+ ONNX model in the browser via WebAssembly. On first use it downloaded the weights, taking 1–3 minutes with no visible progress, and frequently timing out.
+- **Fix**: Replaced with a **server-side Replicate `rembg` call** (`POST /api/branch/uniforms/remove-bg`). Uses `Prefer: wait` for synchronous completion (~3–5 seconds). The upload modal now closes immediately after image upload; bg removal happens in the background and the card updates live.
+
+### Fixed — Images Not Showing (Private Bucket)
+- **Root cause**: The `uniforms` Supabase storage bucket was set to `public = false`, but the code was storing `/object/public/uniforms/...` URLs. These URLs 403'd for all users.
+- **Fix**: Made the `uniforms` bucket public via Supabase. Images now load correctly across the app, the builder, and the public viewer.
+
+### Fixed — `bg_removed` Flag Always `false`
+- **Root cause 1**: `POST /api/branch/uniforms` hardcoded `bg_removed: false` regardless of what the client sent.
+- **Root cause 2**: Even when `@imgly` succeeded, the client never passed `bg_removed: true` in the body.
+- **Fix**: API now accepts `bg_removed` from the request body. New server-side route sets `bg_removed = true` in the DB after successful removal.
+- **Backfill**: 3 existing records that had `/bg-removed/` paths but `bg_removed = false` were corrected via SQL update.
+
+### Added — `POST /api/branch/uniforms/remove-bg`
+- Server-side bg removal route using Replicate `lucataco/remove-bg` model.
+- Fetches raw image from storage, submits to Replicate, downloads result PNG, uploads to `uniforms/bg-removed/...`, updates `image_url` + `bg_removed = true` on the uniform record.
+
+### Changed — Uniform Card UX
+- Cards now show a **checkered background** when `bg_removed = true` (matches image editor convention for transparency).
+- New **"✓ BG removed" green badge** on top-left of processed cards.
+- New **"Removing bg…" overlay spinner** while server-side removal is in progress.
+- Upload form closes immediately after image is saved — bg removal continues in the background without blocking the user.
+
+---
+
 ## [Unreleased] — 2026-05-21 (Combination_Builder_Redesign — Phases 1–8 & CSS)
 
 ### Added — Database Migration (Phase 1)

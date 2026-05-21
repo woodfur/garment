@@ -9,8 +9,9 @@ type Department = { id: string; name: string };
 type Uniform = {
   id: string; name: string; category: string; department_id: string;
   image_url: string | null; raw_image_url: string | null; is_archived: boolean;
-  bg_removed: boolean; description: string | null; created_at: string;
+  bg_removed: boolean; storage_path: string | null; description: string | null; created_at: string;
   departments: { name: string } | null;
+  _bgRemoving?: boolean; // client-only ephemeral flag
 };
 
 const CATEGORIES: { value: UniformCategory; label: string }[] = [
@@ -38,8 +39,6 @@ export default function UniformsPageClient() {
   const [formFile, setFormFile] = useState<File | null>(null);
   const [formPreview, setFormPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [bgRemoving, setBgRemoving] = useState(false);
-  const [bgProgress, setBgProgress] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -76,7 +75,7 @@ export default function UniformsPageClient() {
     setFormError(null);
 
     try {
-      // 1. Upload raw image to Supabase storage via signed upload
+      // 1. Get a signed upload URL
       const ext = formFile.name.split(".").pop() ?? "jpg";
       const storagePath = `${formDept}/${Date.now()}.${ext}`;
       const uploadRes = await fetch(`/api/branch/uniforms/upload-url`, {
@@ -85,51 +84,27 @@ export default function UniformsPageClient() {
         body: JSON.stringify({ path: storagePath, contentType: formFile.type }),
       });
 
-      let rawUrl: string;
       if (!uploadRes.ok) {
-        // Fallback: upload via direct API if upload-url not available yet
         setFormError("Image upload service unavailable. Please try again.");
         setUploading(false);
         return;
       }
-      const { uploadUrl, publicUrl } = await uploadRes.json();
-      await fetch(uploadUrl, { method: "PUT", body: formFile, headers: { "Content-Type": formFile.type } });
-      rawUrl = publicUrl;
+      const { uploadUrl, publicUrl: rawUrl } = await uploadRes.json();
 
-      // 2. Background removal (client-side using @imgly/background-removal)
-      let finalImageUrl = rawUrl;
-      try {
-        setBgRemoving(true);
-        setBgProgress("Removing background…");
-        const { removeBackground } = await import("@imgly/background-removal");
-        const blob = await removeBackground(formFile, {
-          progress: (key: string, current: number, total: number) => {
-            if (key === "compute:inference") {
-              setBgProgress(`Processing… ${Math.round((current / total) * 100)}%`);
-            }
-          },
-        });
-        // Upload bg-removed PNG
-        const bgPath = `bg-removed/${storagePath.replace(/\.[^.]+$/, ".png")}`;
-        const bgUploadRes = await fetch(`/api/branch/uniforms/upload-url`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: bgPath, contentType: "image/png" }),
-        });
-        if (bgUploadRes.ok) {
-          const { uploadUrl: bgUploadUrl, publicUrl: bgPublicUrl } = await bgUploadRes.json();
-          await fetch(bgUploadUrl, { method: "PUT", body: blob, headers: { "Content-Type": "image/png" } });
-          finalImageUrl = bgPublicUrl;
-        }
-      } catch (bgErr) {
-        console.warn("Background removal failed — using raw image", bgErr);
-      } finally {
-        setBgRemoving(false);
-        setBgProgress("");
+      // 2. Upload the raw file
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: formFile,
+        headers: { "Content-Type": formFile.type },
+      });
+      if (!putRes.ok) {
+        setFormError("Image upload failed. Please try again.");
+        setUploading(false);
+        return;
       }
 
-      // 3. Create uniform record
-      const res = await fetch("/api/branch/uniforms", {
+      // 3. Create the DB record immediately (with raw image)
+      const createRes = await fetch("/api/branch/uniforms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -139,27 +114,64 @@ export default function UniformsPageClient() {
           description: formDesc.trim() || null,
           storage_path: storagePath,
           raw_image_url: rawUrl,
-          image_url: finalImageUrl,
+          image_url: rawUrl, // will be replaced after bg removal
+          bg_removed: false,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) { setFormError(data.error ?? "Failed to save"); return; }
+      const created = await createRes.json();
+      if (!createRes.ok) { setFormError(created.error ?? "Failed to save"); setUploading(false); return; }
 
-      // Optimistic update
-      setUniforms((prev) => [{ ...data, departments: departments.find(d => d.id === formDept) ? { name: departments.find(d => d.id === formDept)!.name } : null }, ...prev]);
+      // Optimistic add to list immediately
+      const dept = departments.find(d => d.id === formDept);
+      const newUniform: Uniform = {
+        ...created,
+        storage_path: storagePath,
+        departments: dept ? { name: dept.name } : null,
+        _bgRemoving: true,
+      };
+      setUniforms((prev) => [newUniform, ...prev]);
       resetForm();
+      setUploading(false);
+
+      // 4. Trigger server-side background removal (non-blocking)
+      triggerBgRemoval(created.id, storagePath);
     } catch (err) {
       console.error(err);
       setFormError("Upload failed. Please try again.");
-    } finally {
       setUploading(false);
+    }
+  }
+
+  async function triggerBgRemoval(uniformId: string, storagePath: string) {
+    // Mark as removing in UI
+    setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, _bgRemoving: true } : u));
+
+    try {
+      const res = await fetch("/api/branch/uniforms/remove-bg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uniformId, storagePath }),
+      });
+      const data = await res.json();
+      if (res.ok && data.image_url) {
+        setUniforms((prev) => prev.map((u) =>
+          u.id === uniformId
+            ? { ...u, image_url: data.image_url, bg_removed: true, _bgRemoving: false }
+            : u
+        ));
+      } else {
+        // BG removal failed — just clear the spinner, keep raw image
+        setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, _bgRemoving: false } : u));
+      }
+    } catch {
+      setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, _bgRemoving: false } : u));
     }
   }
 
   function resetForm() {
     setShowForm(false); setFormName(""); setFormCategory("top");
     setFormDept(""); setFormDesc(""); setFormFile(null);
-    setFormPreview(null); setFormError(null);
+    setFormPreview(null); setFormError(null); setUploading(false);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -321,23 +333,16 @@ export default function UniformsPageClient() {
 
               {formError && <p style={{ color: "var(--color-error)", fontSize: "0.82rem", margin: 0 }}>{formError}</p>}
 
-              {/* BG removal progress */}
-              {bgRemoving && (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 0.875rem", borderRadius: "var(--radius-md)", background: "var(--color-primary-light)", fontSize: "0.82rem", color: "var(--color-primary-dark)" }}>
-                  <Loader2 size={14} className="animate-spin" /> {bgProgress}
-                </div>
-              )}
-
               <div style={{ display: "flex", gap: "0.625rem" }}>
-                <button onClick={handleUpload} disabled={uploading || bgRemoving} style={{
+                <button onClick={handleUpload} disabled={uploading} style={{
                   flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
                   padding: "0.7rem", borderRadius: "var(--radius-md)",
                   background: "linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)",
                   color: "#fff", border: "none", fontWeight: 600, fontSize: "0.9rem",
-                  cursor: uploading || bgRemoving ? "not-allowed" : "pointer",
-                  opacity: uploading || bgRemoving ? 0.7 : 1,
+                  cursor: uploading ? "not-allowed" : "pointer",
+                  opacity: uploading ? 0.7 : 1,
                 }}>
-                  {uploading || bgRemoving ? <><Loader2 size={15} className="animate-spin" /> {bgRemoving ? bgProgress : "Uploading…"}</> : <><Upload size={15} /> Upload Uniform</>}
+                  {uploading ? <><Loader2 size={15} className="animate-spin" /> Uploading…</> : <><Upload size={15} /> Upload Uniform</>}
                 </button>
                 <button onClick={resetForm} style={{ padding: "0.7rem 1rem", borderRadius: "var(--radius-md)", background: "transparent", border: "1px solid var(--color-border)", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>Cancel</button>
               </div>
@@ -363,11 +368,22 @@ export default function UniformsPageClient() {
           {filtered.map((u) => (
             <div key={u.id} className="card" style={{ padding: 0, overflow: "hidden", opacity: u.is_archived ? 0.65 : 1, transition: "opacity 0.15s" }}>
               {/* Image */}
-              <div style={{ height: 180, background: "var(--color-bg-primary)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+              <div style={{ height: 180, background: u.bg_removed ? "repeating-conic-gradient(#e5e5e5 0% 25%, #fff 0% 50%) 0 0 / 20px 20px" : "var(--color-bg-primary)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                 {u.image_url ? (
                   <Image src={u.image_url} alt={u.name} fill style={{ objectFit: "contain", padding: "0.5rem" }} unoptimized />
                 ) : (
                   <Shirt size={48} color="var(--color-text-disabled)" />
+                )}
+                {/* BG removing spinner */}
+                {u._bgRemoving && (
+                  <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 0 }}>
+                    <Loader2 size={22} className="animate-spin" color="#fff" />
+                    <span style={{ fontSize: "0.7rem", color: "#fff", fontWeight: 600 }}>Removing bg…</span>
+                  </div>
+                )}
+                {/* Status badges */}
+                {!u._bgRemoving && u.bg_removed && (
+                  <div style={{ position: "absolute", top: "0.5rem", left: "0.5rem", background: "rgba(34,197,94,0.85)", color: "#fff", fontSize: "0.6rem", fontWeight: 700, padding: "0.2rem 0.45rem", borderRadius: "var(--radius-full)", textTransform: "uppercase", backdropFilter: "blur(4px)" }}>✓ BG removed</div>
                 )}
                 {u.is_archived && (
                   <div style={{ position: "absolute", top: "0.5rem", right: "0.5rem", background: "var(--color-warning)", color: "#fff", fontSize: "0.65rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "var(--radius-full)", textTransform: "uppercase" }}>Archived</div>
