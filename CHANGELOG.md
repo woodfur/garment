@@ -4,6 +4,18 @@ All notable changes to the Garment platform are recorded here.
 
 ---
 
+## [Unreleased] — 2026-05-21 (Login Page Redesign)
+
+### Changed — Login Page
+- **Removed left decorative panel**: Eliminated the split-panel layout and SVG fabric illustration from the login page.
+- **Church logo**: Added Kharis Church Purple logo (`public/kharis-church-purple.png`) above the login form heading, served via `next/image` with `priority` for fast LCP.
+- **Centred single-column layout**: Login page is now a clean centred card on `--color-bg-primary` background. Form card, heading, and logo are all centre-aligned.
+
+### Files Changed
+`src/app/(auth)/auth/login/page.tsx` · `public/kharis-church-purple.png` *(new)*
+
+---
+
 ## [Unreleased] — 2026-05-21 (Performance Optimisation)
 
 ### Improved — Application Performance
