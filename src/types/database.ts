@@ -59,6 +59,7 @@ export interface Database {
         Row: {
           id: string;
           branch_id: string;
+          department_id: string;
           name: string;
           category: UniformCategory;
           image_url: string | null;
@@ -76,6 +77,7 @@ export interface Database {
         Row: {
           id: string;
           branch_id: string;
+          department_id: string;
           name: string;
           description: string | null;
           canvas_data: Record<string, unknown> | null;
@@ -85,6 +87,17 @@ export interface Database {
         };
         Insert: Omit<Database["public"]["Tables"]["combinations"]["Row"], "id" | "created_at">;
         Update: Partial<Database["public"]["Tables"]["combinations"]["Insert"]>;
+      };
+      department_members: {
+        Row: {
+          id: string;
+          department_id: string;
+          branch_id: string;
+          name: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["department_members"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["department_members"]["Insert"]>;
       };
       combination_items: {
         Row: {
@@ -181,6 +194,7 @@ export type Branch = Database["public"]["Tables"]["branches"]["Row"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Invitation = Database["public"]["Tables"]["invitations"]["Row"];
 export type Department = Database["public"]["Tables"]["departments"]["Row"];
+export type DepartmentMember = Database["public"]["Tables"]["department_members"]["Row"];
 export type Uniform = Database["public"]["Tables"]["uniforms"]["Row"];
 export type Combination = Database["public"]["Tables"]["combinations"]["Row"];
 export type CombinationItem = Database["public"]["Tables"]["combination_items"]["Row"];
@@ -189,3 +203,10 @@ export type InventoryItem = Database["public"]["Tables"]["inventory_items"]["Row
 export type InventoryTransaction = Database["public"]["Tables"]["inventory_transactions"]["Row"];
 export type Announcement = Database["public"]["Tables"]["announcements"]["Row"];
 export type AuditLog = Database["public"]["Tables"]["audit_logs"]["Row"];
+
+// Extended types with computed fields
+export type DepartmentWithCounts = Department & {
+  uniform_count: number;
+  combination_count: number;
+  member_count: number;
+};

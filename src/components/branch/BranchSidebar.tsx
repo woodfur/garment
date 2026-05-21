@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard, Shirt, Layers, Calendar, Package, Megaphone, LogOut, ChevronRight,
+  LayoutDashboard, Shirt, Layers, Calendar, Package, Megaphone, LogOut, ChevronRight, Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,6 +14,7 @@ interface BranchSidebarProps {
 
 const navItems = [
   { href: "/branch/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
+  { href: "/branch/departments",   label: "Departments",   icon: Users },
   { href: "/branch/uniforms",      label: "Uniforms",      icon: Shirt },
   { href: "/branch/combinations",  label: "Combinations",  icon: Layers },
   { href: "/branch/schedule",      label: "Schedule",      icon: Calendar },
