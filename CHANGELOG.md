@@ -4,6 +4,56 @@ All notable changes to the Garment platform are recorded here.
 
 ---
 
+## [Unreleased] — 2026-05-21 (Departments, Uniforms, Combinations Feature)
+
+### Added — Departments
+- **Departments page** (`/branch/departments`): Branch leaders can create, edit, and delete departments scoped to their branch.
+- **Department members**: Each department has a named members list (name only, no user account). Members can belong to multiple departments. Add/remove from the expandable card.
+- **Departments nav item**: Added to BranchSidebar between Dashboard and Uniforms.
+- **Deletion guard**: Deleting a department is blocked with a user-friendly message if uniforms or combinations depend on it.
+
+### Added — Uniforms
+- **Uniforms page** (`/branch/uniforms`): Full upload and management of uniform items per branch.
+- **Department filter tabs**: Filter uniforms by department. Badge on each card shows category and department.
+- **Background removal pipeline**: On upload, `@imgly/background-removal` runs client-side to produce a transparent PNG stored in the `uniforms` bucket. Progress shown during processing.
+- **Archive/restore**: Soft-archive uniforms without deleting. Dashboard stat count updates via cache revalidation.
+
+### Added — Combinations
+- **Combinations page** (`/branch/combinations`): Lists all saved outfit combinations with department badge and preview image.
+- **3-step combination builder** (`/branch/combinations/new`):
+  - Step 1: Pick department (filters all subsequent uniform choices).
+  - Step 2: Drag-and-drop canvas — uniforms from the chosen department only. Layer order controls (up/down/remove).
+  - Step 3: Name, describe, and save. Preview auto-generated via offscreen canvas.
+
+### Added — Database
+- `uniforms.department_id NOT NULL FK` (RESTRICT)
+- `combinations.department_id NOT NULL FK` (RESTRICT)
+- `UNIQUE(branch_id, name)` constraint on departments
+- `department_members` table with indexes
+- `combination-previews` public Supabase storage bucket
+
+### Added — API Routes (all protected by `requireBranchLeader()`)
+- `GET/POST /api/branch/departments`
+- `PATCH/DELETE /api/branch/departments/[departmentId]`
+- `GET/POST /api/branch/departments/[departmentId]/members`
+- `DELETE /api/branch/departments/[departmentId]/members/[memberId]`
+- `GET/POST /api/branch/uniforms`
+- `PATCH/DELETE /api/branch/uniforms/[uniformId]`
+- `POST /api/branch/uniforms/[uniformId]/archive`
+- `POST /api/branch/uniforms/upload-url`
+- `GET/POST /api/branch/combinations`
+- `GET/PATCH/DELETE /api/branch/combinations/[combinationId]`
+- `POST /api/branch/combinations/upload-preview`
+
+### Files Changed
+`src/lib/api-auth.ts` *(new)* · `src/types/database.ts` · `src/components/branch/BranchSidebar.tsx`
+`src/app/(branch)/branch/departments/**` · `src/app/(branch)/branch/uniforms/**` · `src/app/(branch)/branch/combinations/**`
+`src/components/branch/DepartmentCard.tsx` · `src/components/branch/DepartmentsPageClient.tsx`
+`src/components/branch/UniformsPageClient.tsx` · `src/components/branch/CombinationsPageClient.tsx` · `src/components/branch/CombinationBuilderClient.tsx`
+`src/app/api/branch/**` *(multiple new routes)* · `supabase/departments_feature_migration.sql` *(new)*
+
+---
+
 ## [Unreleased] — 2026-05-21 (Login Page Redesign)
 
 ### Changed — Login Page
