@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2, Info } from "lucide-react";
 
-export default function LoginPage() {
+// Separated because useSearchParams() requires a Suspense boundary
+// to prevent build-time prerender failure (Next.js requirement)
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reason = searchParams.get("reason");
@@ -33,7 +35,6 @@ export default function LoginPage() {
     }
 
     if (data.user) {
-      // Redirect to root — it handles role-based routing server-side
       router.push("/");
       router.refresh();
     }
@@ -51,7 +52,7 @@ export default function LoginPage() {
           }} />
           <span style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: "1.5rem" }}
             className="text-gold-gradient">
-            Polar
+            Garment
           </span>
         </div>
         <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem" }}
@@ -190,5 +191,19 @@ export default function LoginPage() {
         No account? Contact your administrator.
       </p>
     </div>
+  );
+}
+
+// Suspense wrapper required — useSearchParams() suspends during prerender.
+// Without this, Next.js build fails with prerender error on /auth/login.
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full max-w-md" style={{ textAlign: "center", padding: "4rem", color: "var(--color-text-muted)" }}>
+        <Loader2 size={24} className="animate-spin" style={{ margin: "0 auto" }} />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
