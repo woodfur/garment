@@ -1,17 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, LogOut, ChevronRight } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard, Shirt, Layers, Calendar, Package, Megaphone, LogOut, ChevronRight,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+
+interface BranchSidebarProps {
+  branchName: string;
+  leaderName: string | null;
+}
 
 const navItems = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/branches", label: "Branches", icon: Building2 },
+  { href: "/branch/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
+  { href: "/branch/uniforms",      label: "Uniforms",      icon: Shirt },
+  { href: "/branch/combinations",  label: "Combinations",  icon: Layers },
+  { href: "/branch/schedule",      label: "Schedule",      icon: Calendar },
+  { href: "/branch/inventory",     label: "Inventory",     icon: Package },
+  { href: "/branch/announcements", label: "Announcements", icon: Megaphone },
 ];
 
-export default function AdminSidebar() {
+export default function BranchSidebar({ branchName, leaderName }: BranchSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -33,7 +43,7 @@ export default function AdminSidebar() {
     }}>
       {/* Logo */}
       <div style={{ padding: "0 1.5rem 2rem" }}>
-        <Link href="/admin/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+        <Link href="/branch/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "0.625rem" }}>
           <div style={{
             width: 32, height: 32,
             background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
@@ -51,8 +61,11 @@ export default function AdminSidebar() {
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           paddingLeft: "0.25rem",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}>
-          Super Admin
+          {branchName}
         </div>
       </div>
 
@@ -64,7 +77,7 @@ export default function AdminSidebar() {
             <Link
               key={href}
               href={href}
-              id={`admin-nav-${label.toLowerCase()}`}
+              id={`branch-nav-${label.toLowerCase()}`}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -91,7 +104,7 @@ export default function AdminSidebar() {
       {/* Sign out */}
       <div style={{ padding: "0 0.75rem", borderTop: "1px solid var(--color-border)", paddingTop: "1rem", marginTop: "1rem" }}>
         <button
-          id="admin-signout"
+          id="branch-signout"
           onClick={handleSignOut}
           style={{
             display: "flex",

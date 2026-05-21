@@ -4,7 +4,25 @@ All notable changes to the Garment platform are recorded here.
 
 ---
 
-## [Unreleased] — 2026-05-20
+## [Unreleased] — 2026-05-21
+
+### Added
+- **Branch Dashboard** — full data-driven overview page replacing the placeholder
+  - 4 stat cards: Uniforms (active), Combinations, Upcoming Services, Low Stock Alerts (green=0 / red=>0)
+  - Upcoming Schedule section: next 3 services with date, title, combination name, and notes
+  - Recent Announcements section: latest 3 published announcements with body preview
+  - Quick Actions section: 5 action cards (Uniforms, Combinations, Schedule, Inventory, Announcements) with "Coming Soon" badges
+- **Branch Layout Shell** — sidebar + topbar chrome for all branch routes
+  - `BranchSidebar` component: Garment branding, branch name subtitle, 6 nav items with active state, sign-out
+  - `BranchTopbar` component: branch name/role on left, initials avatar + display name + sign-out on right
+  - Full 6-step guard sequence: auth → mustChangePassword → super_admin redirect → null branchId → branch existence → render
+- **5 "Coming Soon" stub pages** for future branch sections: Uniforms, Combinations, Schedule, Inventory, Announcements — each with sidebar/topbar chrome intact
+- **AuthClaims extended** — `fullName` added to `getAuthContext()` return value and DB SELECT
+
+### Fixed
+- `super_admin` visiting `/branch/*` routes now redirects to `/admin/dashboard` (previously would crash on missing `branchId`)
+- AdminSidebar brand name updated from "Polar" to "Garment"
+
 
 ### Added
 - **Branch leader account provisioning** — replaced broken `inviteUserByEmail` flow (required SMTP) with admin-provisioned accounts

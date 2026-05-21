@@ -7,15 +7,15 @@ export interface AuthClaims {
   role: "super_admin" | "branch_leader";
   branchId: string | null;
   mustChangePassword: boolean;
+  fullName: string | null;
 }
 
 /**
- * getAuthContext — returns the authenticated user's role, branch, and flags.
+ * getAuthContext — returns the authenticated user's role, branch, flags, and name.
  *
  * Always performs a DB query for the full profile because:
  * - must_change_password changes on first login and cannot be read from JWT
- * - JWT fast path only saves the role/branchId lookup; branch pages always
- *   need fresh profile data
+ * - full_name is needed by branch layout components (sidebar/topbar)
  *
  * Uses React cache() — deduplicated per request across layout, page, and
  * all server components in the same render tree.
@@ -24,18 +24,15 @@ export interface AuthClaims {
  */
 export const getAuthContext = cache(async (): Promise<AuthClaims | null> => {
   try {
-    // Must call createClient() to maintain @supabase/ssr cookie refresh mechanism.
-    // getSession() reads from the cookie store — no network call in normal operation.
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) return null;
 
-    // Always read profile from DB — must_change_password cannot come from JWT
     const admin = createAdminClient();
     const { data: profile } = await admin
       .from("profiles")
-      .select("role, branch_id, must_change_password")
+      .select("role, branch_id, must_change_password, full_name")
       .eq("id", session.user.id)
       .single();
 
@@ -45,6 +42,7 @@ export const getAuthContext = cache(async (): Promise<AuthClaims | null> => {
       role: string;
       branch_id: string | null;
       must_change_password: boolean;
+      full_name: string | null;
     };
 
     return {
@@ -53,9 +51,9 @@ export const getAuthContext = cache(async (): Promise<AuthClaims | null> => {
       role: p.role as AuthClaims["role"],
       branchId: p.branch_id,
       mustChangePassword: p.must_change_password,
+      fullName: p.full_name,
     };
   } catch {
-    // Malformed cookie, DB failure, or network error — treat as unauthenticated
     return null;
   }
 });
