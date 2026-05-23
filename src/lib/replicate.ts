@@ -339,6 +339,15 @@ async function pollAndFinaliseVideo(
 
     // Succeeded — store GIF URL and check readiness
     const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : String(prediction.output ?? "");
+
+    // GAP-1 C10 FIX: Guard against empty outputUrl — mirrors the same guard in pollAndContinueChain.
+    // Without this, an empty string gets written to male_gif_url/female_gif_url, making
+    // checkAndMarkReady() permanently return false and hanging the combination in 'processing'.
+    if (!outputUrl) {
+      await markFailed(combinationId, predictionId, "Video prediction succeeded but returned no output URL");
+      return;
+    }
+
     const admin = createAdminClient();
     const db = admin as any;
     const col = gender === "male" ? "male_gif_url" : "female_gif_url";
