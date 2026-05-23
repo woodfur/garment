@@ -147,6 +147,14 @@ export async function POST(
       .join("; ");
     await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
     console.error(`[generate-preview] Chain failure for ${combinationId}: ${rejectedReasons}`);
+
+    // Surface specific Replicate errors so users understand the real cause
+    if (rejectedReasons.includes("402") || rejectedReasons.toLowerCase().includes("insufficient credit")) {
+      return NextResponse.json({ error: "Replicate account has insufficient credit. Add billing at replicate.com/account/billing then try again." }, { status: 402 });
+    }
+    if (rejectedReasons.includes("429") || rejectedReasons.toLowerCase().includes("throttled")) {
+      return NextResponse.json({ error: "Replicate rate limit reached. Please wait a minute and try again." }, { status: 429 });
+    }
     return NextResponse.json({ error: "One or more AI generation chains failed to start. Please try again." }, { status: 500 });
   }
 
