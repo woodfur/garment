@@ -37,6 +37,11 @@ export default function CombinationBuilderClient() {
 
   // Step 3: Save
   const [combinationId, setCombinationId] = useState<string | null>(null);
+  // GAP-2 FIX: Persist comboId in a ref so retries after partial failure reuse the same record.
+  // React state setters don't update synchronously — on retry after zone-insert failure,
+  // combinationId state may already hold the new ID but a naive re-check would miss it.
+  // The ref ensures the created ID persists across render cycles without race conditions.
+  const savedComboIdRef = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
@@ -140,8 +145,8 @@ export default function CombinationBuilderClient() {
     setError(null);
 
     try {
-      // 1. Create combination
-      let comboId = combinationId;
+      // 1. Create combination — use savedComboIdRef for idempotency across retries
+      let comboId = savedComboIdRef.current ?? combinationId;
       if (!comboId) {
         const res = await fetch("/api/branch/combinations", {
           method: "POST",
@@ -151,6 +156,7 @@ export default function CombinationBuilderClient() {
         if (!res.ok) throw new Error((await res.json()).error ?? "Failed to create combination");
         const combo = await res.json();
         comboId = combo.id;
+        savedComboIdRef.current = comboId; // persist immediately — survives render cycles
         setCombinationId(comboId);
       }
 
@@ -189,6 +195,12 @@ export default function CombinationBuilderClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ gender: "both" }),
         });
+        // GAP-3 FIX: Check response status — a 400/500 (e.g. 'no zone items') was previously
+        // silently ignored, causing a redirect with no error feedback and preview stuck at 'none'.
+        if (!previewRes.ok) {
+          const previewData = await previewRes.json().catch(() => ({}));
+          throw new Error(previewData.error ?? "Failed to start AI preview generation. Please try again.");
+        }
         const previewData = await previewRes.json();
         if (previewData.estimated_seconds) setEstimatedSeconds(previewData.estimated_seconds);
         if (previewData.warnings?.length) setWarnings(previewData.warnings);

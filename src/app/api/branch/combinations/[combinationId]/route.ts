@@ -5,13 +5,24 @@ import { revalidateTag } from "next/cache";
 
 type Params = { params: Promise<{ combinationId: string }> };
 
-async function verifyCombination(combinationId: string, branchId: string) {
+type CombinationRecord = {
+  id: string;
+  branch_id: string;
+  preview_url: string | null;
+  male_gif_url: string | null;
+  female_gif_url: string | null;
+  male_composite_url: string | null;
+  female_composite_url: string | null;
+};
+
+async function verifyCombination(combinationId: string, branchId: string): Promise<CombinationRecord | null> {
   const admin = createAdminClient();
+  // GAP-4 FIX: Select all storage URL columns so DELETE handler can clean up all files.
   const { data } = await (admin as any)
     .from("combinations")
-    .select("id, branch_id, preview_url")
+    .select("id, branch_id, preview_url, male_gif_url, female_gif_url, male_composite_url, female_composite_url")
     .eq("id", combinationId)
-    .single() as { data: { id: string; branch_id: string; preview_url: string | null } | null };
+    .single() as { data: CombinationRecord | null };
   return data?.branch_id === branchId ? data : null;
 }
 
@@ -94,10 +105,22 @@ export async function DELETE(_request: Request, { params }: Params) {
   try {
     const admin = createAdminClient();
 
-    // Delete preview from storage
-    if (combo.preview_url) {
-      const path = combo.preview_url.split("/combination-previews/")[1];
-      if (path) await admin.storage.from("combination-previews").remove([path]);
+    // GAP-4 FIX: Delete ALL storage files — not just preview_url, but also gif/composite assets.
+    // Previously only preview_url was deleted, leaking up to 4 files per combination.
+    const storageUrls = [
+      combo.preview_url,
+      combo.male_gif_url,
+      combo.female_gif_url,
+      combo.male_composite_url,
+      combo.female_composite_url,
+    ].filter(Boolean) as string[];
+
+    const pathsToRemove = storageUrls
+      .map((url) => url.split("/combination-previews/")[1])
+      .filter(Boolean);
+
+    if (pathsToRemove.length > 0) {
+      await admin.storage.from("combination-previews").remove(pathsToRemove);
     }
 
     const db = admin as any;
