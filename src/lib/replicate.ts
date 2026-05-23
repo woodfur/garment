@@ -283,13 +283,23 @@ async function pollAndContinueChain(
 
     // Succeeded — process result
     const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : String(prediction.output ?? "");
+
+    // GAP-3 FIX: Guard against empty outputUrl (prediction.output was null/undefined/[]).
+    // The webhook handler has this guard; the dev poll loop was missing it.
+    if (!outputUrl) {
+      await markFailed(combinationId, predictionId, "Prediction succeeded but returned no output URL");
+      return;
+    }
+
     const admin = createAdminClient();
     const db = admin as any;
     await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
 
     const nextIndex = currentIndex + 1;
     if (nextIndex < allItems.length) {
-      // Continue chain
+      // Continue chain — each step polls its own prediction in a separate async task.
+      // GAP-1 NOTE: This spawn is intentional fire-and-forget; predictionId changes per step
+      // so each chain step must independently poll its own Replicate prediction.
       const nextId = await compositeNextGarment(outputUrl, allItems[nextIndex], combinationId, gender, nextIndex, allItems.length);
       void pollAndContinueChain(nextId, combinationId, gender, allItems, nextIndex, outputUrl);
     } else {

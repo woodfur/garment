@@ -28,7 +28,9 @@ export default async function BranchDashboardPage() {
   const auth = await getAuthContext();
   const branchId = auth!.branchId as string;
   const today = new Date().toISOString().split("T")[0];
-  const adminClient = createAdminClient();
+  // GAP-6 FIX: Do NOT create adminClient here — move it inside each cache callback.
+  // If captured in closure, a stale client instance would be used by cache hits from
+  // other requests. Each callback creates its own client on execution.
 
   /**
    * Two server-side cache entries — keyed by branchId, 30s TTL each.
@@ -45,6 +47,7 @@ export default async function BranchDashboardPage() {
   // Entry 1: Stat counts (uniforms, combinations, schedules, low stock)
   const statCounts = await unstable_cache(
     async () => {
+      const adminClient = createAdminClient(); // GAP-6 FIX: created inside callback — not captured from outer scope
       const [uniforms, combos, schedCount, lowStockRes] = await Promise.all([
         (adminClient as any)
           .from("uniforms")
@@ -83,6 +86,7 @@ export default async function BranchDashboardPage() {
   // Entry 2: List data (upcoming schedules, announcements)
   const listData = await unstable_cache(
     async () => {
+      const adminClient = createAdminClient(); // GAP-6 FIX: created inside callback
       const [upcomingRes, announcementsRes] = await Promise.all([
         (adminClient as any)
           .from("schedules")
@@ -151,7 +155,7 @@ export default async function BranchDashboardPage() {
       {/* ── Header ─────────────────────────────────────────────── */}
       <div style={{ marginBottom: "2rem" }}>
         <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem", marginBottom: "0.25rem" }}>
-          Welcome back, {displayName.split(" ")[0]} 👋
+          Welcome back, {displayName.split(" ")[0] || "there"} 👋
         </h1>
         <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
           Here&apos;s what&apos;s happening at your branch today.

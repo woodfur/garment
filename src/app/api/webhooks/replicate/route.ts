@@ -102,6 +102,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
   }
 
+  // GAP-5 FIX: Validate gender is strictly 'male' or 'female'.
+  // Any other value would silently write to the wrong DB column via the ternary at line ~184.
+  if (gender !== "male" && gender !== "female") {
+    return NextResponse.json({ error: "Invalid gender param — must be 'male' or 'female'" }, { status: 400 });
+  }
+
   let body: { id: string; status: string; output?: string | string[]; error?: string };
   try {
     body = JSON.parse(rawBody);

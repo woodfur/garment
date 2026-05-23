@@ -31,6 +31,10 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const [deleting, setDeleting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  // GAP-7 FIX: generationKey forces the poll useEffect to re-run when the user clicks
+  // Regenerate after a timeout. Without this, preview_status stays 'processing'
+  // so the effect dependency doesn't change and no new interval is started.
+  const [generationKey, setGenerationKey] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -75,7 +79,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
       }
     }, POLL_INTERVAL);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [combo?.preview_status, combinationId]);
+  }, [combo?.preview_status, combinationId, generationKey]);
 
   const handleDelete = async () => {
     if (!confirm(`Delete "${combo?.name}"? This cannot be undone.`)) return;
@@ -98,6 +102,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const handleGenerate = async (force = false) => {
     setGenerating(true);
     setTimedOut(false);
+    setGenerationKey((k) => k + 1); // GAP-7 FIX: increment to restart poll effect
     try {
       const res = await fetch(`/api/branch/combinations/${combinationId}/generate-preview`, {
         method: "POST", headers: { "Content-Type": "application/json" },
