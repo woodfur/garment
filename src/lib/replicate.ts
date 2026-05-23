@@ -19,9 +19,10 @@ const IS_PROD = process.env.NODE_ENV === "production" && APP_URL !== "";
 // Model identifiers
 // ---------------------------------------------------------------------------
 const MODELS = {
-  // viktorfa/catviton was removed from Replicate (404). Switched to cuuupid/idm-vton
-  // which accepts the same input schema (human_img, garm_img, garment_des, etc.)
-  composite:   "cuuupid/idm-vton:latest",
+  // cuuupid/idm-vton — explicit version hash required for predictions.create().
+  // ':latest' tag only works with replicate.run(), not predictions.create().
+  // Version 0513734a = latest as of 2025-03-25 (updated from old e3893af4 version).
+  composite:   "cuuupid/idm-vton:0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985",
   animation:   "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3d",
   characterGen: "black-forest-labs/flux-dev",
 } as const;
@@ -60,6 +61,16 @@ function webhookUrl(meta: CompositeJobMeta): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Internal: map body zone to IDM-VTON category enum
+// ---------------------------------------------------------------------------
+function zoneToCategory(zone: string): "upper_body" | "lower_body" | "dresses" {
+  if (zone === "bottom" || zone === "footwear") return "lower_body";
+  if (zone === "full_body") return "dresses";
+  // top, outer, head, accessory_* → upper_body
+  return "upper_body";
+}
+
+// ---------------------------------------------------------------------------
 // startCompositeChain
 // Fires the first garment compositing job and inserts a replicate_jobs row.
 // The webhook (prod) or poll loop (dev) continues the chain.
@@ -91,14 +102,15 @@ export async function startCompositeChain(
   };
 
   const prediction = await replicate.predictions.create({
-    model: MODELS.composite,
+    version: MODELS.composite,
     input: {
       human_img: baseCharacterUrl,
       garm_img:  firstItem.uniform_image_url,
       garment_des: firstItem.uniform_name,
-      is_checked: true,
-      is_checked_crop: false,
-      denoise_steps: 30,
+      // New IDM-VTON schema: category enum instead of is_checked/is_checked_crop
+      category: zoneToCategory(firstItem.zone),
+      crop: true, // mannequin images may not be exactly 3:4 ratio
+      steps: 30,
       seed: 42,
     },
     ...(IS_PROD ? { webhook: webhookUrl(meta), webhook_events_filter: ["completed"] } : {}),
@@ -149,14 +161,14 @@ export async function compositeNextGarment(
   };
 
   const prediction = await replicate.predictions.create({
-    model: MODELS.composite,
+    version: MODELS.composite,
     input: {
       human_img: currentImageUrl,
       garm_img:  nextItem.uniform_image_url,
       garment_des: nextItem.uniform_name,
-      is_checked: true,
-      is_checked_crop: false,
-      denoise_steps: 30,
+      category: zoneToCategory(nextItem.zone),
+      crop: true,
+      steps: 30,
       seed: 42,
     },
     ...(IS_PROD ? { webhook: webhookUrl(meta), webhook_events_filter: ["completed"] } : {}),
