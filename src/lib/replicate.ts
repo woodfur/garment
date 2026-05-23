@@ -19,8 +19,9 @@ const IS_PROD = process.env.NODE_ENV === "production" && APP_URL !== "";
 // Model identifiers
 // ---------------------------------------------------------------------------
 const MODELS = {
-  composite:   "viktorfa/catviton:latest",
-  compositeFallback: "cuuupid/idm-vton:latest",
+  // viktorfa/catviton was removed from Replicate (404). Switched to cuuupid/idm-vton
+  // which accepts the same input schema (human_img, garm_img, garment_des, etc.)
+  composite:   "cuuupid/idm-vton:latest",
   animation:   "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3d",
   characterGen: "black-forest-labs/flux-dev",
 } as const;
