@@ -19,6 +19,11 @@ export async function POST(
   const { combinationId } = await params;
   const body = await req.json().catch(() => ({})) as { gender?: string; force?: boolean };
   const genderParam = (body.gender ?? "both") as "male" | "female" | "both";
+  // GAP-6 FIX: Runtime validate genderParam \u2014 TypeScript 'as' cast does no runtime check.
+  // An invalid value would propagate to replicate_jobs.gender and the webhook URL params.
+  if (body.gender !== undefined && !["male", "female", "both"].includes(body.gender)) {
+    return NextResponse.json({ error: "gender must be 'male', 'female', or 'both'" }, { status: 400 });
+  }
   const force = body.force === true;
 
   const admin = createAdminClient();

@@ -75,6 +75,11 @@ export async function startCompositeChain(
   const db = admin as any;
 
   const totalSteps = orderedZoneItems.length;
+  // GAP-7 FIX: Guard against empty input — startCompositeChain is called from the route
+  // which pre-validates, but direct API callers could bypass that check.
+  if (totalSteps === 0) {
+    throw new Error("orderedZoneItems must not be empty — at least one zone item is required");
+  }
   const firstItem = orderedZoneItems[0];
 
   const meta: CompositeJobMeta = {
@@ -244,7 +249,15 @@ export async function generateCharacterImage(gender: Gender): Promise<string> {
     },
   });
 
-  const url = Array.isArray(output) ? output[0] : String(output);
+  const raw = Array.isArray(output) ? output[0] : output;
+
+  // GAP-9 FIX: SDK v1.4+ may return FileOutput (ReadableStream) for some models.
+  // String(stream) returns '[object ReadableStream]' which passes the !url guard.
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    throw new Error("generateCharacterImage: unexpected non-string output — check Replicate SDK version");
+  }
+
+  const url = String(raw ?? "");
   if (!url) throw new Error("Character generation returned no output");
   return url;
 }

@@ -161,8 +161,10 @@ export default function CombinationBuilderClient() {
       }
 
       // 2. Save zone items — clear then re-insert to avoid phantom items from removed zones
-      // GAP-8 FIX: On re-save, delete all existing zone items first so removed zones don't persist
-      if (comboId === combinationId && combinationId) {
+      // GAP-4 FIX: Use savedComboIdRef.current to detect re-saves.
+      // Previously used comboId===combinationId, but combinationId state doesn't update
+      // synchronously — on first save, the state is still null even though comboId is set.
+      if (savedComboIdRef.current !== null && comboId) {
         // This is a re-save — clear existing items before upserting
         const clearRes = await fetch(`/api/branch/combinations/${comboId}/zones`, { method: "DELETE" });
         if (!clearRes.ok) {
@@ -176,7 +178,11 @@ export default function CombinationBuilderClient() {
         ...Object.entries(outfit.female).map(([zone, item]) => ({ gender: "female" as Gender, zone: zone as BodyZone, uniform_id: item!.uniform_id })),
       ];
 
-      await Promise.all(allItems.map(async (item) => {
+      // GAP-5 FIX: Sequential inserts instead of Promise.all.
+      // Parallel inserts leave partial state in DB if one zone fails mid-flight
+      // (other requests complete while the failed one throws, and the catch block
+      // can't roll them back). Sequential ensures we either stop early or finish all.
+      for (const item of allItems) {
         const r = await fetch(`/api/branch/combinations/${comboId}/zones`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -186,7 +192,7 @@ export default function CombinationBuilderClient() {
           const data = await r.json().catch(() => ({}));
           throw new Error(data.error ?? `Failed to save zone: ${item.zone}`);
         }
-      }));
+      }
 
       if (generatePreview) {
         setGenerating(true);

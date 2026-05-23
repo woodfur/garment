@@ -124,11 +124,14 @@ export async function POST(req: Request) {
     await db.from("replicate_jobs")
       .update({ status: "failed", error_message: body.error ?? `Prediction ${body.status}` })
       .eq("prediction_id", body.id);
-    // Check if all jobs for this combination are done/failed
-    const { data: jobs } = await db.from("replicate_jobs").select("status").eq("combination_id", combinationId);
-    const allSettled = (jobs as Array<{ status: string }> | null)?.every((j) => j.status === "done" || j.status === "failed");
-    if (allSettled) {
-      await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
+    // GAP-10 FIX: Check jobsErr before using jobs — a DB error returns null jobs which
+    // makes allSettled undefined (falsy), silently skipping the failed status update.
+    const { data: jobs, error: jobsErr } = await db.from("replicate_jobs").select("status").eq("combination_id", combinationId);
+    if (!jobsErr && jobs) {
+      const allSettled = (jobs as Array<{ status: string }>).every((j) => j.status === "done" || j.status === "failed");
+      if (allSettled) {
+        await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
+      }
     }
     return NextResponse.json({ received: true });
   }
@@ -138,7 +141,14 @@ export async function POST(req: Request) {
   }
 
   const outputUrl = Array.isArray(body.output) ? body.output[0] : String(body.output ?? "");
-  if (!outputUrl) return NextResponse.json({ error: "No output URL" }, { status: 400 });
+  // GAP-1 FIX: Return 200 (not 400) when output URL is empty.
+  // A non-2xx response causes Replicate to retry the webhook indefinitely.
+  // We still mark as failed so the combination doesn't hang in 'processing'.
+  if (!outputUrl) {
+    await db.from("replicate_jobs").update({ status: "failed", error_message: "Prediction succeeded but returned no output URL" }).eq("prediction_id", body.id);
+    await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
+    return NextResponse.json({ received: true, warning: "No output URL" });
+  }
 
   // Mark current job done
   await db.from("replicate_jobs")
@@ -146,50 +156,60 @@ export async function POST(req: Request) {
     .eq("prediction_id", body.id);
 
   // --- Composite step completed ---
+  // GAP-2 FIX: Wrap chain continuation in try/catch and return 200 on error.
+  // Without this, any thrown error returns 500 to Replicate, which retries the
+  // webhook and creates duplicate chain steps and replicate_jobs rows.
   if (jobType.startsWith("composite_")) {
-    const nextIndex = sequenceIndex + 1;
+    try {
+      const nextIndex = sequenceIndex + 1;
 
-    if (nextIndex < totalSteps) {
-      // Continue chain — fetch next zone item
-      const { data: zoneItems } = await db
-        .from("combination_zone_items")
-        .select("*, uniform:uniforms(id, name, image_url)")
-        .eq("combination_id", combinationId)
-        .eq("gender", gender);
+      if (nextIndex < totalSteps) {
+        // Continue chain — fetch next zone item
+        const { data: zoneItems } = await db
+          .from("combination_zone_items")
+          .select("*, uniform:uniforms(id, name, image_url)")
+          .eq("combination_id", combinationId)
+          .eq("gender", gender);
 
-      const typedItems = (zoneItems ?? []) as Array<{
-        zone: string;
-        uniform_id: string;
-        uniform: { id: string; name: string; image_url: string | null } | null;
-      }>;
+        const typedItems = (zoneItems ?? []) as Array<{
+          zone: string;
+          uniform_id: string;
+          uniform: { id: string; name: string; image_url: string | null } | null;
+        }>;
 
-      const orderedItems: ZoneItem[] = ZONE_LAYER_ORDER
-        .filter((zone) => typedItems.some((i) => i.zone === zone && i.uniform?.image_url))
-        .map((zone) => {
-          const item = typedItems.find((i) => i.zone === zone)!;
-          return {
-            zone: item.zone as ZoneItem["zone"],
-            uniform_id: item.uniform_id,
-            uniform_image_url: item.uniform!.image_url!,
-            uniform_name: item.uniform!.name,
-          };
-        });
+        const orderedItems: ZoneItem[] = ZONE_LAYER_ORDER
+          .filter((zone) => typedItems.some((i) => i.zone === zone && i.uniform?.image_url))
+          .map((zone) => {
+            const item = typedItems.find((i) => i.zone === zone)!;
+            return {
+              zone: item.zone as ZoneItem["zone"],
+              uniform_id: item.uniform_id,
+              uniform_image_url: item.uniform!.image_url!,
+              uniform_name: item.uniform!.name,
+            };
+          });
 
-      if (orderedItems[nextIndex]) {
-        await compositeNextGarment(
-          outputUrl,
-          orderedItems[nextIndex],
-          combinationId,
-          gender,
-          nextIndex,
-          totalSteps
-        );
+        if (orderedItems[nextIndex]) {
+          await compositeNextGarment(
+            outputUrl,
+            orderedItems[nextIndex],
+            combinationId,
+            gender,
+            nextIndex,
+            totalSteps
+          );
+        }
+      } else {
+        // All garments composited — store composite URL and fire animation
+        const col = gender === "male" ? "male_composite_url" : "female_composite_url";
+        await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
+        await generateVideoFromImage(outputUrl, combinationId, gender);
       }
-    } else {
-      // All garments composited — store composite URL and fire animation
-      const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-      await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-      await generateVideoFromImage(outputUrl, combinationId, gender);
+    } catch (chainErr) {
+      console.error("[webhook] composite chain error:", chainErr);
+      await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
+      // Return 200 to stop Replicate from retrying and creating duplicate jobs
+      return NextResponse.json({ received: true, error: "chain step failed" });
     }
   }
 
