@@ -107,7 +107,7 @@ export async function startCompositeChain(
     sequence_index: 0,
     total_steps: totalSteps,
     current_image_url: baseCharacterUrl,
-    next_uniform_id: orderedZoneItems.length > 1 ? null : null, // next handled in webhook
+    next_uniform_id: null, // intentionally null — webhook re-fetches ordered zone items from DB
     status: "pending",
   });
 
@@ -256,7 +256,7 @@ export async function getPredictionStatus(predictionId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Dev-only: poll and continue composite chain
+// Dev-only: poll and continue composite chain (iterative — no frame accumulation)
 // ---------------------------------------------------------------------------
 async function pollAndContinueChain(
   predictionId: string,
@@ -264,81 +264,82 @@ async function pollAndContinueChain(
   gender: Gender,
   allItems: ZoneItem[],
   currentIndex: number,
-  currentImageUrl: string,
-  attempt = 0
+  currentImageUrl: string
 ) {
   const MAX_ATTEMPTS = 200; // ~10 min at 3s intervals
-  if (attempt > MAX_ATTEMPTS) {
-    await markFailed(combinationId, predictionId);
+
+  // GAP-4 FIX: Iterative loop instead of tail recursion.
+  // Recursion with await sleep() suspends each frame — up to 200 frames would accumulate.
+  for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
+    await sleep(3000);
+    const prediction = await getPredictionStatus(predictionId);
+
+    if (prediction.status === "failed" || prediction.status === "canceled") {
+      await markFailed(combinationId, predictionId);
+      return;
+    }
+
+    if (prediction.status !== "succeeded") continue;
+
+    // Succeeded — process result
+    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : String(prediction.output ?? "");
+    const admin = createAdminClient();
+    const db = admin as any;
+    await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
+
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < allItems.length) {
+      // Continue chain
+      const nextId = await compositeNextGarment(outputUrl, allItems[nextIndex], combinationId, gender, nextIndex, allItems.length);
+      void pollAndContinueChain(nextId, combinationId, gender, allItems, nextIndex, outputUrl);
+    } else {
+      // Chain complete — store composite, start animation
+      const col = gender === "male" ? "male_composite_url" : "female_composite_url";
+      await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
+      void generateVideoFromImage(outputUrl, combinationId, gender);
+    }
     return;
   }
 
-  await sleep(3000);
-  const prediction = await getPredictionStatus(predictionId);
-
-  if (prediction.status === "failed" || prediction.status === "canceled") {
-    await markFailed(combinationId, predictionId);
-    return;
-  }
-
-  if (prediction.status !== "succeeded") {
-    return pollAndContinueChain(predictionId, combinationId, gender, allItems, currentIndex, currentImageUrl, attempt + 1);
-  }
-
-  const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : String(prediction.output ?? "");
-  const admin = createAdminClient();
-  const db = admin as any;
-  await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
-
-  const nextIndex = currentIndex + 1;
-  if (nextIndex < allItems.length) {
-    // Continue chain
-    const nextId = await compositeNextGarment(outputUrl, allItems[nextIndex], combinationId, gender, nextIndex, allItems.length);
-    void pollAndContinueChain(nextId, combinationId, gender, allItems, nextIndex, outputUrl);
-  } else {
-    // Chain complete — store composite, start animation
-    const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-    await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-    void generateVideoFromImage(outputUrl, combinationId, gender);
-  }
+  // Exceeded max attempts
+  await markFailed(combinationId, predictionId);
 }
 
 // ---------------------------------------------------------------------------
-// Dev-only: poll and finalise video
+// Dev-only: poll and finalise video (iterative — no frame accumulation)
 // ---------------------------------------------------------------------------
 async function pollAndFinaliseVideo(
   predictionId: string,
   combinationId: string,
-  gender: Gender,
-  attempt = 0
+  gender: Gender
 ) {
   const MAX_ATTEMPTS = 200;
-  if (attempt > MAX_ATTEMPTS) {
-    await markFailed(combinationId, predictionId);
+
+  // GAP-4 FIX: Iterative loop instead of tail recursion.
+  for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
+    await sleep(3000);
+    const prediction = await getPredictionStatus(predictionId);
+
+    if (prediction.status === "failed" || prediction.status === "canceled") {
+      await markFailed(combinationId, predictionId);
+      return;
+    }
+
+    if (prediction.status !== "succeeded") continue;
+
+    // Succeeded — store GIF URL and check readiness
+    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : String(prediction.output ?? "");
+    const admin = createAdminClient();
+    const db = admin as any;
+    const col = gender === "male" ? "male_gif_url" : "female_gif_url";
+    await db.from("replicate_jobs").update({ status: "done" }).eq("prediction_id", predictionId);
+    await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
+    await checkAndMarkReady(combinationId);
     return;
   }
 
-  await sleep(3000);
-  const prediction = await getPredictionStatus(predictionId);
-
-  if (prediction.status === "failed" || prediction.status === "canceled") {
-    await markFailed(combinationId, predictionId);
-    return;
-  }
-
-  if (prediction.status !== "succeeded") {
-    return pollAndFinaliseVideo(predictionId, combinationId, gender, attempt + 1);
-  }
-
-  const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : String(prediction.output ?? "");
-  const admin = createAdminClient();
-  const db = admin as any;
-  const col = gender === "male" ? "male_gif_url" : "female_gif_url";
-  await db.from("replicate_jobs").update({ status: "done" }).eq("prediction_id", predictionId);
-  await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-
-  // GAP-11 FIX: Use gender-aware readiness check
-  await checkAndMarkReady(combinationId);
+  // Exceeded max attempts
+  await markFailed(combinationId, predictionId);
 }
 
 // ---------------------------------------------------------------------------

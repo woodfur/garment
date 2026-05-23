@@ -75,7 +75,9 @@ export default async function BranchDashboardPage() {
       };
     },
     [`dashboard-stats-${branchId}`],
-    { revalidate: 30 }
+    // GAP-1 FIX: tags must be in the options object for revalidateTag() to work.
+    // Without tags here, all revalidateTag('dashboard-stats-*') calls were no-ops.
+    { tags: [`dashboard-stats-${branchId}`], revalidate: 30 }
   )();
 
   // Entry 2: List data (upcoming schedules, announcements)
@@ -103,7 +105,9 @@ export default async function BranchDashboardPage() {
       };
     },
     [`dashboard-lists-${branchId}`],
-    { revalidate: 30 }
+    // GAP-1 FIX: tags must be in the options object for revalidateTag() to work.
+    // Without tags here, all revalidateTag('dashboard-lists-*') calls were no-ops.
+    { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
   )();
 
   const { uniformsCount, combinationsCount, scheduleCount, lowStockCount } = statCounts;
