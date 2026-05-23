@@ -35,3 +35,33 @@ export async function requireBranchLeader(): Promise<BranchLeaderAuth | NextResp
 
   return { auth: { ...auth, branchId: auth.branchId } };
 }
+
+export type SuperAdminAuth = {
+  auth: AuthClaims;
+};
+
+/**
+ * requireSuperAdmin — shared auth guard for all /api/admin/* routes.
+ *
+ * Checks:
+ * 1. Valid session
+ * 2. Role must be 'super_admin'
+ *
+ * Usage in route handlers:
+ *   const result = await requireSuperAdmin();
+ *   if (result instanceof NextResponse) return result;
+ *   const { auth } = result;
+ */
+export async function requireSuperAdmin(): Promise<SuperAdminAuth | NextResponse> {
+  const auth = await getAuthContext();
+
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (auth.role !== "super_admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  return { auth };
+}

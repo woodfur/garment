@@ -337,20 +337,56 @@ async function pollAndFinaliseVideo(
   await db.from("replicate_jobs").update({ status: "done" }).eq("prediction_id", predictionId);
   await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
 
-  // Check if both GIFs are ready
-  const { data: combo } = await db.from("combinations").select("male_gif_url, female_gif_url").eq("id", combinationId).single() as { data: { male_gif_url: string | null; female_gif_url: string | null } | null };
-  if (combo?.male_gif_url && combo?.female_gif_url) {
-    await db.from("combinations").update({ preview_status: "ready" }).eq("id", combinationId);
-  }
+  // GAP-11 FIX: Use gender-aware readiness check
+  await checkAndMarkReady(combinationId);
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-async function markFailed(combinationId: string, predictionId: string) {
+
+/**
+ * GAP-11 FIX: Checks if the combination preview is ready based on which
+ * genders have zone items assigned. Only requires GIFs for genders that
+ * actually have items — a male-only combination marks ready after male GIF.
+ */
+async function checkAndMarkReady(combinationId: string) {
   const admin = createAdminClient();
   const db = admin as any;
-  await db.from("replicate_jobs").update({ status: "failed" }).eq("prediction_id", predictionId);
+
+  // Determine which genders have zone assignments
+  const { data: zoneItems } = await db
+    .from("combination_zone_items")
+    .select("gender")
+    .eq("combination_id", combinationId);
+
+  const genders = new Set<string>((zoneItems ?? []).map((i: { gender: string }) => i.gender));
+  const needsMale   = genders.has("male");
+  const needsFemale = genders.has("female");
+
+  // No zone items at all — skip
+  if (!needsMale && !needsFemale) return;
+
+  const { data: combo } = await db
+    .from("combinations")
+    .select("male_gif_url, female_gif_url")
+    .eq("id", combinationId)
+    .single() as { data: { male_gif_url: string | null; female_gif_url: string | null } | null };
+
+  const maleReady   = !needsMale   || !!combo?.male_gif_url;
+  const femaleReady = !needsFemale || !!combo?.female_gif_url;
+
+  if (maleReady && femaleReady) {
+    await db.from("combinations").update({ preview_status: "ready" }).eq("id", combinationId);
+  }
+}
+
+async function markFailed(combinationId: string, predictionId: string, reason = "Prediction failed or exceeded retry limit") {
+  const admin = createAdminClient();
+  const db = admin as any;
+  await db.from("replicate_jobs")
+    .update({ status: "failed", error_message: reason })
+    .eq("prediction_id", predictionId);
   // Check if ALL active jobs for this combination are failed
   const { data: jobs } = await db.from("replicate_jobs").select("status").eq("combination_id", combinationId);
   const allFailed = (jobs as Array<{ status: string }> | null)?.every((j) => j.status === "failed" || j.status === "done");

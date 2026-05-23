@@ -4,6 +4,56 @@ All notable changes to the Garment platform are recorded here.
 
 ---
 
+## [Unreleased] — 2026-05-23 (Security & Robustness Gap Analysis — Cycles 1–6)
+
+### Security — Fixed Critical Auth Vulnerabilities
+- **`/api/admin/branches` POST**: Added `requireSuperAdmin()` guard — previously unprotected.
+- **`/api/admin/create-leader`**: Replaced inconsistent `app_metadata` auth with `requireSuperAdmin()`.
+- **`/api/admin/branches` GET filter**: Replaced string-interpolated `.or()` with separate `.eq()` calls + slug validation to prevent filter injection.
+- **`/api/branch/uniforms/upload-url`**: Added content-type MIME validation.
+
+### Security — Webhook HMAC-SHA256 Verification
+- **`/api/webhooks/replicate`**: Proper Replicate HMAC-SHA256 verification using `webhook-id + webhook-timestamp + body`. 5-minute replay attack protection. Rejects all webhooks in production if `REPLICATE_WEBHOOK_SECRET` is not set.
+- Added `REPLICATE_WEBHOOK_SECRET` and all missing env vars to `.env.example`.
+
+### Security — Storage & Database RLS
+- Applied 10 storage RLS policies on `storage.objects` across all 4 buckets.
+- `exports` bucket INSERT policy restricted to `service_role` only.
+- Per-bucket MIME type allow-lists and file size limits set.
+- Enabled RLS on 4 tables that were missing it: `combination_zone_items`, `replicate_jobs`, `schedule_assignments`, `department_members`. All 16 public tables now covered.
+
+### Fixed — AI Preview Generation
+- **Gender-aware readiness**: `checkAndMarkReady()` queries zone items to determine assigned genders — male-only combinations correctly reach `preview_status = 'ready'`.
+- **Force-regenerate**: Clears old GIF/composite URLs when `force=true` before starting new chains.
+- **Error tracking**: `error_message TEXT` column added to `replicate_jobs`; webhook stores failure reason.
+- **Orphan cleanup**: Combination DELETE explicitly removes `replicate_jobs` rows first.
+
+### Fixed — UI & Database
+- Preview block shows with `male_gif_url OR female_gif_url` — single-gender combinations display correctly.
+- Builder drag state always cleared; mannequin warning banner added; JSX structure and null safety fixed.
+- Dropped duplicate `replicate_jobs_gender_check` constraint; `gender`/`status`/`combination_id` columns NOT NULL.
+- All `revalidateTag()` calls updated with required 2nd `"default"` arg (Next.js 16.2.6). Zero TypeScript errors.
+
+### Pending Admin Actions
+- Upload mannequins via `POST /api/admin/generate-mannequins` → set `NEXT_PUBLIC_MANNEQUIN_*_URL`.
+- Set `REPLICATE_WEBHOOK_SECRET` in `.env.local`.
+- Trigger bg removal for `Black Jacket` and `Black trousers` uniforms.
+- Add female zone items to `Sunday Choir Dress` combination if needed.
+
+### Additional Fixes — Cycles 4–6
+- **`generate-preview` single-gender**: When `gender=both` is requested, only genders with assigned zone items are processed. Male-only combinations no longer receive a 400 error for missing female zones.
+- **`getSession()` → `getUser()`**: Both `(branch-auth)/layout.tsx` and `change-password` API now use server-verified JWT via `getUser()` — prevents forged/expired cookie exploitation.
+- **`handleDelete` silent failure**: Delete button now checks `res.ok`, shows error alert on failure, and uses `try/finally` so the button never gets permanently disabled.
+- **`handleGenerate` silent failure**: Preview generate button now shows API error messages (e.g. "No zone items assigned") and handles network errors; `setGenerating(false)` guaranteed via `finally`.
+- **Phantom zone items on re-save**: `DELETE /api/branch/combinations/[id]/zones` endpoint added. Builder calls it to clear all zones before re-inserting, preventing removed zones from persisting.
+- **Dead "Edit Zones" link**: Removed broken link that silently opened a blank builder ignoring the `?edit=` param. Marked as planned feature.
+- **Unused `Edit` import**: Removed dead import left from link removal.
+- **`createAdminClient` safety**: Added JSDoc warning that the function is intentionally synchronous — prevents latent bug if ever made async.
+- **`replicate_jobs.status` constraint**: Added `CHECK (status IN ('pending','processing','completed','failed'))` — previously any string could be inserted.
+- **Storage DELETE policies**: Added `service_role` DELETE policies for `mannequins` and `combination-previews` buckets — enables webhook to replace/clean up stale images.
+
+---
+
 ## [Unreleased] — 2026-05-21 (Bugfix: Uniform Background Removal & Storage)
 
 ### Fixed — Background Removal Too Slow / Not Working

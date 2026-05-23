@@ -63,16 +63,25 @@ export async function POST(
     uniform: { id: string; name: string; image_url: string | null; bg_removed: boolean; category: string } | null;
   }>;
 
-  const genders: Gender[] = genderParam === "both" ? ["male", "female"] : [genderParam as Gender];
+  // GAP-1 FIX: When 'both' is requested, only process genders that have zone items.
+  // Genders with no assignments are silently skipped — not treated as an error.
+  const assignedGenders = new Set(typedZoneItems.map((i) => i.gender));
+  const genders: Gender[] = genderParam === "both"
+    ? (["male", "female"] as Gender[]).filter((g) => assignedGenders.has(g))
+    : [genderParam as Gender];
 
-  // Validate: at least one non-accessory zone per requested gender
+  if (genders.length === 0) {
+    return NextResponse.json({ error: "No zone items assigned for any gender. Assign uniforms to zones before generating a preview." }, { status: 400 });
+  }
+
+  // Validate: at least one non-accessory (core) zone per each included gender
   const warnings: string[] = [];
   for (const gender of genders) {
     const genderItems = typedZoneItems.filter((i) => i.gender === gender);
     const coreItems = genderItems.filter((i) => !i.zone.startsWith("accessory_"));
     if (coreItems.length === 0) {
       return NextResponse.json(
-        { error: `No uniforms assigned to core zones for ${gender} outfit. Assign at least one item (top, bottom, footwear, head, or outer).` },
+        { error: `No core zone items for ${gender} outfit. Assign at least one item (top, bottom, footwear, head, or outer).` },
         { status: 400 }
       );
     }
@@ -83,8 +92,20 @@ export async function POST(
     }
   }
 
-  // Set status to processing
-  await db.from("combinations").update({ preview_status: "processing" }).eq("id", combinationId);
+  // Set status to processing (and clear old GIF URLs if force-regenerating)
+  if (force) {
+    // GAP-9 FIX: Clear stale GIF/composite URLs so checkAndMarkReady() doesn't
+    // immediately flip status back to 'ready' using the old values
+    await db.from("combinations").update({
+      preview_status: "processing",
+      male_gif_url: null,
+      female_gif_url: null,
+      male_composite_url: null,
+      female_composite_url: null,
+    }).eq("id", combinationId);
+  } else {
+    await db.from("combinations").update({ preview_status: "processing" }).eq("id", combinationId);
+  }
 
   // Fire composite chains for each gender in parallel
   const chainPromises = genders.map(async (gender) => {
@@ -111,11 +132,17 @@ export async function POST(
 
   const results = await Promise.allSettled(chainPromises);
 
-  // If ALL chains failed to start, reset status
-  const allFailed = results.every((r) => r.status === "rejected");
-  if (allFailed) {
+  // GAP-3 FIX: If ANY chain failed to start, mark as failed.
+  // Previously only failed when ALL chains rejected, which left combinations
+  // permanently stuck in "processing" when only one gender's chain was rejected.
+  const anyFailed = results.some((r) => r.status === "rejected");
+  if (anyFailed) {
+    const rejectedReasons = (results.filter((r) => r.status === "rejected") as PromiseRejectedResult[])
+      .map((r) => r.reason?.message ?? "Unknown error")
+      .join("; ");
     await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
-    return NextResponse.json({ error: "Failed to start AI generation. Please try again." }, { status: 500 });
+    console.error(`[generate-preview] Chain failure for ${combinationId}: ${rejectedReasons}`);
+    return NextResponse.json({ error: "One or more AI generation chains failed to start. Please try again." }, { status: 500 });
   }
 
   const maxEstimate = (results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<{ gender: Gender; predictionId: string; estimatedSeconds: number }>[])

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Trash2, Loader2, RefreshCw, Zap, Edit } from "lucide-react";
+import { ArrowLeft, Trash2, Loader2, RefreshCw, Zap } from "lucide-react";
 import { ZONE_POSITIONS, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 
@@ -34,14 +34,20 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
-    const [comboRes, zonesRes] = await Promise.all([
-      fetch(`/api/branch/combinations/${combinationId}`),
-      fetch(`/api/branch/combinations/${combinationId}/zones`),
-    ]);
-    const [comboData, zonesData] = await Promise.all([comboRes.json(), zonesRes.json()]);
-    setCombo(comboData);
-    setZones(zonesData ?? { male: {}, female: {} });
-    setLoading(false);
+    try {
+      const [comboRes, zonesRes] = await Promise.all([
+        fetch(`/api/branch/combinations/${combinationId}`),
+        fetch(`/api/branch/combinations/${combinationId}/zones`),
+      ]);
+      if (!comboRes.ok) { setCombo(null); return; }
+      const [comboData, zonesData] = await Promise.all([comboRes.json(), zonesRes.json()]);
+      setCombo(comboData);
+      setZones(zonesData ?? { male: {}, female: {} });
+    } catch {
+      setCombo(null); // renders "Combination not found."
+    } finally {
+      setLoading(false);
+    }
   }, [combinationId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -56,11 +62,16 @@ export default function CombinationDetailClient({ combinationId }: { combination
         setTimedOut(true);
         return;
       }
-      const res = await fetch(`/api/branch/combinations/${combinationId}/preview-status`);
-      const data = await res.json();
-      setCombo((prev) => prev ? { ...prev, ...data } : prev);
-      if (data.preview_status === "ready" || data.preview_status === "failed") {
-        clearInterval(pollRef.current!);
+      try {
+        const res = await fetch(`/api/branch/combinations/${combinationId}/preview-status`);
+        if (!res.ok) return; // skip on server error, retry next tick
+        const data = await res.json();
+        setCombo((prev) => prev ? { ...prev, ...data } : prev);
+        if (data.preview_status === "ready" || data.preview_status === "failed") {
+          clearInterval(pollRef.current!);
+        }
+      } catch {
+        // network error — silently retry next tick
       }
     }, POLL_INTERVAL);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
@@ -69,19 +80,40 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const handleDelete = async () => {
     if (!confirm(`Delete "${combo?.name}"? This cannot be undone.`)) return;
     setDeleting(true);
-    await fetch(`/api/branch/combinations/${combinationId}`, { method: "DELETE" });
-    router.push("/branch/combinations");
+    try {
+      const res = await fetch(`/api/branch/combinations/${combinationId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error ?? "Failed to delete combination. Please try again.");
+        return;
+      }
+      router.push("/branch/combinations");
+    } catch {
+      alert("Network error — failed to delete combination. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleGenerate = async (force = false) => {
     setGenerating(true);
     setTimedOut(false);
-    const res = await fetch(`/api/branch/combinations/${combinationId}/generate-preview`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gender: "both", force }),
-    });
-    if (res.ok) setCombo((prev) => prev ? { ...prev, preview_status: "processing" } : prev);
-    setGenerating(false);
+    try {
+      const res = await fetch(`/api/branch/combinations/${combinationId}/generate-preview`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gender: "both", force }),
+      });
+      if (res.ok) {
+        setCombo((prev) => prev ? { ...prev, preview_status: "processing" } : prev);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error ?? "Failed to start AI preview generation. Please try again.");
+      }
+    } catch {
+      alert("Network error — failed to generate preview. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   if (loading) return <div style={{ padding: 32 }}><Loader2 className="animate-spin" /></div>;
@@ -105,13 +137,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
           )}
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <Link href={`/branch/combinations/new?edit=${combinationId}`} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "0.5rem 1rem",
-            borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)",
-            color: "var(--color-text-secondary)", fontSize: "0.85rem", textDecoration: "none",
-          }}>
-            <Edit size={14} /> Edit Zones
-          </Link>
+          {/* Edit Zones: planned feature — builder edit-mode not yet implemented */}
           <button onClick={handleDelete} disabled={deleting} style={{
             display: "flex", alignItems: "center", gap: 6, padding: "0.5rem 1rem",
             borderRadius: "var(--radius-md)", border: "1px solid var(--color-error)",
@@ -142,16 +168,20 @@ export default function CombinationDetailClient({ combinationId }: { combination
           </div>
         </div>
 
-        {combo.preview_status === "ready" && combo.male_gif_url && combo.female_gif_url ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--color-text-muted)" }}>MALE</p>
-              <video src={combo.male_gif_url}   autoPlay loop muted playsInline style={{ width: "100%", borderRadius: "var(--radius-md)" }} />
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--color-text-muted)" }}>FEMALE</p>
-              <video src={combo.female_gif_url} autoPlay loop muted playsInline style={{ width: "100%", borderRadius: "var(--radius-md)" }} />
-            </div>
+        {combo.preview_status === "ready" && (combo.male_gif_url || combo.female_gif_url) ? (
+          <div style={{ display: "grid", gridTemplateColumns: combo.male_gif_url && combo.female_gif_url ? "1fr 1fr" : "1fr", gap: "1rem", maxWidth: combo.male_gif_url && combo.female_gif_url ? "none" : "320px" }}>
+            {combo.male_gif_url && (
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--color-text-muted)" }}>MALE</p>
+                <video src={combo.male_gif_url} autoPlay loop muted playsInline style={{ width: "100%", borderRadius: "var(--radius-md)" }} />
+              </div>
+            )}
+            {combo.female_gif_url && (
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--color-text-muted)" }}>FEMALE</p>
+                <video src={combo.female_gif_url} autoPlay loop muted playsInline style={{ width: "100%", borderRadius: "var(--radius-md)" }} />
+              </div>
+            )}
           </div>
         ) : combo.preview_status === "processing" ? (
           <div style={{ padding: "2rem", textAlign: "center" }}>
@@ -199,6 +229,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
                       <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{ZONE_POSITIONS[zone].label}</td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>
                         {mItem ? (
+                          mItem.uniform ? (
                           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                             {mItem.uniform.image_url && (
                               <Image src={mItem.uniform.image_url} alt={mItem.uniform.name} width={32} height={32} style={{ borderRadius: 4, objectFit: "cover" }} />
@@ -206,10 +237,12 @@ export default function CombinationDetailClient({ combinationId }: { combination
                             <span>{mItem.uniform.name}</span>
                             {!mItem.uniform.bg_removed && <span title="No bg removal" style={{ fontSize: "0.7rem" }}>⚠️</span>}
                           </div>
+                          ) : <span style={{ color: "var(--color-text-disabled)" }}>[Uniform deleted]</span>
                         ) : <span style={{ color: "var(--color-text-disabled)" }}>—</span>}
                       </td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>
                         {fItem ? (
+                          fItem.uniform ? (
                           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                             {fItem.uniform.image_url && (
                               <Image src={fItem.uniform.image_url} alt={fItem.uniform.name} width={32} height={32} style={{ borderRadius: 4, objectFit: "cover" }} />
@@ -217,6 +250,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
                             <span>{fItem.uniform.name}</span>
                             {!fItem.uniform.bg_removed && <span title="No bg removal" style={{ fontSize: "0.7rem" }}>⚠️</span>}
                           </div>
+                          ) : <span style={{ color: "var(--color-text-disabled)" }}>[Uniform deleted]</span>
                         ) : <span style={{ color: "var(--color-text-disabled)" }}>—</span>}
                       </td>
                     </tr>

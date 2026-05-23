@@ -24,35 +24,48 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Super admin already exists" }, { status: 409 });
   }
 
-  const { email, password, fullName } = await request.json();
+  let email: string, password: string, fullName: string | undefined;
+  try {
+    const body = await request.json();
+    email = body.email;
+    password = body.password;
+    fullName = body.fullName;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   if (!email || !password) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
 
-  const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: {
-      role: "super_admin",
+  try {
+    const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        role: "super_admin",
+        full_name: fullName || "Super Admin",
+      },
+    });
+
+    if (createError) {
+      return NextResponse.json({ error: createError.message }, { status: 500 });
+    }
+
+    // Upsert profile with super_admin role
+    await (supabase as any).from("profiles").upsert({
+      id: authUser.user.id,
+      email,
       full_name: fullName || "Super Admin",
-    },
-  });
+      role: "super_admin",
+      branch_id: null,
+      must_change_password: false,
+    });
 
-  if (createError) {
-    return NextResponse.json({ error: createError.message }, { status: 500 });
+    return NextResponse.json({ success: true, userId: authUser.user.id });
+  } catch (err) {
+    console.error("[admin/setup] Unexpected error:", err);
+    return NextResponse.json({ error: "Setup failed unexpectedly" }, { status: 500 });
   }
-
-  // Upsert profile with super_admin role
-  await (supabase as any).from("profiles").upsert({
-    id: authUser.user.id,
-    email,
-    full_name: fullName || "Super Admin",
-    role: "super_admin",
-    branch_id: null,
-    must_change_password: false,
-  });
-
-  return NextResponse.json({ success: true, userId: authUser.user.id });
 }

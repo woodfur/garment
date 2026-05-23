@@ -95,6 +95,7 @@ export default async function PublicViewerPage({ params }: PageProps) {
 
                   {a.combination?.preview_status === "ready" ? (
                     <div className="viewer-previews">
+                      {a.combination.male_gif_url && (
                       <div className="viewer-preview-item">
                         <span className="viewer-gender-label">Male</span>
                         <video
@@ -113,6 +114,8 @@ export default async function PublicViewerPage({ params }: PageProps) {
                           ↓ Download
                         </a>
                       </div>
+                      )}
+                      {a.combination.female_gif_url && (
                       <div className="viewer-preview-item">
                         <span className="viewer-gender-label">Female</span>
                         <video
@@ -131,6 +134,7 @@ export default async function PublicViewerPage({ params }: PageProps) {
                           ↓ Download
                         </a>
                       </div>
+                      )}
                     </div>
                   ) : (
                     <div className="viewer-preview-pending">

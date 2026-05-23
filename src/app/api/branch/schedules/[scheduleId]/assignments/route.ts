@@ -59,10 +59,22 @@ export async function DELETE(
 ) {
   const result = await requireBranchLeader();
   if (result instanceof NextResponse) return result;
+  const { auth } = result;
   const { scheduleId } = await params;
   const { department_id } = (await req.json()) as { department_id: string };
 
   const admin = createAdminClient();
+
+  // Verify schedule belongs to this branch (same check as POST)
+  const { data: sched } = await (admin as any)
+    .from("schedules")
+    .select("branch_id")
+    .eq("id", scheduleId)
+    .single();
+  if (!sched || sched.branch_id !== auth.branchId) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const { error } = await (admin as any)
     .from("schedule_assignments")
     .delete()

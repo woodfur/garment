@@ -30,6 +30,7 @@ export async function GET(_request: Request, { params }: Params) {
       .from("combinations")
       .select(`
         id, name, description, department_id, canvas_data, preview_url, created_at,
+        preview_status, male_gif_url, female_gif_url, male_composite_url, female_composite_url,
         departments(name),
         combination_items(
           id, uniform_id, layer_order, x, y, scale_x, scale_y, rotation,
@@ -99,7 +100,13 @@ export async function DELETE(_request: Request, { params }: Params) {
       if (path) await admin.storage.from("combination-previews").remove([path]);
     }
 
-    const { error } = await (admin as any).from("combinations").delete().eq("id", combinationId);
+    const db = admin as any;
+
+    // Delete orphaned replicate_jobs for this combination
+    // (FK has ON DELETE CASCADE, but being explicit prevents accumulation if cascade changes)
+    await db.from("replicate_jobs").delete().eq("combination_id", combinationId);
+
+    const { error } = await db.from("combinations").delete().eq("id", combinationId);
     if (error) throw error;
 
     revalidateTag(`dashboard-lists-${auth.branchId}`, "default");

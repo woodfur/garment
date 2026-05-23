@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireSuperAdmin } from "@/lib/api-auth";
 
 /** Bias-free password generation using rejection sampling */
 function generatePassword(): string {
@@ -36,33 +37,15 @@ function generatePassword(): string {
 }
 
 export async function POST(request: Request) {
+  // GAP-2 FIX: Use requireSuperAdmin() for consistent, authoritative DB-backed auth
+  const authResult = await requireSuperAdmin();
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const { email, fullName, branchId } = await request.json();
 
     if (!email || !branchId) {
       return NextResponse.json({ error: "Email and branch are required" }, { status: 400 });
-    }
-
-    // Authenticate caller — getUser() verifies the JWT against Supabase Auth server
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const meta = user.app_metadata as Record<string, string> | undefined;
-    let callerRole = meta?.user_role;
-
-    if (!callerRole) {
-      const admin = createAdminClient();
-      const { data: profile } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      callerRole = (profile as { role: string } | null)?.role;
-    }
-
-    if (callerRole !== "super_admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const adminSupabase = createAdminClient();

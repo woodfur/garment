@@ -9,10 +9,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
     }
 
-    // Get session — SSR client handles cookie refresh automatically
+    // GAP-3 FIX: Use getUser() (server-verified JWT) instead of getSession() (cookie-only).
+    // Critical: password changes must verify the session is still valid server-side.
     const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     // Update password — SSR client writes refreshed session tokens back to cookies
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     const { error: profileError } = await (admin as any)
       .from("profiles")
       .update({ must_change_password: false })
-      .eq("id", session.user.id) as { error: Error | null };
+      .eq("id", user.id) as { error: Error | null };
 
     if (profileError) {
       console.error("Failed to update must_change_password flag:", profileError);

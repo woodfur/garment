@@ -87,3 +87,43 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
 }
+
+// DELETE /api/branch/combinations/[combinationId]/zones
+// Clears ALL zone items for this combination (used before re-inserting on save).
+// Accepts optional body { gender } to clear only one gender's zones.
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ combinationId: string }> }
+) {
+  const authResult = await requireBranchLeader();
+  if (authResult instanceof NextResponse) return authResult;
+  const { auth } = authResult;
+
+  const { combinationId } = await params;
+  const admin = createAdminClient();
+  const db = admin as any;
+
+  // Verify combination belongs to this branch
+  const { data: combo } = await db
+    .from("combinations")
+    .select("branch_id")
+    .eq("id", combinationId)
+    .single() as { data: { branch_id: string } | null };
+
+  if (!combo || combo.branch_id !== auth.branchId) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Optional: filter by gender if specified in body
+  let body: { gender?: string } = {};
+  try { body = await req.json(); } catch { /* no body = clear all */ }
+
+  let query = db.from("combination_zone_items").delete().eq("combination_id", combinationId);
+  if (body.gender === "male" || body.gender === "female") {
+    query = query.eq("gender", body.gender);
+  }
+
+  const { error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}

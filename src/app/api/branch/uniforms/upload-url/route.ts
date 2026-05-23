@@ -16,6 +16,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "path is required" }, { status: 400 });
     }
 
+    // Validate content type if provided
+    const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (contentType && !ALLOWED_TYPES.includes(contentType)) {
+      return NextResponse.json(
+        { error: `Unsupported file type. Allowed: ${ALLOWED_TYPES.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
     const admin = createAdminClient();
 
     // Create a signed upload URL (60 second expiry)

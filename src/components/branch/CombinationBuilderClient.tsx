@@ -56,7 +56,7 @@ export default function CombinationBuilderClient() {
   // Load uniforms when department selected
   useEffect(() => {
     if (!selectedDept) return;
-    fetch(`/api/branch/uniforms?department_id=${selectedDept.id}&archived=false`)
+    fetch(`/api/branch/uniforms?department_id=${selectedDept.id}&include_archived=false`)
       .then((r) => r.json())
       .then((d) => setUniforms(Array.isArray(d) ? d : d.uniforms ?? []))
       .catch(console.error);
@@ -70,7 +70,7 @@ export default function CombinationBuilderClient() {
   // Has bg_removed issues
   const bgWarnings = (() => {
     const all = [...Object.values(outfit.male), ...Object.values(outfit.female)] as CombinationZoneItemWithUniform[];
-    return all.filter((item) => item?.uniform && !item.uniform.bg_removed).map((item) => item.uniform.name);
+    return all.filter((item) => item?.uniform && !item.uniform.bg_removed).map((item) => item.uniform!.name);
   })();
 
   // ---------------------------------------------------------------------------
@@ -154,19 +154,33 @@ export default function CombinationBuilderClient() {
         setCombinationId(comboId);
       }
 
-      // 2. Save zone items for both genders
+      // 2. Save zone items — clear then re-insert to avoid phantom items from removed zones
+      // GAP-8 FIX: On re-save, delete all existing zone items first so removed zones don't persist
+      if (comboId === combinationId && combinationId) {
+        // This is a re-save — clear existing items before upserting
+        const clearRes = await fetch(`/api/branch/combinations/${comboId}/zones`, { method: "DELETE" });
+        if (!clearRes.ok) {
+          const clearData = await clearRes.json().catch(() => ({}));
+          throw new Error(clearData.error ?? "Failed to clear existing zone assignments");
+        }
+      }
+
       const allItems = [
         ...Object.entries(outfit.male).map(([zone, item]) => ({ gender: "male" as Gender, zone: zone as BodyZone, uniform_id: item!.uniform_id })),
         ...Object.entries(outfit.female).map(([zone, item]) => ({ gender: "female" as Gender, zone: zone as BodyZone, uniform_id: item!.uniform_id })),
       ];
 
-      await Promise.all(allItems.map((item) =>
-        fetch(`/api/branch/combinations/${comboId}/zones`, {
+      await Promise.all(allItems.map(async (item) => {
+        const r = await fetch(`/api/branch/combinations/${comboId}/zones`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(item),
-        })
-      ));
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          throw new Error(data.error ?? `Failed to save zone: ${item.zone}`);
+        }
+      }));
 
       if (generatePreview) {
         setGenerating(true);
@@ -194,6 +208,7 @@ export default function CombinationBuilderClient() {
   // Render helpers
   // ---------------------------------------------------------------------------
   const mannequinUrl = { male: MANNEQUIN_MALE_URL, female: MANNEQUIN_FEMALE_URL };
+  const mannequinsConfigured = !!(MANNEQUIN_MALE_URL && MANNEQUIN_FEMALE_URL);
   const zonesToRender = showAccessories
     ? [...STANDARD_ZONES, ...ACCESSORY_ZONES]
     : STANDARD_ZONES;
@@ -261,6 +276,12 @@ export default function CombinationBuilderClient() {
             Click a zone on either mannequin, then select a uniform from the panel. You can also drag uniforms directly onto zones.
           </p>
 
+          {!mannequinsConfigured && (
+            <div className="builder-warning" style={{ marginBottom: "1rem" }}>
+              ⚙️ <strong>Mannequin images not yet configured.</strong> The visual builder is available but mannequin previews will appear blank. Please ask your administrator to run the mannequin generation tool and set the required environment variables.
+            </div>
+          )}
+
           <div className="zone-builder-layout">
             {/* Mannequins */}
             {(["male", "female"] as Gender[]).map((gender) => (
@@ -300,21 +321,23 @@ export default function CombinationBuilderClient() {
                           if (draggedUniform && ZONE_CATEGORIES[zone] === draggedUniform.category) {
                             handleDrop(gender, zone);
                           }
+                          // GAP-5 FIX: always clear drag state, even on invalid category drop
+                          setDraggedUniform(null);
                         }}
                         title={pos.label}
                       >
                         {assigned ? (
                           <div className="zone-filled-content">
-                            {assigned.uniform.image_url ? (
+                            {assigned.uniform?.image_url ? (
                               <Image
                                 src={assigned.uniform.image_url}
-                                alt={assigned.uniform.name}
+                                alt={assigned.uniform?.name ?? "Uniform"}
                                 width={40}
                                 height={40}
                                 className="zone-uniform-thumb"
                               />
                             ) : (
-                              <span className="zone-uniform-initial">{assigned.uniform.name[0]}</span>
+                              <span className="zone-uniform-initial">{assigned.uniform?.name?.[0] ?? "?"}</span>
                             )}
                             <button
                               className="zone-clear-btn"
@@ -330,74 +353,75 @@ export default function CombinationBuilderClient() {
                       </div>
                     );
                   })}
-                </div>
-
-                {/* Accessory toggle */}
-                <button
-                  className="accessories-toggle"
-                  onClick={() => setShowAccessories((v) => !v)}
-                >
-                  {showAccessories ? "Hide Accessories" : "⊕ Show Accessories"}
-                </button>
-              </div>
-            ))}
-
-            {/* Uniform Panel */}
-            <div className="uniform-panel">
-              <div className="uniform-panel-header">
-                <h3>Uniforms</h3>
-                {activeZone && (
-                  <div className="active-zone-badge">
-                    {activeGender === "male" ? "👔" : "👗"} {ZONE_POSITIONS[activeZone].label}
-                  </div>
-                )}
-                {!activeZone && <p className="panel-hint">Click a zone to filter</p>}
-              </div>
-
-              <div className="uniform-panel-list">
-                {filteredUniforms.length === 0 && (
-                  <p className="panel-empty">
-                    {activeZone
-                      ? `No ${ZONE_CATEGORIES[activeZone]} uniforms in ${selectedDept?.name}.`
-                      : "No uniforms found."}
-                  </p>
-                )}
-                {filteredUniforms.map((u) => (
-                  <div
-                    key={u.id}
-                    className={`panel-uniform-card ${activeZone && ZONE_CATEGORIES[activeZone] !== u.category ? "dimmed" : ""}`}
-                    draggable
-                    onDragStart={() => handleDragStart(u)}
-                    onDragEnd={handleDragEnd}
-                    onClick={() => activeZone && ZONE_CATEGORIES[activeZone] === u.category && assignUniform(u)}
-                  >
-                    {u.image_url ? (
-                      <Image src={u.image_url} alt={u.name} width={48} height={48} className="panel-uniform-img" />
-                    ) : (
-                      <div className="panel-uniform-placeholder">{u.name[0]}</div>
-                    )}
-                    <div className="panel-uniform-info">
-                      <span className="panel-uniform-name">{u.name}</span>
-                      <span className={`panel-uniform-cat cat-${u.category}`}>{u.category}</span>
-                    </div>
-                    {!u.bg_removed && <span className="panel-uniform-warn" title="Background not removed">⚠️</span>}
-                  </div>
-                ))}
               </div>
             </div>
-          </div>
+          ))}
 
-          <div className="builder-nav">
-            <button className="btn btn-ghost" onClick={() => setStep(1)}>← Back</button>
-            <button
-              className="btn btn-primary"
-              disabled={!canProceed}
-              onClick={() => setStep(3)}
-            >
-              Continue → ({totalAssigned} assigned)
-            </button>
+          {/* Accessory toggle — single instance outside gender loop */}
+          <button
+            className="accessories-toggle"
+            style={{ gridColumn: "1 / -1", justifySelf: "center", marginTop: 8 }}
+            onClick={() => setShowAccessories((v) => !v)}
+          >
+            {showAccessories ? "Hide Accessories" : "⊕ Show Accessories"}
+          </button>
+
+          {/* Uniform Panel */}
+          <div className="uniform-panel">
+            <div className="uniform-panel-header">
+              <h3>Uniforms</h3>
+              {activeZone && (
+                <div className="active-zone-badge">
+                  {activeGender === "male" ? "👔" : "👗"} {ZONE_POSITIONS[activeZone].label}
+                </div>
+              )}
+              {!activeZone && <p className="panel-hint">Click a zone to filter</p>}
+            </div>
+
+            <div className="uniform-panel-list">
+              {filteredUniforms.length === 0 && (
+                <p className="panel-empty">
+                  {activeZone
+                    ? `No ${ZONE_CATEGORIES[activeZone]} uniforms in ${selectedDept?.name}.`
+                    : "No uniforms found."}
+                </p>
+              )}
+              {filteredUniforms.map((u) => (
+                <div
+                  key={u.id}
+                  className={`panel-uniform-card ${activeZone && ZONE_CATEGORIES[activeZone] !== u.category ? "dimmed" : ""}`}
+                  draggable
+                  onDragStart={() => handleDragStart(u)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => activeZone && ZONE_CATEGORIES[activeZone] === u.category && assignUniform(u)}
+                >
+                  {u.image_url ? (
+                    <Image src={u.image_url} alt={u.name} width={48} height={48} className="panel-uniform-img" />
+                  ) : (
+                    <div className="panel-uniform-placeholder">{u.name[0]}</div>
+                  )}
+                  <div className="panel-uniform-info">
+                    <span className="panel-uniform-name">{u.name}</span>
+                    <span className={`panel-uniform-cat cat-${u.category}`}>{u.category}</span>
+                  </div>
+                  {!u.bg_removed && <span className="panel-uniform-warn" title="Background not removed">⚠️</span>}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
+
+        <div className="builder-nav">
+          <button className="btn btn-ghost" onClick={() => setStep(1)}>← Back</button>
+          <button
+            className="btn btn-primary"
+            disabled={!canProceed}
+            onClick={() => setStep(3)}
+          >
+            Continue → ({totalAssigned} assigned)
+          </button>
+        </div>
+      </div>
       )}
 
       {/* ------------------------------------------------------------------ */}
@@ -419,8 +443,8 @@ export default function CombinationBuilderClient() {
                     {(Object.entries(outfit[gender]) as [BodyZone, CombinationZoneItemWithUniform][]).map(([zone, item]) => (
                       <li key={zone} className="summary-item">
                         <span className="summary-zone">{ZONE_POSITIONS[zone].label}</span>
-                        <span className="summary-uniform">{item.uniform.name}</span>
-                        {!item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
+                        <span className="summary-uniform">{item.uniform?.name ?? "[Deleted]"}</span>
+                        {item.uniform && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
                       </li>
                     ))}
                   </ul>

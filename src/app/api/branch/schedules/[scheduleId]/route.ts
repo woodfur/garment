@@ -17,9 +17,19 @@ export async function PATCH(
   };
   const admin = createAdminClient();
 
+  // Whitelist only permitted fields — prevent branch_id / id injection via admin client
+  const updates: Record<string, unknown> = {};
+  if (body.title !== undefined) updates.title = String(body.title).trim();
+  if (body.service_date !== undefined) updates.service_date = body.service_date;
+  if (body.notes !== undefined) updates.notes = body.notes ? String(body.notes).trim() : null;
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+  }
+
   const { data, error } = await (admin as any)
     .from("schedules")
-    .update(body)
+    .update(updates)
     .eq("id", scheduleId)
     .eq("branch_id", auth.branchId)
     .select()

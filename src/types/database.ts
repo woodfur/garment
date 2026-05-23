@@ -268,9 +268,9 @@ export type DepartmentWithCounts = Department & {
   member_count: number;
 };
 
-// Zone item with joined uniform data
+// Zone item with joined uniform data (uniform may be null if the uniform was deleted)
 export type CombinationZoneItemWithUniform = CombinationZoneItem & {
-  uniform: Uniform;
+  uniform: Uniform | null;
 };
 
 // Schedule with nested assignments
