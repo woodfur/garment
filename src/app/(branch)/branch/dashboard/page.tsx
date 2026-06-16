@@ -2,8 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { getAuthContext } from "@/lib/auth";
 import { unstable_cache } from "next/cache";
 import { formatDate, truncate } from "@/lib/utils";
-import { Shirt, Layers, Calendar, Megaphone, AlertTriangle } from "lucide-react";
-import QuickActionsGrid from "@/components/branch/QuickActionsGrid";
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -17,291 +16,191 @@ type ScheduleRow = {
   combinations: { name: string } | null;
 };
 
-type AnnouncementRow = {
+type LookRow = {
   id: string;
-  title: string;
-  body: string | null;
-  created_at: string;
+  name: string;
+  preview_status: "none" | "processing" | "ready" | "failed";
+  male_gif_url: string | null;
+  female_gif_url: string | null;
+  departments: { name: string } | null;
 };
 
 export default async function BranchDashboardPage() {
   const auth = await getAuthContext();
   const branchId = auth!.branchId as string;
   const today = new Date().toISOString().split("T")[0];
-  // GAP-6 FIX: Do NOT create adminClient here — move it inside each cache callback.
-  // If captured in closure, a stale client instance would be used by cache hits from
-  // other requests. Each callback creates its own client on execution.
 
-  /**
-   * Two server-side cache entries — keyed by branchId, 30s TTL each.
-   *
-   * force-dynamic controls PAGE rendering cache (always re-renders RSC).
-   * unstable_cache controls DATA cache — persists across page renders.
-   * These are independent layers: page renders fresh, data comes from cache.
-   *
-   * Cache invalidation: future mutation API routes (uniforms, schedules, etc.)
-   * must call: revalidateTag(`dashboard-stats-${branchId}`)
-   *            revalidateTag(`dashboard-lists-${branchId}`)
-   */
-
-  // Entry 1: Stat counts (uniforms, combinations, schedules, low stock)
+  // Stat counts — keyed by branchId, 30s TTL
   const statCounts = await unstable_cache(
     async () => {
-      const adminClient = createAdminClient(); // GAP-6 FIX: created inside callback — not captured from outer scope
-      const [uniforms, combos, schedCount, lowStockRes] = await Promise.all([
-        (adminClient as any)
-          .from("uniforms")
-          .select("*", { count: "exact", head: true })
-          .eq("branch_id", branchId)
-          .or("is_archived.eq.false,is_archived.is.null"),
-        (adminClient as any)
-          .from("combinations")
-          .select("*", { count: "exact", head: true })
+      const adminClient = createAdminClient();
+      const [uniforms, combos, schedCount] = await Promise.all([
+        (adminClient as any).from("uniforms").select("*", { count: "exact", head: true })
+          .eq("branch_id", branchId).or("is_archived.eq.false,is_archived.is.null"),
+        (adminClient as any).from("combinations").select("*", { count: "exact", head: true })
           .eq("branch_id", branchId),
-        (adminClient as any)
-          .from("schedules")
-          .select("*", { count: "exact", head: true })
-          .eq("branch_id", branchId)
-          .gte("service_date", today),
-        // DB-side count via RPC — avoids fetching all rows just to filter in JS
-        (adminClient as any)
-          .rpc("get_branch_low_stock_count", { p_branch_id: branchId }),
+        (adminClient as any).from("schedules").select("*", { count: "exact", head: true })
+          .eq("branch_id", branchId).gte("service_date", today),
       ]);
-
-      const lowStockCount = (lowStockRes.data ?? 0) as number;
-
       return {
         uniformsCount: (uniforms.count ?? 0) as number,
         combinationsCount: (combos.count ?? 0) as number,
         scheduleCount: (schedCount.count ?? 0) as number,
-        lowStockCount,
       };
     },
     [`dashboard-stats-${branchId}`],
-    // GAP-1 FIX: tags must be in the options object for revalidateTag() to work.
-    // Without tags here, all revalidateTag('dashboard-stats-*') calls were no-ops.
     { tags: [`dashboard-stats-${branchId}`], revalidate: 30 }
   )();
 
-  // Entry 2: List data (upcoming schedules, announcements)
-  const listData = await unstable_cache(
+  // Upcoming schedules — keyed by branchId, 30s TTL
+  const upcomingSchedules = await unstable_cache(
     async () => {
-      const adminClient = createAdminClient(); // GAP-6 FIX: created inside callback
-      const [upcomingRes, announcementsRes] = await Promise.all([
-        (adminClient as any)
-          .from("schedules")
-          .select("id, title, service_date, notes, combinations(name)")
-          .eq("branch_id", branchId)
-          .gte("service_date", today)
-          .order("service_date", { ascending: true })
-          .limit(3),
-        (adminClient as any)
-          .from("announcements")
-          .select("id, title, body, created_at")
-          .eq("branch_id", branchId)
-          .eq("is_published", true)
-          .order("created_at", { ascending: false })
-          .limit(3),
-      ]);
-      return {
-        upcomingSchedules: (upcomingRes.data ?? []) as ScheduleRow[],
-        announcements: (announcementsRes.data ?? []) as AnnouncementRow[],
-      };
+      const adminClient = createAdminClient();
+      const res = await (adminClient as any)
+        .from("schedules")
+        .select("id, title, service_date, notes, combinations(name)")
+        .eq("branch_id", branchId).gte("service_date", today)
+        .order("service_date", { ascending: true }).limit(3);
+      return (res.data ?? []) as ScheduleRow[];
     },
     [`dashboard-lists-${branchId}`],
-    // GAP-1 FIX: tags must be in the options object for revalidateTag() to work.
-    // Without tags here, all revalidateTag('dashboard-lists-*') calls were no-ops.
     { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
   )();
 
-  const { uniformsCount, combinationsCount, scheduleCount, lowStockCount } = statCounts;
-  const { upcomingSchedules, announcements } = listData;
+  // A few existing looks for quick access / assignment
+  const recentLooks = await unstable_cache(
+    async () => {
+      const adminClient = createAdminClient();
+      const res = await (adminClient as any)
+        .from("combinations")
+        .select("id, name, preview_status, male_gif_url, female_gif_url, departments(name)")
+        .eq("branch_id", branchId)
+        .order("created_at", { ascending: false })
+        .limit(6);
+      return (res.data ?? []) as LookRow[];
+    },
+    [`dashboard-looks-${branchId}`],
+    { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
+  )();
 
-  const stats = [
-    {
-      label: "Uniforms",
-      value: uniformsCount,
-      icon: Shirt,
-      color: "var(--color-gold)",
-      bg: "rgba(155,135,245,0.12)",
-    },
-    {
-      label: "Combinations",
-      value: combinationsCount,
-      icon: Layers,
-      color: "var(--color-info)",
-      bg: "rgba(33,150,243,0.12)",
-    },
-    {
-      label: "Upcoming Services",
-      value: scheduleCount,
-      icon: Calendar,
-      color: "#A78BFA",
-      bg: "rgba(167,139,250,0.12)",
-    },
-    {
-      label: "Low Stock Alerts",
-      value: lowStockCount,
-      icon: AlertTriangle,
-      color: lowStockCount > 0 ? "var(--color-error)" : "var(--color-success)",
-      bg: lowStockCount > 0 ? "var(--color-error-bg)" : "var(--color-success-bg)",
-    },
-  ];
+  const { uniformsCount, combinationsCount, scheduleCount } = statCounts;
 
   const displayName = auth!.fullName ?? auth!.email;
+  const firstName = (displayName ?? "there").split(" ")[0] || "there";
+  // gallery rhythm — first plate large, then an asymmetric md/sm cadence
+  const galleryClasses = ["g-lg", "g-md", "g-sm", "g-sm", "g-md", "g-md"];
 
   return (
-    <div style={{ maxWidth: 1200 }}>
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem", marginBottom: "0.25rem" }}>
-          Welcome back, {displayName.split(" ")[0] || "there"} 👋
-        </h1>
-        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
-          Here&apos;s what&apos;s happening at your branch today.
-        </p>
+    <div className="dash">
+      {/* masthead */}
+      <div className="dash-mast">
+        <div>
+          <div className="eyebrow eyebrow-accent">The Fitting Room</div>
+          <div className="ttl">Dashboard</div>
+        </div>
+        <div className="issue">
+          <b>{combinationsCount} looks · {uniformsCount} pieces</b><br />
+          {scheduleCount} upcoming {scheduleCount === 1 ? "service" : "services"}
+        </div>
       </div>
 
-      {/* ── Stat Cards ─────────────────────────────────────────── */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-        gap: "1.25rem",
-        marginBottom: "2rem",
-      }}>
-        {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="card" style={{ padding: "1.5rem", display: "flex", alignItems: "center", gap: "1.25rem" }}>
-            <div style={{
-              width: 48, height: 48,
-              borderRadius: "var(--radius-md)",
-              background: bg,
-              border: `1px solid ${color}30`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0,
-            }}>
-              <Icon size={22} color={color} />
-            </div>
-            <div>
-              <div style={{ fontSize: "1.75rem", fontWeight: 700, fontFamily: "var(--font-heading)", lineHeight: 1 }}>
-                {value}
-              </div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "0.25rem" }}>
-                {label}
-              </div>
-            </div>
+      {/* hero spread */}
+      <section className="dash-hero">
+        <div className="plate">
+          <span className="kick">This Sunday</span>
+          <div className="silh" />
+          <span className="no">{String(combinationsCount).padStart(2, "0")}</span>
+        </div>
+        <div className="copy">
+          <div className="eyebrow">Welcome back, {firstName}</div>
+          <h1>Dress the<br /><em>congregation</em>.</h1>
+          <p>Compose a look on the mannequin, render it with AI, and publish a lookbook the congregation can browse before the service.</p>
+          <div className="dash-cta">
+            <Link href="/branch/combinations/new" className="btn-primary">Open the Fitting Room →</Link>
+            <Link href="/branch/uniforms" className="btn-secondary">Add a uniform</Link>
           </div>
-        ))}
+        </div>
+      </section>
+
+      {/* stat ledger */}
+      <section className="dash-ledger">
+        <div className="c"><div className="v">{uniformsCount}<small>pieces</small></div><div className="k">Wardrobe</div></div>
+        <div className="c hl"><div className="v">{String(combinationsCount).padStart(2, "0")}</div><div className="k">Looks composed</div></div>
+        <div className="c"><div className="v">{String(scheduleCount).padStart(2, "0")}</div><div className="k">Upcoming services</div></div>
+      </section>
+
+      {/* looks gallery */}
+      <div className="dash-sec">
+        <div className="lt"><span className="num">01</span><h2>This season&rsquo;s <em>looks</em></h2></div>
+        <Link href="/branch/uniforms">View all →</Link>
       </div>
+      {recentLooks.length === 0 ? (
+        <div style={{ padding: "2.5rem 0", color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
+          No looks yet. <Link href="/branch/combinations/new" style={{ color: "var(--color-primary-dark)", fontWeight: 600 }}>Compose your first →</Link>
+        </div>
+      ) : (
+        <section className="dash-gallery">
+          {recentLooks.map((look, i) => {
+            const gif = look.male_gif_url ?? look.female_gif_url;
+            const ready = look.preview_status === "ready" && gif;
+            return (
+              <Link key={look.id} href={`/branch/combinations/${look.id}`} className={`plate-look ${galleryClasses[i] ?? "g-md"}`}>
+                <span className="no">{toRoman(i + 1)}</span>
+                {ready && <span className="badge">Ready</span>}
+                {ready ? (
+                  <video className="pl-media" src={gif!} autoPlay loop muted playsInline />
+                ) : (
+                  <div className={`silh${i % 2 === 0 ? " p" : ""}`} />
+                )}
+                <div className="cap">
+                  <div className="t">{look.name}</div>
+                  {look.departments?.name && <div className="d">{look.departments.name}</div>}
+                </div>
+              </Link>
+            );
+          })}
+        </section>
+      )}
 
-      {/* ── Upcoming Schedule + Announcements ──────────────────── */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-        gap: "1.5rem",
-        marginBottom: "2rem",
-      }}>
-        {/* Upcoming Schedule */}
-        <div className="card" style={{ padding: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
-            <Calendar size={17} color="var(--color-gold)" />
-            <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "0.95rem", fontWeight: 600 }}>
-              Upcoming Schedule
-            </h2>
+      {/* footer band */}
+      <section className="dash-band">
+        <div className="col">
+          <div className="dash-sec" style={{ padding: "0 0 0.6rem" }}>
+            <div className="lt"><span className="num">02</span><h2>Upcoming <em>services</em></h2></div>
           </div>
-
           {upcomingSchedules.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "2rem 1rem", color: "var(--color-text-disabled)" }}>
-              <Calendar size={32} style={{ marginBottom: "0.75rem", opacity: 0.4 }} />
-              <p style={{ fontSize: "0.85rem" }}>No upcoming services scheduled.</p>
-            </div>
+            <div style={{ padding: "1.5rem 0", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No upcoming services scheduled.</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {upcomingSchedules.map((sched, i) => (
-                <div
-                  key={sched.id}
-                  style={{
-                    padding: "0.875rem 1rem",
-                    background: "var(--color-bg-primary)",
-                    borderRadius: "var(--radius-md)",
-                    border: "1px solid var(--color-border)",
-                    borderLeft: i === 0 ? "3px solid var(--color-gold)" : "3px solid var(--color-border)",
-                  }}
-                >
-                  <div style={{ fontSize: "0.72rem", color: "var(--color-text-disabled)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.3rem" }}>
-                    {formatDate(sched.service_date, { weekday: "short", day: "numeric", month: "short" })}
-                  </div>
-                  <div style={{ fontWeight: 600, fontSize: "0.875rem", marginBottom: "0.2rem" }}>
-                    {sched.title}
-                  </div>
-                  {sched.combinations?.name && (
-                    <div style={{ fontSize: "0.78rem", color: "var(--color-gold)" }}>
-                      {sched.combinations.name}
-                    </div>
-                  )}
-                  {sched.notes && (
-                    <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", marginTop: "0.2rem" }}>
-                      {truncate(sched.notes, 80)}
-                    </div>
-                  )}
+            upcomingSchedules.map((s, i) => (
+              <div key={s.id} className={`dash-svc${i === 0 ? " next" : ""}`}>
+                <div className="d">
+                  {formatDate(s.service_date, { day: "numeric" })}
+                  <small>{formatDate(s.service_date, { month: "short" })}</small>
                 </div>
-              ))}
-            </div>
+                <div>
+                  <div className="t">{s.title}</div>
+                  {s.combinations?.name && <div className="c">{s.combinations.name}</div>}
+                  {s.notes && <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", marginTop: 4 }}>{truncate(s.notes, 90)}</div>}
+                </div>
+              </div>
+            ))
           )}
         </div>
-
-        {/* Recent Announcements */}
-        <div className="card" style={{ padding: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
-            <Megaphone size={17} color="var(--color-gold)" />
-            <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "0.95rem", fontWeight: 600 }}>
-              Recent Announcements
-            </h2>
+        <div className="col dash-studio">
+          <div className="rule-label" style={{ marginBottom: "1.1rem" }}><span>From the studio</span></div>
+          <p>Publish a schedule and your congregation can browse this Sunday&rsquo;s looks from a shareable viewer code.</p>
+          <div className="links">
+            <Link href="/branch/schedule">Publish a schedule <span>→</span></Link>
+            <Link href="/branch/combinations/new">Compose a look <span>＋</span></Link>
+            <Link href="/branch/departments">Manage the roster <span>→</span></Link>
           </div>
-
-          {announcements.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "2rem 1rem", color: "var(--color-text-disabled)" }}>
-              <Megaphone size={32} style={{ marginBottom: "0.75rem", opacity: 0.4 }} />
-              <p style={{ fontSize: "0.85rem" }}>No announcements yet.</p>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {announcements.map((ann) => (
-                <div
-                  key={ann.id}
-                  style={{
-                    padding: "0.875rem 1rem",
-                    background: "var(--color-bg-primary)",
-                    borderRadius: "var(--radius-md)",
-                    border: "1px solid var(--color-border)",
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: "0.875rem", marginBottom: "0.3rem" }}>
-                    {ann.title}
-                  </div>
-                  {ann.body && (
-                    <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", lineHeight: 1.5, marginBottom: "0.4rem" }}>
-                      {truncate(ann.body, 100)}
-                    </div>
-                  )}
-                  <div style={{ fontSize: "0.72rem", color: "var(--color-text-disabled)" }}>
-                    {formatDate(ann.created_at, { day: "numeric", month: "short", year: "numeric" })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-      </div>
-
-      {/* ── Quick Actions ───────────────────────────────────────── */}
-      <div className="card" style={{ padding: "1.5rem" }}>
-        <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "0.95rem", fontWeight: 600, marginBottom: "1.25rem" }}>
-          Quick Actions
-        </h2>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-          <QuickActionsGrid />
-        </div>
-      </div>
+      </section>
     </div>
   );
+}
+
+// roman numerals for the editorial gallery index
+function toRoman(n: number): string {
+  return ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"][n - 1] ?? String(n);
 }

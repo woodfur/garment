@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
-import CombinationsPageClient from "@/components/branch/CombinationsPageClient";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Combinations | Garment" };
-
+// The Wardrobe (/branch/uniforms) now holds both finished looks and pieces,
+// so the old combinations list redirects there. Detail pages
+// (/branch/combinations/[id]) and the builder (/new) still live under this route.
 export default function CombinationsPage() {
-  return <CombinationsPageClient />;
+  redirect("/branch/uniforms");
 }

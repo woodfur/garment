@@ -63,15 +63,15 @@ export default async function BranchDetailPage({ params }: PageProps) {
           <Building2 size={26} color="#FFFFFF" />
         </div>
         <div>
-          <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem", marginBottom: "0.2rem" }}>
+          <h1 className="display-serif" style={{ fontSize: "2.2rem", marginBottom: "0.2rem" }}>
             {branch.name}
           </h1>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>/{branch.slug}</span>
             <span style={{
-              background: "rgba(155,135,245,0.1)", border: "1px solid rgba(155,135,245,0.2)",
-              color: "var(--color-gold)", padding: "0.2rem 0.7rem",
-              borderRadius: "var(--radius-full)", fontSize: "0.78rem", fontWeight: 700, letterSpacing: "0.06em",
+              background: "var(--color-primary-light)", border: "1px solid var(--color-border)",
+              color: "var(--color-primary-dark)", padding: "0.2rem 0.7rem",
+              borderRadius: "var(--radius-full)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
             }}>
               {branch.view_code}
             </span>

@@ -55,17 +55,18 @@ export default function NewBranchPage() {
   };
 
   return (
-    <div style={{ maxWidth: 560 }}>
+    <div style={{ maxWidth: 560, margin: "0 auto" }}>
       {/* Back */}
       <Link href="/admin/branches" style={{
         display: "inline-flex", alignItems: "center", gap: "0.4rem",
-        color: "var(--color-text-muted)", fontSize: "0.85rem", textDecoration: "none", marginBottom: "1.5rem",
+        color: "var(--color-text-muted)", fontSize: "0.82rem", fontWeight: 600, textDecoration: "none", marginBottom: "1.25rem",
       }}>
-        <ArrowLeft size={15} /> Back to Branches
+        <ArrowLeft size={15} /> Back to branches
       </Link>
 
-      <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem", marginBottom: "0.25rem" }}>
-        New Branch
+      <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>Administration</div>
+      <h1 className="display-serif" style={{ fontSize: "2.4rem", marginBottom: "0.35rem" }}>
+        New <em className="serif-em">branch</em>
       </h1>
       <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", marginBottom: "2rem" }}>
         Create a new church branch on the Garment platform.
@@ -172,16 +173,11 @@ export default function NewBranchPage() {
             id="create-branch-submit"
             type="submit"
             disabled={loading}
-            style={{
-              background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-              color: "#FFFFFF", fontWeight: 600, fontSize: "0.9rem",
-              padding: "0.75rem", borderRadius: "var(--radius-md)", border: "none",
-              cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
-              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-            }}
+            className="btn-primary"
+            style={{ fontSize: "0.9rem", padding: "0.8rem", opacity: loading ? 0.7 : 1 }}
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
-            {loading ? "Creating…" : "Create Branch"}
+            {loading ? "Creating…" : "Create branch"}
           </button>
         </div>
       </form>

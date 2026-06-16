@@ -78,15 +78,17 @@ export default function ChangePasswordPage() {
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div style={{
             width: 64, height: 64,
-            background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
+            background: "var(--color-primary-dark)",
             borderRadius: "var(--radius-lg)",
             display: "flex", alignItems: "center", justifyContent: "center",
             margin: "0 auto 1.25rem",
+            boxShadow: "var(--shadow-primary)",
           }}>
             <ShieldCheck size={28} color="#FFFFFF" />
           </div>
-          <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.5rem", marginBottom: "0.5rem" }}>
-            Set Your Password
+          <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.5rem" }}>First sign-in</div>
+          <h1 className="display-serif" style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
+            Set your <em className="serif-em">password</em>
           </h1>
           <p style={{ color: "var(--color-text-muted)", fontSize: "0.875rem", lineHeight: 1.6 }}>
             You&apos;re logging in for the first time. Please set a new password before continuing.
@@ -183,18 +185,11 @@ export default function ChangePasswordPage() {
             id="set-password-btn"
             type="submit"
             disabled={!canSubmit}
-            style={{
-              background: "linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)",
-              color: "#FFFFFF", fontWeight: 700, fontSize: "0.9rem",
-              padding: "0.75rem", borderRadius: "var(--radius-md)", border: "none",
-              cursor: canSubmit ? "pointer" : "not-allowed",
-              opacity: canSubmit ? 1 : 0.5,
-              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-              transition: "opacity 0.15s",
-            }}
+            className="btn-primary"
+            style={{ fontSize: "0.9rem", padding: "0.8rem", opacity: canSubmit ? 1 : 0.5 }}
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
-            {loading ? "Saving…" : "Set Password & Continue"}
+            {loading ? "Saving…" : "Set password & continue"}
           </button>
         </form>
       </div>

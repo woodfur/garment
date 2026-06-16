@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Trash2, Loader2, RefreshCw, Zap } from "lucide-react";
+import { ArrowLeft, Trash2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { ZONE_POSITIONS, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 
@@ -31,9 +31,9 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const [deleting, setDeleting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [activeGender, setActiveGender] = useState<Gender>("male");
   // GAP-7 FIX: generationKey forces the poll useEffect to re-run when the user clicks
-  // Regenerate after a timeout. Without this, preview_status stays 'processing'
-  // so the effect dependency doesn't change and no new interval is started.
+  // Regenerate after a timeout.
   const [generationKey, setGenerationKey] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -48,7 +48,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
       setCombo(comboData);
       setZones(zonesData ?? { male: {}, female: {} });
     } catch {
-      setCombo(null); // renders "Combination not found."
+      setCombo(null);
     } finally {
       setLoading(false);
     }
@@ -61,22 +61,14 @@ export default function CombinationDetailClient({ combinationId }: { combination
     if (combo?.preview_status !== "processing") return;
     const start = Date.now();
     pollRef.current = setInterval(async () => {
-      if (Date.now() - start > POLL_TIMEOUT) {
-        clearInterval(pollRef.current!);
-        setTimedOut(true);
-        return;
-      }
+      if (Date.now() - start > POLL_TIMEOUT) { clearInterval(pollRef.current!); setTimedOut(true); return; }
       try {
         const res = await fetch(`/api/branch/combinations/${combinationId}/preview-status`);
-        if (!res.ok) return; // skip on server error, retry next tick
+        if (!res.ok) return;
         const data = await res.json();
         setCombo((prev) => prev ? { ...prev, ...data } : prev);
-        if (data.preview_status === "ready" || data.preview_status === "failed") {
-          clearInterval(pollRef.current!);
-        }
-      } catch {
-        // network error — silently retry next tick
-      }
+        if (data.preview_status === "ready" || data.preview_status === "failed") clearInterval(pollRef.current!);
+      } catch { /* retry */ }
     }, POLL_INTERVAL);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [combo?.preview_status, combinationId, generationKey]);
@@ -86,14 +78,10 @@ export default function CombinationDetailClient({ combinationId }: { combination
     setDeleting(true);
     try {
       const res = await fetch(`/api/branch/combinations/${combinationId}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error ?? "Failed to delete combination. Please try again.");
-        return;
-      }
-      router.push("/branch/combinations");
+      if (!res.ok) { const data = await res.json().catch(() => ({})); alert(data.error ?? "Failed to delete. Please try again."); return; }
+      router.push("/branch/uniforms");
     } catch {
-      alert("Network error — failed to delete combination. Please try again.");
+      alert("Network error — failed to delete. Please try again.");
     } finally {
       setDeleting(false);
     }
@@ -102,18 +90,14 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const handleGenerate = async (force = false) => {
     setGenerating(true);
     setTimedOut(false);
-    setGenerationKey((k) => k + 1); // GAP-7 FIX: increment to restart poll effect
+    setGenerationKey((k) => k + 1);
     try {
       const res = await fetch(`/api/branch/combinations/${combinationId}/generate-preview`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gender: "both", force }),
       });
-      if (res.ok) {
-        setCombo((prev) => prev ? { ...prev, preview_status: "processing" } : prev);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error ?? "Failed to start AI preview generation. Please try again.");
-      }
+      if (res.ok) setCombo((prev) => prev ? { ...prev, preview_status: "processing" } : prev);
+      else { const data = await res.json().catch(() => ({})); alert(data.error ?? "Failed to start AI preview. Please try again."); }
     } catch {
       alert("Network error — failed to generate preview. Please try again.");
     } finally {
@@ -121,151 +105,137 @@ export default function CombinationDetailClient({ combinationId }: { combination
     }
   };
 
-  if (loading) return <div style={{ padding: 32 }}><Loader2 className="animate-spin" /></div>;
-  if (!combo) return <div style={{ padding: 32 }}>Combination not found.</div>;
+  if (loading) return <div style={{ display: "grid", placeItems: "center", padding: "4rem", color: "var(--color-text-faint)" }}><Loader2 size={24} className="animate-spin" /></div>;
+  if (!combo) return (
+    <div style={{ textAlign: "center", padding: "4rem 2rem", maxWidth: 960, margin: "0 auto" }}>
+      <h1 className="display-serif" style={{ fontSize: "1.6rem", marginBottom: "0.5rem" }}>Look not found</h1>
+      <Link href="/branch/uniforms" className="btn-primary" style={{ padding: "0.65rem 1.3rem", textDecoration: "none", marginTop: "1rem" }}>← Back to wardrobe</Link>
+    </div>
+  );
 
   const allZones = [...STANDARD_ZONES, ...ACCESSORY_ZONES];
+  const genderGif = activeGender === "male" ? combo.male_gif_url : combo.female_gif_url;
+  const activeZoneList = allZones
+    .map((zone) => ({ zone, item: zones[activeGender][zone] }))
+    .filter((z) => z.item);
+  const genderHasAny = (g: Gender) => Object.keys(zones[g]).length > 0;
 
   return (
-    <div style={{ maxWidth: 960 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-        <Link href="/branch/combinations" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--color-text-muted)", textDecoration: "none", fontSize: "0.85rem" }}>
-          <ArrowLeft size={15} /> Back
-        </Link>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.5rem", marginBottom: "0.125rem" }}>{combo.name}</h1>
-          {combo.departments?.name && (
-            <span style={{ fontSize: "0.75rem", fontWeight: 600, padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", background: "var(--color-primary-light)", color: "var(--color-primary-dark)" }}>
-              {combo.departments.name}
-            </span>
-          )}
+    <div style={{ maxWidth: 960, margin: "0 auto" }}>
+      {/* Back */}
+      <Link href="/branch/uniforms" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--color-text-muted)", textDecoration: "none", fontSize: "0.82rem", fontWeight: 600, marginBottom: "1rem" }}>
+        <ArrowLeft size={15} /> Back to wardrobe
+      </Link>
+
+      {/* Masthead */}
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", paddingBottom: "0.875rem", marginBottom: "1.75rem", borderBottom: "1.5px solid var(--color-text-primary)" }}>
+        <div>
+          <div className="eyebrow eyebrow-accent">{combo.departments?.name ?? "A look"}</div>
+          <h1 className="display-serif" style={{ fontSize: "2.4rem", marginTop: "0.3rem" }}>{combo.name}</h1>
+          {combo.description && <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", marginTop: "0.4rem", maxWidth: "52ch" }}>{combo.description}</p>}
         </div>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          {/* Edit Zones: planned feature — builder edit-mode not yet implemented */}
-          <button onClick={handleDelete} disabled={deleting} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "0.5rem 1rem",
-            borderRadius: "var(--radius-md)", border: "1px solid var(--color-error)",
-            color: "var(--color-error)", background: "transparent", cursor: "pointer", fontSize: "0.85rem",
-          }}>
-            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete
-          </button>
-        </div>
+        <button onClick={handleDelete} disabled={deleting} className="btn-back" style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.55rem 1.1rem", color: "var(--color-error)" }}>
+          {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete
+        </button>
       </div>
 
-      {/* AI Preview section */}
-      <div className="card" style={{ marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-          <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1.1rem" }}>AI Preview</h2>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            {combo.preview_status !== "processing" && (
-              <button onClick={() => handleGenerate(combo.preview_status === "ready")} disabled={generating} style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "0.45rem 1rem",
-                borderRadius: "var(--radius-md)", border: "1px solid var(--color-primary)",
-                background: "var(--color-primary-light)", color: "var(--color-primary-dark)",
-                cursor: "pointer", fontSize: "0.82rem", fontWeight: 600,
-              }}>
-                {generating ? <Loader2 size={13} className="animate-spin" /> :
-                  combo.preview_status === "ready" ? <><RefreshCw size={13} /> Regenerate</> :
-                    <><Zap size={13} /> Generate AI Preview</>}
-              </button>
-            )}
-          </div>
+      {/* The render */}
+      <section style={{ marginBottom: "2.5rem" }}>
+        <div className="dash-sec" style={{ padding: "0 0 1.1rem" }}>
+          <div className="lt"><span className="num">01</span><h2>The <em>render</em></h2></div>
+          {combo.preview_status !== "processing" && (
+            <button onClick={() => handleGenerate(combo.preview_status === "ready")} disabled={generating}
+              className="btn-primary" style={{ padding: "0.5rem 1.1rem", fontSize: "0.8rem" }}>
+              {generating ? <Loader2 size={13} className="animate-spin" /> :
+                combo.preview_status === "ready" ? <><RefreshCw size={13} /> Regenerate</> :
+                  <><Sparkles size={13} /> Generate AI preview</>}
+            </button>
+          )}
         </div>
 
         {combo.preview_status === "ready" && (combo.male_gif_url || combo.female_gif_url) ? (
-          <div style={{ display: "grid", gridTemplateColumns: combo.male_gif_url && combo.female_gif_url ? "1fr 1fr" : "1fr", gap: "1rem", maxWidth: combo.male_gif_url && combo.female_gif_url ? "none" : "320px" }}>
-            {combo.male_gif_url && (
-              <div style={{ textAlign: "center" }}>
-                <p style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--color-text-muted)" }}>MALE</p>
-                <video src={combo.male_gif_url} autoPlay loop muted playsInline style={{ width: "100%", borderRadius: "var(--radius-md)" }} />
-              </div>
-            )}
-            {combo.female_gif_url && (
-              <div style={{ textAlign: "center" }}>
-                <p style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--color-text-muted)" }}>FEMALE</p>
-                <video src={combo.female_gif_url} autoPlay loop muted playsInline style={{ width: "100%", borderRadius: "var(--radius-md)" }} />
-              </div>
-            )}
+          <div style={{ display: "grid", gridTemplateColumns: combo.male_gif_url && combo.female_gif_url ? "1fr 1fr" : "1fr", gap: "1.25rem", maxWidth: combo.male_gif_url && combo.female_gif_url ? "none" : 340 }}>
+            {(["male", "female"] as Gender[]).map((g) => {
+              const gif = g === "male" ? combo.male_gif_url : combo.female_gif_url;
+              if (!gif) return null;
+              return (
+                <div key={g}>
+                  <div className="rule-label" style={{ marginBottom: "0.6rem" }}><span>{g === "male" ? "Male" : "Female"}</span><span className="rule" /></div>
+                  <video src={gif} autoPlay loop muted playsInline style={{ width: "100%", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", background: "var(--color-bg-board)" }} />
+                </div>
+              );
+            })}
           </div>
         ) : combo.preview_status === "processing" ? (
-          <div style={{ padding: "2rem", textAlign: "center" }}>
-            <Loader2 size={32} className="animate-spin" color="var(--color-primary)" style={{ margin: "0 auto 1rem" }} />
-            {timedOut
-              ? <p style={{ color: "var(--color-text-muted)" }}>Taking longer than expected — check back shortly.</p>
-              : <p style={{ color: "var(--color-text-muted)" }}>Generating AI preview (~2–3 minutes)…</p>}
+          <div className="card" style={{ padding: "3rem 2rem", textAlign: "center" }}>
+            <Loader2 size={30} className="animate-spin" color="var(--color-primary-dark)" style={{ margin: "0 auto 1rem" }} />
+            <p style={{ color: "var(--color-text-muted)" }}>
+              {timedOut ? "Taking longer than expected — check back shortly." : "Composing the look (~2–3 minutes)…"}
+            </p>
           </div>
         ) : combo.preview_status === "failed" ? (
-          <div style={{ padding: "1.5rem", textAlign: "center", color: "var(--color-error)" }}>
-            ⚠️ Generation failed. Click "Generate AI Preview" to retry.
+          <div className="card" style={{ padding: "2rem", textAlign: "center", color: "var(--color-error)" }}>
+            ⚠️ Generation failed. Use “Generate AI preview” to retry.
           </div>
         ) : (
-          <div style={{ padding: "1.5rem", textAlign: "center", color: "var(--color-text-muted)" }}>
-            No preview generated yet. Click "Generate AI Preview" above.
+          <div className="card" style={{ padding: "2.5rem 2rem", textAlign: "center" }}>
+            <p className="display-serif" style={{ fontSize: "1.2rem", marginBottom: "0.35rem" }}>Not rendered yet</p>
+            <p style={{ color: "var(--color-text-muted)", fontSize: "0.88rem" }}>Generate the AI preview to see this look come to life.</p>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Zone assignment table */}
-      <div className="card">
-        <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1.1rem", marginBottom: "1rem" }}>Zone Assignments</h2>
-        {Object.keys(zones.male).length === 0 && Object.keys(zones.female).length === 0 ? (
-          <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
-            No zone assignments yet. This may be a legacy combination.{" "}
-            <Link href={`/branch/combinations/new`} style={{ color: "var(--color-primary)" }}>Build a new one</Link>.
-          </p>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  <th style={{ textAlign: "left", padding: "0.5rem 0.75rem", color: "var(--color-text-muted)", fontWeight: 600 }}>Zone</th>
-                  <th style={{ textAlign: "left", padding: "0.5rem 0.75rem", color: "var(--color-text-muted)", fontWeight: 600 }}>👔 Male</th>
-                  <th style={{ textAlign: "left", padding: "0.5rem 0.75rem", color: "var(--color-text-muted)", fontWeight: 600 }}>👗 Female</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allZones.map((zone) => {
-                  const mItem = zones.male[zone];
-                  const fItem = zones.female[zone];
-                  if (!mItem && !fItem) return null;
-                  return (
-                    <tr key={zone} style={{ borderBottom: "1px solid var(--color-border-subtle, rgba(255,255,255,0.05))" }}>
-                      <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{ZONE_POSITIONS[zone].label}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        {mItem ? (
-                          mItem.uniform ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                            {mItem.uniform.image_url && (
-                              <Image src={mItem.uniform.image_url} alt={mItem.uniform.name} width={32} height={32} style={{ borderRadius: 4, objectFit: "cover" }} />
-                            )}
-                            <span>{mItem.uniform.name}</span>
-                            {!mItem.uniform.bg_removed && <span title="No bg removal" style={{ fontSize: "0.7rem" }}>⚠️</span>}
-                          </div>
-                          ) : <span style={{ color: "var(--color-text-disabled)" }}>[Uniform deleted]</span>
-                        ) : <span style={{ color: "var(--color-text-disabled)" }}>—</span>}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        {fItem ? (
-                          fItem.uniform ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                            {fItem.uniform.image_url && (
-                              <Image src={fItem.uniform.image_url} alt={fItem.uniform.name} width={32} height={32} style={{ borderRadius: 4, objectFit: "cover" }} />
-                            )}
-                            <span>{fItem.uniform.name}</span>
-                            {!fItem.uniform.bg_removed && <span title="No bg removal" style={{ fontSize: "0.7rem" }}>⚠️</span>}
-                          </div>
-                          ) : <span style={{ color: "var(--color-text-disabled)" }}>[Uniform deleted]</span>
-                        ) : <span style={{ color: "var(--color-text-disabled)" }}>—</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Zone assignments — the pieces in this look */}
+      <section>
+        <div className="dash-sec" style={{ padding: "0 0 1.1rem" }}>
+          <div className="lt"><span className="num">02</span><h2>The <em>pieces</em></h2></div>
+        </div>
+
+        {!genderHasAny("male") && !genderHasAny("female") ? (
+          <div className="card" style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
+            No pieces recorded for this look. <Link href="/branch/combinations/new" style={{ color: "var(--color-primary-dark)", fontWeight: 600 }}>Build a new one →</Link>
           </div>
+        ) : (
+          <>
+            {/* gender toggle */}
+            <div className="gender-toggle">
+              <button className={activeGender === "male" ? "on" : ""} onClick={() => setActiveGender("male")}>♂ Male</button>
+              <button className={activeGender === "female" ? "on" : ""} onClick={() => setActiveGender("female")}>♀ Female</button>
+            </div>
+
+            {activeZoneList.length === 0 ? (
+              <div className="card" style={{ marginTop: "0.5rem" }}>
+                <p style={{ padding: "1.5rem", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.88rem" }}>
+                  No pieces assigned to the {activeGender} look.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "1rem", marginTop: "0.5rem" }}>
+                {activeZoneList.map(({ zone, item }) => (
+                  <div key={zone} className="card" style={{ padding: 0, overflow: "hidden" }}>
+                    <div style={{ position: "relative", aspectRatio: "1", background: item!.uniform?.bg_removed ? "repeating-conic-gradient(#e9e3d7 0% 25%, #fbf9f4 0% 50%) 0 0 / 16px 16px" : "var(--color-bg-elevated)", borderBottom: "1px solid var(--color-border)", display: "grid", placeItems: "center" }}>
+                      {item!.uniform?.image_url ? (
+                        <Image src={item!.uniform.image_url} alt={item!.uniform.name} fill style={{ objectFit: "contain", padding: "0.75rem" }} unoptimized />
+                      ) : (
+                        <span style={{ fontFamily: "var(--font-heading)", fontStyle: "italic", fontSize: "2rem", color: "var(--color-text-faint)" }}>{item!.uniform?.name?.[0] ?? "?"}</span>
+                      )}
+                      {item!.uniform && !item!.uniform.bg_removed && (
+                        <span title="Background not removed" style={{ position: "absolute", top: "0.5rem", right: "0.5rem", fontSize: "0.85rem" }}>⚠️</span>
+                      )}
+                    </div>
+                    <div style={{ padding: "0.7rem 0.8rem" }}>
+                      <div style={{ fontSize: "0.55rem", letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-text-faint)", fontWeight: 700 }}>{ZONE_POSITIONS[zone].label}</div>
+                      <div style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: "0.95rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
+                        {item!.uniform?.name ?? "[Uniform deleted]"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
-      </div>
+      </section>
     </div>
   );
 }

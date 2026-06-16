@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import BranchSidebar from "@/components/branch/BranchSidebar";
 import BranchTopbar from "@/components/branch/BranchTopbar";
+import MobileTabBar from "@/components/branch/MobileTabBar";
 
 /**
  * getCachedBranchName — cached branches.name lookup, keyed by branchId.
@@ -53,10 +54,11 @@ export default async function BranchLayout({ children }: { children: React.React
       <BranchSidebar branchName={branchName} leaderName={auth.fullName} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <BranchTopbar branchName={branchName} leaderName={auth.fullName} email={auth.email} />
-        <main style={{ flex: 1, padding: "2rem", overflowY: "auto" }}>
+        <main className="branch-main" style={{ flex: 1, padding: "2rem", overflowY: "auto" }}>
           {children}
         </main>
       </div>
+      <MobileTabBar />
     </div>
   );
 }
