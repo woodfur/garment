@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     let query = (admin as any)
       .from("uniforms")
-      .select("id, name, category, department_id, image_url, raw_image_url, storage_path, description, is_archived, bg_removed, created_at, departments(name)")
+      .select("id, name, category, department_id, image_url, raw_image_url, storage_path, description, is_archived, bg_removed, color, color_label, created_at, departments(name)")
       .eq("branch_id", auth.branchId)
       .order("created_at", { ascending: false });
 
@@ -39,11 +39,17 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, category, department_id, description, storage_path, image_url, raw_image_url, bg_removed } = body;
+    const { name, category, department_id, description, storage_path, image_url, raw_image_url, bg_removed, color, color_label } = body;
 
     if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (!category?.trim()) return NextResponse.json({ error: "Category is required" }, { status: 400 });
     if (!department_id) return NextResponse.json({ error: "Department is required" }, { status: 400 });
+
+    // A piece is either a photo or a colour swatch — require at least one.
+    const hexColor = typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color) ? color : null;
+    if (!image_url && !hexColor) {
+      return NextResponse.json({ error: "Provide either an image or a colour" }, { status: 400 });
+    }
 
     // Verify department belongs to this branch
     const admin = createAdminClient();
@@ -65,6 +71,8 @@ export async function POST(request: Request) {
         storage_path: storage_path || null,
         image_url: image_url || null,
         raw_image_url: raw_image_url || null,
+        color: hexColor,
+        color_label: color_label?.trim() || null,
         branch_id: auth.branchId,
         is_archived: false,
         bg_removed: bg_removed === true,

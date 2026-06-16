@@ -8,7 +8,15 @@ import { ArrowLeft, Trash2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { ZONE_POSITIONS, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 
-type UniformSummary = { id: string; name: string; image_url: string | null; bg_removed: boolean };
+/** Readable text colour (ink or paper) for a label on a colour swatch. */
+function textOn(hex: string): string {
+  const c = hex.replace("#", "");
+  if (c.length < 6) return "#211C19";
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#211C19" : "#FBF9F4";
+}
+
+type UniformSummary = { id: string; name: string; image_url: string | null; bg_removed: boolean; color: string | null; color_label: string | null };
 type ZoneItem = { id: string; zone: BodyZone; gender: Gender; uniform: UniformSummary };
 type ZoneMap = Partial<Record<BodyZone, ZoneItem>>;
 type PreviewStatus = "none" | "processing" | "ready" | "failed";
@@ -213,13 +221,15 @@ export default function CombinationDetailClient({ combinationId }: { combination
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "1rem", marginTop: "0.5rem" }}>
                 {activeZoneList.map(({ zone, item }) => (
                   <div key={zone} className="card" style={{ padding: 0, overflow: "hidden" }}>
-                    <div style={{ position: "relative", aspectRatio: "1", background: item!.uniform?.bg_removed ? "repeating-conic-gradient(#e9e3d7 0% 25%, #fbf9f4 0% 50%) 0 0 / 16px 16px" : "var(--color-bg-elevated)", borderBottom: "1px solid var(--color-border)", display: "grid", placeItems: "center" }}>
+                    <div style={{ position: "relative", aspectRatio: "1", background: item!.uniform?.color && !item!.uniform?.image_url ? item!.uniform.color : (item!.uniform?.bg_removed ? "repeating-conic-gradient(#e9e3d7 0% 25%, #fbf9f4 0% 50%) 0 0 / 16px 16px" : "var(--color-bg-elevated)"), borderBottom: "1px solid var(--color-border)", display: "grid", placeItems: "center" }}>
                       {item!.uniform?.image_url ? (
                         <Image src={item!.uniform.image_url} alt={item!.uniform.name} fill style={{ objectFit: "contain", padding: "0.75rem" }} unoptimized />
+                      ) : item!.uniform?.color ? (
+                        <span style={{ fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: textOn(item!.uniform.color), background: "rgba(0,0,0,0.12)", padding: "0.2rem 0.5rem", borderRadius: 999 }}>{item!.uniform.color_label || item!.uniform.color}</span>
                       ) : (
                         <span style={{ fontFamily: "var(--font-heading)", fontStyle: "italic", fontSize: "2rem", color: "var(--color-text-faint)" }}>{item!.uniform?.name?.[0] ?? "?"}</span>
                       )}
-                      {item!.uniform && !item!.uniform.bg_removed && (
+                      {item!.uniform?.image_url && !item!.uniform.bg_removed && (
                         <span title="Background not removed" style={{ position: "absolute", top: "0.5rem", right: "0.5rem", fontSize: "0.85rem" }}>⚠️</span>
                       )}
                     </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
-import { startCompositeChain, type ZoneItem } from "@/lib/replicate";
+import { startCompositeChain, startColorBaseGeneration, type ZoneItem, type ColorZoneItem } from "@/lib/replicate";
 import { ZONE_LAYER_ORDER } from "@/types/zones";
 import { MANNEQUIN_MALE_URL, MANNEQUIN_FEMALE_URL } from "@/lib/mannequin-config";
 import type { Gender } from "@/types/database";
@@ -48,15 +48,10 @@ export async function POST(
     return NextResponse.json({ error: "Preview already generated. Pass force=true to regenerate." }, { status: 409 });
   }
 
-  // Check mannequin URLs configured
-  if (!MANNEQUIN_MALE_URL || !MANNEQUIN_FEMALE_URL) {
-    return NextResponse.json({ error: "Mannequin characters not yet configured. Contact administrator." }, { status: 503 });
-  }
-
   // Fetch zone items with uniform data (cast admin for unregistered table)
   const { data: zoneItems, error: zoneErr } = await (admin as any)
     .from("combination_zone_items")
-    .select("*, uniform:uniforms(id, name, image_url, bg_removed, category)")
+    .select("*, uniform:uniforms(id, name, image_url, bg_removed, category, color, color_label)")
     .eq("combination_id", combinationId);
 
   if (zoneErr) return NextResponse.json({ error: zoneErr.message }, { status: 500 });
@@ -65,7 +60,7 @@ export async function POST(
     gender: Gender;
     zone: string;
     uniform_id: string;
-    uniform: { id: string; name: string; image_url: string | null; bg_removed: boolean; category: string } | null;
+    uniform: { id: string; name: string; image_url: string | null; bg_removed: boolean; category: string; color: string | null; color_label: string | null } | null;
   }>;
 
   // GAP-1 FIX: When 'both' is requested, only process genders that have zone items.
@@ -91,10 +86,21 @@ export async function POST(
       );
     }
     // Warn if any uniform lacks bg removal
-    const missingBg = genderItems.filter((i) => i.uniform && !i.uniform.bg_removed);
+    const missingBg = genderItems.filter((i) => i.uniform?.image_url && !i.uniform.bg_removed);
     if (missingBg.length > 0) {
       warnings.push(`${gender}: ${missingBg.map((i) => i.uniform?.name).join(", ")} have not had background removed. Preview quality may be affected.`);
     }
+  }
+
+  // A mannequin base is only needed for genders rendered purely from photos.
+  // Colour / mixed looks generate their own base via Flux, so they don't need one.
+  const needsMannequin = genders.some((gender) => {
+    const items = typedZoneItems.filter((i) => i.gender === gender);
+    const hasColor = items.some((i) => i.uniform?.color && !i.uniform?.image_url);
+    return !hasColor;
+  });
+  if (needsMannequin && (!MANNEQUIN_MALE_URL || !MANNEQUIN_FEMALE_URL)) {
+    return NextResponse.json({ error: "Mannequin characters not yet configured. Contact administrator." }, { status: 503 });
   }
 
   // Set status to processing (and clear old GIF URLs if force-regenerating)
@@ -114,12 +120,13 @@ export async function POST(
 
   // Fire composite chains for each gender in parallel
   const chainPromises = genders.map(async (gender) => {
-    const genderItems = typedZoneItems.filter((i) => i.gender === gender && i.uniform?.image_url);
-    // Sort by ZONE_LAYER_ORDER
-    const ordered: ZoneItem[] = ZONE_LAYER_ORDER
-      .filter((zone) => genderItems.some((i) => i.zone === zone))
+    const genderItems = typedZoneItems.filter((i) => i.gender === gender);
+
+    // Photo pieces — ordered by layer order
+    const photoOrdered: ZoneItem[] = ZONE_LAYER_ORDER
+      .filter((zone) => genderItems.some((i) => i.zone === zone && i.uniform?.image_url))
       .map((zone) => {
-        const item = genderItems.find((i) => i.zone === zone)!;
+        const item = genderItems.find((i) => i.zone === zone && i.uniform?.image_url)!;
         return {
           zone: item.zone as ZoneItem["zone"],
           uniform_id: item.uniform_id,
@@ -128,9 +135,28 @@ export async function POST(
         };
       });
 
+    // Colour pieces — rendered into the figure via a Flux prompt
+    const colorItems: ColorZoneItem[] = genderItems
+      .filter((i) => i.uniform?.color && !i.uniform?.image_url)
+      .map((i) => ({
+        zone: i.zone as ColorZoneItem["zone"],
+        category: i.uniform!.category,
+        color: i.uniform!.color!,
+        color_label: i.uniform!.color_label,
+      }));
+
+    if (colorItems.length > 0) {
+      // Colour (or mixed) look — generate a Flux base, then chain photo pieces on top.
+      const estimatedSeconds = photoOrdered.length * 20 + 60;
+      return startColorBaseGeneration(combinationId, gender, colorItems, photoOrdered).then((r) => ({
+        gender, predictionId: r.predictionId, estimatedSeconds,
+      }));
+    }
+
+    // All-photo look — composite onto the static mannequin.
     const baseUrl = gender === "male" ? MANNEQUIN_MALE_URL : MANNEQUIN_FEMALE_URL;
-    const estimatedSeconds = ordered.length * 20 + 45;
-    return startCompositeChain(combinationId, gender, ordered, baseUrl).then((r) => ({
+    const estimatedSeconds = photoOrdered.length * 20 + 45;
+    return startCompositeChain(combinationId, gender, photoOrdered, baseUrl).then((r) => ({
       gender, predictionId: r.predictionId, estimatedSeconds,
     }));
   });

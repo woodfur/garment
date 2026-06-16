@@ -74,6 +74,10 @@ export interface Database {
           description: string | null;
           is_archived: boolean;
           bg_removed: boolean;
+          // Colour-based pieces: a uniform may be a colour swatch instead of a photo.
+          // `color` is the hex value, `color_label` an optional human name (e.g. "Baltic Sea").
+          color: string | null;
+          color_label: string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["uniforms"]["Row"], "id" | "created_at">;
