@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +32,19 @@ interface Schedule {
   title: string;
   notes: string | null;
   assignments: Assignment[];
+}
+
+/** An assignment tagged with the schedule row it actually belongs to. */
+type SourcedAssignment = Assignment & { _scheduleId: string };
+
+/** One calendar day's card — may merge several duplicate schedule rows. */
+interface GroupedSchedule {
+  id: string; // primary schedule row — new outfits are assigned here
+  ids: string[]; // every schedule row for this date (deleted together)
+  service_date: string;
+  title: string;
+  notes: string | null;
+  assignments: SourcedAssignment[];
 }
 
 // ─── Assign Form (inline) ─────────────────────────────────────────────────────
@@ -217,6 +230,31 @@ function PreviewBadge({ status }: { status: string }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// Regular weekly services — Wednesday + Sunday — are pre-filled automatically.
+// "Add service" is reserved for special / one-off services.
+const REGULAR_WEEKS_AHEAD = 5;
+
+/** Local "YYYY-MM-DD" for a Date (matches how service_date is stored/compared). */
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function nextRegularServices(): { date: string; title: string }[] {
+  const out: { date: string; title: string }[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < REGULAR_WEEKS_AHEAD * 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const day = d.getDay(); // 0 = Sunday, 3 = Wednesday
+    if (day === 0 || day === 3) {
+      const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      out.push({ date, title: day === 0 ? "Sunday Service" : "Wednesday Service" });
+    }
+  }
+  return out;
+}
+
 export default function SchedulePageClient() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,6 +275,19 @@ export default function SchedulePageClient() {
   // Track which schedules are being deleted
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
+  // Guard: the regular-service pre-fill must run at most once per mount, otherwise
+  // React's double-invoked effects (dev) or overlapping loads create duplicate
+  // schedule rows for the same date.
+  const prefilledRef = useRef(false);
+
+  // Guard: the one-time duplicate cleanup must run at most once per mount.
+  const cleanedRef = useRef(false);
+
+  // Today's local date boundary — past services drop off the schedule once the
+  // day passes. Set in an effect (not at render) to avoid SSR/hydration drift.
+  const [todayStr, setTodayStr] = useState("");
+  useEffect(() => { setTodayStr(localDateStr(new Date())); }, []);
+
   // Load schedules
   const loadSchedules = useCallback(async () => {
     setLoading(true);
@@ -248,7 +299,73 @@ export default function SchedulePageClient() {
         setError(data.error ?? "Failed to load schedules");
         return;
       }
-      setSchedules(Array.isArray(data) ? data : []);
+      let list: Schedule[] = Array.isArray(data) ? data : [];
+
+      // Pre-fill the upcoming regular Wednesday & Sunday services (create any missing ones).
+      // Only ever attempt this once per mount — see prefilledRef above.
+      const existingDates = new Set(list.map((s) => s.service_date));
+      const missing = prefilledRef.current
+        ? []
+        : nextRegularServices().filter((r) => !existingDates.has(r.date));
+      if (!prefilledRef.current) prefilledRef.current = true;
+      if (missing.length > 0) {
+        const created = await Promise.all(
+          missing.map(async (r) => {
+            try {
+              const cr = await fetch("/api/branch/schedules", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ service_date: r.date, title: r.title }),
+              });
+              if (!cr.ok) return null;
+              const row = await cr.json();
+              return { ...row, assignments: [] } as Schedule;
+            } catch {
+              return null;
+            }
+          })
+        );
+        list = [...list, ...created.filter((s): s is Schedule => s !== null)];
+      }
+
+      // One-time cleanup of leftover duplicate rows for the same date. For each date
+      // we keep the richest row (most assignments) and delete only the EMPTY
+      // duplicates, so no assigned outfit is ever lost. A duplicate that still holds
+      // outfits is left alone (it just merges into the day's card on screen).
+      if (!cleanedRef.current) {
+        cleanedRef.current = true;
+        const byDate = new Map<string, Schedule[]>();
+        for (const s of list) {
+          const arr = byDate.get(s.service_date) ?? [];
+          arr.push(s);
+          byDate.set(s.service_date, arr);
+        }
+        const toDelete: string[] = [];
+        for (const rows of byDate.values()) {
+          if (rows.length < 2) continue;
+          const [, ...rest] = [...rows].sort(
+            (a, b) =>
+              b.assignments.length - a.assignments.length || a.id.localeCompare(b.id)
+          );
+          for (const r of rest) {
+            if (r.assignments.length === 0) toDelete.push(r.id);
+          }
+        }
+        if (toDelete.length > 0) {
+          const del = new Set(toDelete);
+          await Promise.all(
+            toDelete.map((id) =>
+              fetch(`/api/branch/schedules/${id}`, { method: "DELETE" }).catch(() => null)
+            )
+          );
+          list = list.filter((s) => !del.has(s.id));
+        }
+      }
+
+      list.sort(
+        (a, b) => new Date(a.service_date).getTime() - new Date(b.service_date).getTime()
+      );
+      setSchedules(list);
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -298,31 +415,41 @@ export default function SchedulePageClient() {
     }
   }
 
-  // Delete schedule
-  async function handleDeleteSchedule(scheduleId: string) {
+  // Delete every schedule row for a calendar day (handles merged duplicates)
+  async function handleDeleteGroup(ids: string[]) {
     if (
       !confirm(
         "Delete this service date and all its assignments? This cannot be undone."
       )
     )
       return;
-    setDeletingIds((prev) => new Set(prev).add(scheduleId));
+    setDeletingIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
     try {
-      const res = await fetch(`/api/branch/schedules/${scheduleId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        setSchedules((prev) => prev.filter((s) => s.id !== scheduleId));
-      } else {
-        const data = await res.json();
-        alert(data.error ?? "Failed to delete schedule");
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const res = await fetch(`/api/branch/schedules/${id}`, { method: "DELETE" });
+            return res.ok ? id : null;
+          } catch {
+            return null;
+          }
+        })
+      );
+      const deleted = new Set(results.filter((id): id is string => id !== null));
+      if (deleted.size > 0) {
+        setSchedules((prev) => prev.filter((s) => !deleted.has(s.id)));
       }
-    } catch {
-      alert("Network error. Please try again.");
+      if (deleted.size < ids.length) {
+        alert("Some service rows could not be deleted. Please retry.");
+      }
     } finally {
       setDeletingIds((prev) => {
         const next = new Set(prev);
-        next.delete(scheduleId);
+        ids.forEach((id) => next.delete(id));
         return next;
       });
     }
@@ -381,28 +508,75 @@ export default function SchedulePageClient() {
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
+  // Hide services whose date has already passed (today's service stays until the
+  // day is over). Rows remain in the DB — they're just no longer shown here.
+  const visibleSchedules = todayStr
+    ? schedules.filter((s) => s.service_date >= todayStr)
+    : schedules;
+
+  // Collapse to ONE card per calendar day. If duplicate schedule rows exist for the
+  // same date (legacy data), merge their department outfits into a single card.
+  // Each assignment carries `_scheduleId` so removals hit the right underlying row,
+  // and `ids` lists every row for the date so deletion clears them all.
+  const groupedByDate = (() => {
+    const map = new Map<string, GroupedSchedule>();
+    for (const s of visibleSchedules) {
+      const g = map.get(s.service_date);
+      const tagged = s.assignments.map((a) => ({ ...a, _scheduleId: s.id }));
+      if (!g) {
+        map.set(s.service_date, {
+          id: s.id,
+          ids: [s.id],
+          service_date: s.service_date,
+          title: s.title,
+          notes: s.notes,
+          assignments: tagged,
+        });
+      } else {
+        g.ids.push(s.id);
+        // Dedupe by department — first row wins if the same dept appears twice.
+        for (const a of tagged) {
+          if (!g.assignments.some((x) => x.department_id === a.department_id)) {
+            g.assignments.push(a);
+          }
+        }
+        if (!g.notes && s.notes) g.notes = s.notes;
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(a.service_date).getTime() - new Date(b.service_date).getTime()
+    );
+  })();
+
   return (
     <div className="spc-root">
       <style>{`
         /* ── Root ── */
         .spc-root {
-          padding: 32px;
-          max-width: 900px;
+          max-width: 860px;
           margin: 0 auto;
         }
 
-        /* ── Page header ── */
+        /* ── Page header (masthead) ── */
         .spc-page-header {
-          margin-bottom: 28px;
+          border-bottom: 1.5px solid var(--color-text-primary);
+          padding-bottom: 0.875rem;
+          margin-bottom: 1.75rem;
+        }
+        .spc-eyebrow {
+          font-size: 0.625rem; letter-spacing: 0.3em; text-transform: uppercase;
+          font-weight: 700; color: var(--color-accent); margin-bottom: 6px;
         }
         .spc-page-title {
-          font-size: 1.75rem;
-          font-weight: 700;
+          font-family: var(--font-heading);
+          font-size: 2rem;
+          font-weight: 300;
+          letter-spacing: -0.02em;
           color: var(--color-text-primary);
           margin: 0 0 4px;
         }
         .spc-page-subtitle {
-          font-size: 0.9rem;
+          font-size: 0.88rem;
           color: var(--color-text-muted);
           margin: 0;
         }
@@ -417,8 +591,10 @@ export default function SchedulePageClient() {
           margin-bottom: 32px;
         }
         .spc-create-card-title {
-          font-size: 1rem;
-          font-weight: 600;
+          font-family: var(--font-heading);
+          font-size: 1.3rem;
+          font-weight: 400;
+          letter-spacing: -0.01em;
           color: var(--color-text-primary);
           margin: 0 0 16px;
         }
@@ -454,7 +630,7 @@ export default function SchedulePageClient() {
         }
         .spc-input:focus, .spc-textarea:focus, .spc-select:focus {
           border-color: var(--color-primary-dark);
-          box-shadow: 0 0 0 3px rgba(124,92,191,0.12);
+          box-shadow: 0 0 0 3px rgba(71,39,67,0.12);
         }
         .spc-textarea {
           resize: vertical;
@@ -471,8 +647,8 @@ export default function SchedulePageClient() {
 
         /* ── Buttons ── */
         .spc-btn {
-          padding: 9px 18px;
-          border-radius: var(--radius-md);
+          padding: 9px 20px;
+          border-radius: var(--radius-full);
           font-size: 0.875rem;
           font-weight: 600;
           font-family: var(--font-body);
@@ -485,10 +661,10 @@ export default function SchedulePageClient() {
         }
         .spc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .spc-btn-primary {
-          background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+          background: var(--color-primary-dark);
           color: #fff;
         }
-        .spc-btn-primary:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+        .spc-btn-primary:hover:not(:disabled) { background: #35202F; transform: translateY(-1px); }
         .spc-btn-ghost {
           background: transparent;
           color: var(--color-text-secondary);
@@ -541,18 +717,21 @@ export default function SchedulePageClient() {
         .spc-schedule-meta { flex: 1 1 auto; min-width: 0; }
         .spc-date-badge {
           display: inline-block;
-          background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
-          color: #fff;
-          font-size: 0.78rem;
+          background: var(--color-primary-light);
+          color: var(--color-primary-dark);
+          font-size: 0.62rem;
           font-weight: 700;
           padding: 3px 10px;
           border-radius: var(--radius-full);
-          letter-spacing: 0.03em;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
           margin-bottom: 6px;
         }
         .spc-schedule-title-text {
-          font-size: 1.1rem;
-          font-weight: 700;
+          font-family: var(--font-heading);
+          font-size: 1.25rem;
+          font-weight: 500;
+          letter-spacing: -0.01em;
           color: var(--color-text-primary);
           margin: 0 0 4px;
         }
@@ -740,16 +919,19 @@ export default function SchedulePageClient() {
 
       {/* Page header */}
       <div className="spc-page-header">
-        <h1 className="spc-page-title">📅 Service Schedule</h1>
+        <div className="spc-eyebrow">The Calendar</div>
+        <h1 className="spc-page-title">Schedule</h1>
         <p className="spc-page-subtitle">
-          Manage upcoming service dates and assign outfit combinations to
-          departments.
+          Wednesday &amp; Sunday services appear automatically. Assign a look to each department.
         </p>
       </div>
 
-      {/* Create new schedule */}
+      {/* Create a special / one-off service */}
       <div className="spc-create-card">
-        <h2 className="spc-create-card-title">Add New Service Date</h2>
+        <h2 className="spc-create-card-title">Add a special service</h2>
+        <p className="spc-page-subtitle" style={{ marginTop: -6, marginBottom: 12 }}>
+          For anything outside the regular Wednesday &amp; Sunday services.
+        </p>
         <form onSubmit={handleCreateSchedule}>
           <div className="spc-form-grid">
             <div>
@@ -761,6 +943,7 @@ export default function SchedulePageClient() {
                 type="date"
                 className="spc-input"
                 value={newDate}
+                min={todayStr || undefined}
                 onChange={(e) => setNewDate(e.target.value)}
                 required
               />
@@ -773,7 +956,7 @@ export default function SchedulePageClient() {
                 id="new-title"
                 type="text"
                 className="spc-input"
-                placeholder="e.g. Sunday Morning Service"
+                placeholder="e.g. Easter Sunday, Convention Night"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 required
@@ -800,7 +983,7 @@ export default function SchedulePageClient() {
               className="spc-btn spc-btn-primary"
               disabled={creating || !newDate || !newTitle.trim()}
             >
-              {creating ? "Creating…" : "＋ Add Service Date"}
+              {creating ? "Creating…" : "＋ Add special service"}
             </button>
           </div>
         </form>
@@ -834,20 +1017,20 @@ export default function SchedulePageClient() {
       )}
 
       {/* Empty state */}
-      {!loading && !error && schedules.length === 0 && (
+      {!loading && !error && visibleSchedules.length === 0 && (
         <div className="spc-empty-state">
           <span className="spc-empty-icon">📅</span>
-          <p className="spc-empty-title">No service dates scheduled yet</p>
+          <p className="spc-empty-title">No upcoming service dates</p>
           <p className="spc-empty-text">
             Add your first one using the form above.
           </p>
         </div>
       )}
 
-      {/* Schedule list */}
+      {/* Schedule list — one card per calendar day */}
       {!loading &&
-        schedules.map((schedule) => {
-          const isDeleting = deletingIds.has(schedule.id);
+        groupedByDate.map((schedule) => {
+          const isDeleting = schedule.ids.some((id) => deletingIds.has(id));
           const isAssigning = assigningScheduleId === schedule.id;
           const formattedDate = new Date(
             schedule.service_date + "T00:00:00"
@@ -876,7 +1059,7 @@ export default function SchedulePageClient() {
                 <div className="spc-schedule-actions">
                   <button
                     className="spc-btn spc-btn-danger"
-                    onClick={() => handleDeleteSchedule(schedule.id)}
+                    onClick={() => handleDeleteGroup(schedule.ids)}
                     disabled={isDeleting}
                     title="Delete this service date"
                   >
@@ -939,7 +1122,7 @@ export default function SchedulePageClient() {
                         className="spc-btn spc-btn-danger"
                         onClick={() =>
                           handleRemoveAssignment(
-                            schedule.id,
+                            a._scheduleId,
                             a.department_id,
                             a.id
                           )

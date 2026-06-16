@@ -33,15 +33,17 @@ export default async function AdminDashboardPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 1100 }}>
-      {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem", marginBottom: "0.25rem" }}>
-          Platform Overview
-        </h1>
-        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
-          Manage all branches and monitor platform activity.
-        </p>
+    <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+      {/* Masthead */}
+      <div className="dash-mast">
+        <div>
+          <div className="eyebrow eyebrow-accent">Administration</div>
+          <div className="ttl">Platform overview</div>
+        </div>
+        <div className="issue">
+          <b>{branchCount ?? 0} branches · {leaderCount ?? 0} leaders</b><br />
+          Across the organisation
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -72,19 +74,11 @@ export default async function AdminDashboardPage() {
       {/* Recent Branches */}
       <div className="card" style={{ padding: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
-          <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1rem", fontWeight: 600 }}>
-            Recent Branches
+          <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1.3rem", fontWeight: 400, letterSpacing: "-0.01em" }}>
+            Recent branches
           </h2>
-          <Link href="/admin/branches/new" id="new-branch-link" style={{
-            background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-            color: "#FFFFFF",
-            fontWeight: 600,
-            fontSize: "0.8rem",
-            padding: "0.5rem 1rem",
-            borderRadius: "var(--radius-md)",
-            textDecoration: "none",
-          }}>
-            + New Branch
+          <Link href="/admin/branches/new" id="new-branch-link" className="btn-primary" style={{ fontSize: "0.8rem", padding: "0.5rem 1.1rem", textDecoration: "none" }}>
+            + New branch
           </Link>
         </div>
 
@@ -114,14 +108,15 @@ export default async function AdminDashboardPage() {
                   <td style={{ padding: "0.875rem 0", color: "var(--color-text-muted)", fontSize: "0.8rem" }}>{branch.slug}</td>
                   <td style={{ padding: "0.875rem 0" }}>
                     <span style={{
-                      background: "rgba(155,135,245,0.1)",
-                      border: "1px solid rgba(155,135,245,0.2)",
-                      color: "var(--color-gold)",
+                      background: "var(--color-primary-light)",
+                      border: "1px solid var(--color-border)",
+                      color: "var(--color-primary-dark)",
                       padding: "0.2rem 0.6rem",
                       borderRadius: "var(--radius-full)",
-                      fontSize: "0.78rem",
-                      fontWeight: 600,
-                      letterSpacing: "0.05em",
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
                     }}>
                       {branch.view_code}
                     </span>

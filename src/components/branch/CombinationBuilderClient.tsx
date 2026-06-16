@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ZONE_POSITIONS, ZONE_CATEGORIES, ZONE_LAYER_ORDER, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
-import { MANNEQUIN_MALE_URL, MANNEQUIN_FEMALE_URL } from "@/lib/mannequin-config";
+import { ZONE_POSITIONS, ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 import type { Uniform, Department, CombinationZoneItemWithUniform } from "@/types/database";
 
@@ -31,9 +30,8 @@ export default function CombinationBuilderClient() {
   const [uniforms, setUniforms] = useState<Uniform[]>([]);
   const [outfit, setOutfit] = useState<OutfitState>({ male: {}, female: {} });
   const [activeGender, setActiveGender] = useState<Gender>("male");
-  const [activeZone, setActiveZone] = useState<BodyZone | null>(null);
+  const [activeZone, setActiveZone] = useState<BodyZone | null>("top");
   const [showAccessories, setShowAccessories] = useState(false);
-  const [draggedUniform, setDraggedUniform] = useState<Uniform | null>(null);
 
   // Step 3: Save
   const [combinationId, setCombinationId] = useState<string | null>(null);
@@ -81,11 +79,6 @@ export default function CombinationBuilderClient() {
   // ---------------------------------------------------------------------------
   // Zone assignment handlers
   // ---------------------------------------------------------------------------
-  const handleZoneClick = (gender: Gender, zone: BodyZone) => {
-    setActiveGender(gender);
-    setActiveZone(zone);
-  };
-
   const assignUniform = useCallback((uniform: Uniform) => {
     if (!activeZone) return;
     const fakeItem: CombinationZoneItemWithUniform = {
@@ -111,30 +104,6 @@ export default function CombinationBuilderClient() {
     });
     if (activeGender === gender && activeZone === zone) setActiveZone(null);
   };
-
-  // Drag & Drop
-  const handleDragStart = (uniform: Uniform) => setDraggedUniform(uniform);
-  const handleDragEnd = () => setDraggedUniform(null);
-
-  const handleDrop = (gender: Gender, zone: BodyZone) => {
-    if (!draggedUniform) return;
-    const fakeItem: CombinationZoneItemWithUniform = {
-      id: `temp-${Date.now()}`,
-      combination_id: "",
-      gender,
-      zone,
-      uniform_id: draggedUniform.id,
-      created_at: new Date().toISOString(),
-      uniform: draggedUniform,
-    };
-    setOutfit((prev) => ({
-      ...prev,
-      [gender]: { ...prev[gender], [zone]: fakeItem },
-    }));
-    setDraggedUniform(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
   // ---------------------------------------------------------------------------
   // Step 3: Save combination + zone items
@@ -213,7 +182,7 @@ export default function CombinationBuilderClient() {
         setGenerating(false);
       }
 
-      router.push("/branch/combinations");
+      router.push("/branch/uniforms");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -225,8 +194,6 @@ export default function CombinationBuilderClient() {
   // ---------------------------------------------------------------------------
   // Render helpers
   // ---------------------------------------------------------------------------
-  const mannequinUrl = { male: MANNEQUIN_MALE_URL, female: MANNEQUIN_FEMALE_URL };
-  const mannequinsConfigured = !!(MANNEQUIN_MALE_URL && MANNEQUIN_FEMALE_URL);
   const zonesToRender = showAccessories
     ? [...STANDARD_ZONES, ...ACCESSORY_ZONES]
     : STANDARD_ZONES;
@@ -254,27 +221,32 @@ export default function CombinationBuilderClient() {
       {/* ------------------------------------------------------------------ */}
       {step === 1 && (
         <div className="builder-step">
-          <h2 className="builder-step-title">Choose a Department</h2>
-          <p className="builder-step-subtitle">The combination will only use uniforms from this department.</p>
+          <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.5rem" }}>Step one</div>
+          <h2 className="builder-step-title">Choose a <em className="serif-em">department</em></h2>
+          <p className="builder-step-subtitle">This look will be styled from that department&rsquo;s wardrobe.</p>
           <div className="dept-grid">
-            {departments.map((dept) => (
-              <button
-                key={dept.id}
-                className={`dept-card ${selectedDept?.id === dept.id ? "selected" : ""}`}
-                onClick={() => setSelectedDept(dept)}
-              >
-                <span className="dept-card-icon">🏢</span>
-                <span className="dept-card-name">{dept.name}</span>
-                {dept.description && <span className="dept-card-desc">{dept.description}</span>}
-              </button>
-            ))}
+            {departments.map((dept) => {
+              const selected = selectedDept?.id === dept.id;
+              return (
+                <button
+                  key={dept.id}
+                  className={`dept-card ${selected ? "selected" : ""}`}
+                  onClick={() => setSelectedDept(dept)}
+                >
+                  {selected && <span className="dept-card-check">✓</span>}
+                  <span className="dept-card-mono">{dept.name.charAt(0).toUpperCase()}</span>
+                  <span className="dept-card-name">{dept.name}</span>
+                  {dept.description && <span className="dept-card-desc">{dept.description}</span>}
+                </button>
+              );
+            })}
             {departments.length === 0 && (
-              <p className="builder-empty">No departments found. Create a department first.</p>
+              <p className="builder-empty">No departments yet. <a href="/branch/departments" style={{ color: "var(--color-primary-dark)", fontWeight: 600 }}>Create one first →</a></p>
             )}
           </div>
           <div className="builder-nav">
             <button
-              className="btn btn-primary"
+              className="btn-primary"
               disabled={!selectedDept}
               onClick={() => setStep(2)}
             >
@@ -289,157 +261,159 @@ export default function CombinationBuilderClient() {
       {/* ------------------------------------------------------------------ */}
       {step === 2 && (
         <div className="builder-step">
-          <h2 className="builder-step-title">Assign Uniforms to Zones</h2>
+          <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.5rem" }}>Step two</div>
+          <h2 className="builder-step-title">Style the <em className="serif-em">look</em></h2>
           <p className="builder-step-subtitle">
-            Click a zone on either mannequin, then select a uniform from the panel. You can also drag uniforms directly onto zones.
+            Pick a zone, then choose a piece — each one shows up large so you can see it clearly.
           </p>
 
-          {!mannequinsConfigured && (
-            <div className="builder-warning" style={{ marginBottom: "1rem" }}>
-              ⚙️ <strong>Mannequin images not yet configured.</strong> The visual builder is available but mannequin previews will appear blank. Please ask your administrator to run the mannequin generation tool and set the required environment variables.
-            </div>
-          )}
+          {/* Gender toggle — style one figure at a time */}
+          <div className="gender-toggle" role="tablist" aria-label="Choose figure">
+            <button
+              role="tab"
+              aria-selected={activeGender === "male"}
+              className={activeGender === "male" ? "on" : ""}
+              onClick={() => setActiveGender("male")}
+            >
+              ♂ Male
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeGender === "female"}
+              className={activeGender === "female" ? "on" : ""}
+              onClick={() => setActiveGender("female")}
+            >
+              ♀ Female
+            </button>
+          </div>
+          <p className="gender-caption">
+            Styling the <b>{activeGender}</b> look · {Object.keys(outfit[activeGender]).length}{" "}
+            {Object.keys(outfit[activeGender]).length === 1 ? "piece" : "pieces"} placed
+          </p>
 
-          <div className="zone-builder-layout">
-            {/* Mannequins */}
-            {(["male", "female"] as Gender[]).map((gender) => (
-              <div key={gender} className="mannequin-column">
-                <h3 className="mannequin-label">{gender === "male" ? "👔 Male" : "👗 Female"}</h3>
-                <div
-                  className="mannequin-canvas"
-                  style={{ position: "relative" }}
+          {/* Zone chips — replaces the mannequin hotspots */}
+          <div className="zone-tabs" role="tablist" aria-label="Body zones">
+            {zonesToRender.map((zone) => {
+              const item = outfit[activeGender][zone];
+              return (
+                <button
+                  key={zone}
+                  role="tab"
+                  aria-selected={activeZone === zone}
+                  className={`zone-tab ${activeZone === zone ? "on" : ""} ${item ? "filled" : ""}`}
+                  onClick={() => setActiveZone(zone)}
                 >
-                  {mannequinUrl[gender] ? (
-                    <img
-                      src={mannequinUrl[gender]}
-                      alt={`${gender} character`}
-                      className="mannequin-img"
-                      draggable={false}
-                    />
-                  ) : (
-                    <div className="mannequin-placeholder">
-                      <span>{gender === "male" ? "♂" : "♀"}</span>
-                      <span className="mannequin-placeholder-text">Character loading…</span>
+                  <span className="zone-tab-label">{ZONE_POSITIONS[zone].label}</span>
+                  {item && <span className="zone-tab-dot" aria-hidden>●</span>}
+                </button>
+              );
+            })}
+            <button
+              className="zone-tab zone-tab-acc"
+              onClick={() => setShowAccessories((v) => !v)}
+            >
+              {showAccessories ? "− Accessories" : "+ Accessories"}
+            </button>
+          </div>
+
+          {/* Stage — the selected zone's piece, shown large */}
+          <div className="fit-stage">
+            {(() => {
+              const assigned = activeZone ? outfit[activeGender][activeZone] : null;
+              if (!activeZone) {
+                return <div className="fit-stage-empty"><span>Select a zone above</span></div>;
+              }
+              if (assigned?.uniform) {
+                return (
+                  <div className="fit-stage-filled">
+                    <div className="fit-stage-frame">
+                      {assigned.uniform.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={assigned.uniform.image_url} alt={assigned.uniform.name} className="fit-stage-img" />
+                      ) : (
+                        <span className="fit-stage-initial">{assigned.uniform.name[0]}</span>
+                      )}
                     </div>
-                  )}
-
-                  {/* Zone hotspots */}
-                  {zonesToRender.map((zone) => {
-                    const pos = ZONE_POSITIONS[zone];
-                    const assigned = outfit[gender][zone];
-                    const isActive = activeGender === gender && activeZone === zone;
-                    return (
-                      <div
-                        key={zone}
-                        className={`zone-hotspot ${assigned ? "filled" : "empty"} ${isActive ? "zone-active" : ""}`}
-                        style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%, -50%)" }}
-                        onClick={() => handleZoneClick(gender, zone)}
-                        onDragOver={handleDragOver}
-                        onDrop={() => {
-                          if (draggedUniform && ZONE_CATEGORIES[zone] === draggedUniform.category) {
-                            handleDrop(gender, zone);
-                          }
-                          // GAP-5 FIX: always clear drag state, even on invalid category drop
-                          setDraggedUniform(null);
-                        }}
-                        title={pos.label}
+                    <div className="fit-stage-meta">
+                      <span className="eyebrow eyebrow-accent">{ZONE_POSITIONS[activeZone].label}</span>
+                      <span className="fit-stage-name">{assigned.uniform.name}</span>
+                      {!assigned.uniform.bg_removed && (
+                        <span className="fit-stage-warn">⚠️ Background not removed</span>
+                      )}
+                      <button
+                        className="fit-stage-clear"
+                        onClick={() => clearZone(activeGender, activeZone)}
                       >
-                        {assigned ? (
-                          <div className="zone-filled-content">
-                            {assigned.uniform?.image_url ? (
-                              <Image
-                                src={assigned.uniform.image_url}
-                                alt={assigned.uniform?.name ?? "Uniform"}
-                                width={40}
-                                height={40}
-                                className="zone-uniform-thumb"
-                              />
-                            ) : (
-                              <span className="zone-uniform-initial">{assigned.uniform?.name?.[0] ?? "?"}</span>
-                            )}
-                            <button
-                              className="zone-clear-btn"
-                              onClick={(e) => { e.stopPropagation(); clearZone(gender, zone); }}
-                            >×</button>
-                          </div>
-                        ) : (
-                          <div className="zone-empty-content">
-                            <span className="zone-plus">+</span>
-                            <span className="zone-label">{pos.label}</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          ))}
-
-          {/* Accessory toggle — single instance outside gender loop */}
-          <button
-            className="accessories-toggle"
-            style={{ gridColumn: "1 / -1", justifySelf: "center", marginTop: 8 }}
-            onClick={() => setShowAccessories((v) => !v)}
-          >
-            {showAccessories ? "Hide Accessories" : "⊕ Show Accessories"}
-          </button>
-
-          {/* Uniform Panel */}
-          <div className="uniform-panel">
-            <div className="uniform-panel-header">
-              <h3>Uniforms</h3>
-              {activeZone && (
-                <div className="active-zone-badge">
-                  {activeGender === "male" ? "👔" : "👗"} {ZONE_POSITIONS[activeZone].label}
-                </div>
-              )}
-              {!activeZone && <p className="panel-hint">Click a zone to filter</p>}
-            </div>
-
-            <div className="uniform-panel-list">
-              {filteredUniforms.length === 0 && (
-                <p className="panel-empty">
-                  {activeZone
-                    ? `No ${ZONE_CATEGORIES[activeZone]} uniforms in ${selectedDept?.name}.`
-                    : "No uniforms found."}
-                </p>
-              )}
-              {filteredUniforms.map((u) => (
-                <div
-                  key={u.id}
-                  className={`panel-uniform-card ${activeZone && ZONE_CATEGORIES[activeZone] !== u.category ? "dimmed" : ""}`}
-                  draggable
-                  onDragStart={() => handleDragStart(u)}
-                  onDragEnd={handleDragEnd}
-                  onClick={() => activeZone && ZONE_CATEGORIES[activeZone] === u.category && assignUniform(u)}
-                >
-                  {u.image_url ? (
-                    <Image src={u.image_url} alt={u.name} width={48} height={48} className="panel-uniform-img" />
-                  ) : (
-                    <div className="panel-uniform-placeholder">{u.name[0]}</div>
-                  )}
-                  <div className="panel-uniform-info">
-                    <span className="panel-uniform-name">{u.name}</span>
-                    <span className={`panel-uniform-cat cat-${u.category}`}>{u.category}</span>
+                        Remove piece
+                      </button>
+                    </div>
                   </div>
-                  {!u.bg_removed && <span className="panel-uniform-warn" title="Background not removed">⚠️</span>}
+                );
+              }
+              return (
+                <div className="fit-stage-empty">
+                  <span className="fit-stage-empty-zone">{ZONE_POSITIONS[activeZone].label}</span>
+                  <span>Pick a piece below to dress this zone</span>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
+          </div>
+
+          {/* Picker — pieces for the active zone, always visible (no scrolling) */}
+          <div className="fit-picker">
+            {filteredUniforms.length === 0 ? (
+              <div className="fit-picker-empty">
+                <p style={{ marginBottom: "0.75rem" }}>
+                  {activeZone
+                    ? `No ${ZONE_CATEGORIES[activeZone]} pieces in ${selectedDept?.name}.`
+                    : `No pieces in ${selectedDept?.name ?? "this department"} yet.`}
+                </p>
+                <a
+                  href="/branch/uniforms"
+                  className="btn-primary"
+                  style={{ padding: "0.5rem 1rem", fontSize: "0.8rem", textDecoration: "none" }}
+                >
+                  ＋ Add to wardrobe
+                </a>
+              </div>
+            ) : (
+              <div className="fit-picker-grid">
+                {filteredUniforms.map((u) => {
+                  const selected = !!activeZone && outfit[activeGender][activeZone]?.uniform_id === u.id;
+                  return (
+                    <button
+                      key={u.id}
+                      className={`fit-piece ${selected ? "on" : ""}`}
+                      onClick={() => activeZone && assignUniform(u)}
+                    >
+                      <div className="fit-piece-frame">
+                        {u.image_url ? (
+                          <Image src={u.image_url} alt={u.name} fill sizes="(max-width: 560px) 45vw, 140px" className="fit-piece-img" />
+                        ) : (
+                          <span className="fit-piece-initial">{u.name[0]}</span>
+                        )}
+                        {selected && <span className="fit-piece-check">✓</span>}
+                        {!u.bg_removed && <span className="fit-piece-warn" title="Background not removed">⚠️</span>}
+                      </div>
+                      <span className="fit-piece-name">{u.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="builder-nav">
+            <button className="btn-back" onClick={() => setStep(1)}>← Back</button>
+            <button
+              className="btn-primary"
+              disabled={!canProceed}
+              onClick={() => setStep(3)}
+            >
+              Continue → ({totalAssigned} placed)
+            </button>
           </div>
         </div>
-
-        <div className="builder-nav">
-          <button className="btn btn-ghost" onClick={() => setStep(1)}>← Back</button>
-          <button
-            className="btn btn-primary"
-            disabled={!canProceed}
-            onClick={() => setStep(3)}
-          >
-            Continue → ({totalAssigned} assigned)
-          </button>
-        </div>
-      </div>
       )}
 
       {/* ------------------------------------------------------------------ */}
@@ -447,13 +421,15 @@ export default function CombinationBuilderClient() {
       {/* ------------------------------------------------------------------ */}
       {step === 3 && (
         <div className="builder-step">
-          <h2 className="builder-step-title">Name & Save</h2>
+          <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.5rem" }}>Step three</div>
+          <h2 className="builder-step-title">Name &amp; <em className="serif-em">save</em> the look</h2>
+          <p className="builder-step-subtitle">Review the pieces, give the look a name, then render it.</p>
 
           {/* Zone summary */}
           <div className="summary-grid">
             {(["male", "female"] as Gender[]).map((gender) => (
               <div key={gender} className="summary-card">
-                <h4 className="summary-gender">{gender === "male" ? "👔 Male Outfit" : "👗 Female Outfit"}</h4>
+                <h4 className="summary-gender">{gender === "male" ? "♂ Male look" : "♀ Female look"}</h4>
                 {Object.keys(outfit[gender]).length === 0 ? (
                   <p className="summary-empty">No zones assigned</p>
                 ) : (
@@ -493,11 +469,11 @@ export default function CombinationBuilderClient() {
 
           <div className="builder-form">
             <label className="form-label">
-              Combination Name <span className="required">*</span>
+              Look name <span className="required">*</span>
             </label>
             <input
               className="form-input"
-              placeholder="e.g. Sunday Ushers Formal"
+              placeholder="e.g. Sunday Ushers — Formal"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -512,20 +488,20 @@ export default function CombinationBuilderClient() {
           </div>
 
           <div className="builder-nav builder-nav-save">
-            <button className="btn btn-ghost" onClick={() => setStep(2)}>← Back</button>
+            <button className="btn-back" onClick={() => setStep(2)}>← Back</button>
             <button
-              className="btn btn-ghost"
+              className="btn-ghost"
               disabled={!name.trim() || saving}
               onClick={() => saveCombination(false)}
             >
-              {saving ? "Saving…" : "Save without Preview"}
+              {saving ? "Saving…" : "Save without preview"}
             </button>
             <button
-              className="btn btn-primary"
+              className="btn-primary"
               disabled={!name.trim() || saving || generating}
               onClick={() => saveCombination(true)}
             >
-              {saving || generating ? "Saving & Generating…" : "💫 Save & Generate AI Preview"}
+              {saving || generating ? "Saving & generating…" : "💫 Save & generate AI preview"}
             </button>
           </div>
         </div>

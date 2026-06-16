@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Pencil, Trash2, Users, X, Plus, Check, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Trash2, X, Plus, Check, AlertTriangle } from "lucide-react";
 import type { DepartmentWithCounts, DepartmentMember } from "@/types/database";
 
 interface DepartmentCardProps {
@@ -179,15 +179,16 @@ export default function DepartmentCard({
         ) : (
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
                 <div style={{
-                  width: 32, height: 32, borderRadius: "var(--radius-md)",
-                  background: "var(--color-primary-light)",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  width: 38, height: 38, borderRadius: "12px",
+                  background: "var(--color-primary-light)", color: "var(--color-primary-dark)",
+                  display: "grid", placeItems: "center", flexShrink: 0,
+                  fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: "1.2rem",
                 }}>
-                  <Users size={15} color="var(--color-primary-dark)" />
+                  {department.name.charAt(0).toUpperCase()}
                 </div>
-                <h3 style={{ fontFamily: "var(--font-heading)", fontSize: "1rem", fontWeight: 700, margin: 0 }}>
+                <h3 style={{ fontFamily: "var(--font-heading)", fontSize: "1.25rem", fontWeight: 500, letterSpacing: "-0.01em", margin: 0 }}>
                   {department.name}
                 </h3>
               </div>

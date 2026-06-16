@@ -91,41 +91,41 @@ export default function DepartmentsPageClient() {
 
   if (loading) return null; // loading.tsx handles the skeleton
 
+  const inputStyle: React.CSSProperties = {
+    width: "100%", border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem",
+    fontSize: "0.9rem", outline: "none", background: "var(--color-bg-elevated)",
+  };
+
   return (
-    <div style={{ maxWidth: 800 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "2rem", gap: "1rem", flexWrap: "wrap" }}>
+    <div style={{ maxWidth: 820, margin: "0 auto" }}>
+      {/* Masthead */}
+      <div className="dash-mast">
         <div>
-          <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.75rem", marginBottom: "0.25rem" }}>
-            Departments
-          </h1>
-          <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
-            Manage your branch departments and their members.
-          </p>
+          <div className="eyebrow eyebrow-accent">The Roster</div>
+          <div className="ttl">Departments</div>
         </div>
-        <button
-          id="create-department-btn"
-          onClick={() => { setShowCreate(true); setCreateError(null); }}
-          style={{
-            display: "flex", alignItems: "center", gap: "0.5rem",
-            padding: "0.65rem 1.25rem", borderRadius: "var(--radius-md)",
-            background: "linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)",
-            color: "#fff", border: "none", fontWeight: 600, fontSize: "0.875rem", cursor: "pointer",
-          }}
-        >
-          <Plus size={15} /> New Department
+        <div className="issue">
+          <b>{departments.length} {departments.length === 1 ? "department" : "departments"}</b><br />
+          Choirs · ushers · clergy &amp; more
+        </div>
+      </div>
+
+      {/* Action */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1.5rem" }}>
+        <button id="create-department-btn" onClick={() => { setShowCreate(true); setCreateError(null); }} className="btn-primary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem" }}>
+          <Plus size={15} /> New department
         </button>
       </div>
 
       {/* Create form */}
       {showCreate && (
         <div className="card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
-          <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1rem", fontWeight: 700, marginBottom: "1rem" }}>
-            New Department
-          </h2>
+          <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.3rem" }}>The Roster</div>
+          <h2 className="display-serif" style={{ fontSize: "1.4rem", marginBottom: "1rem" }}>New <em className="serif-em">department</em></h2>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
             <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>
+              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>
                 Name <span style={{ color: "var(--color-error)" }}>*</span>
               </label>
               <input
@@ -135,29 +135,21 @@ export default function DepartmentsPageClient() {
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 placeholder="e.g. Ushers, Choir, Media Team"
                 maxLength={100}
-                style={{
-                  width: "100%", border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem",
-                  fontSize: "0.9rem", outline: "none",
-                }}
-                onFocus={(e) => { e.target.style.borderColor = "var(--color-primary-dark)"; e.target.style.boxShadow = "0 0 0 3px rgba(155,135,245,0.15)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none"; }}
+                style={inputStyle}
+                onFocus={(e) => { e.target.style.borderColor = "var(--color-primary-dark)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; }}
               />
             </div>
             <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>
-                Description <span style={{ color: "var(--color-text-disabled)" }}>(optional)</span>
+              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>
+                Description <span style={{ color: "var(--color-text-faint)" }}>(optional)</span>
               </label>
               <input
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
                 placeholder="Brief description of this department"
                 maxLength={200}
-                style={{
-                  width: "100%", border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem",
-                  fontSize: "0.875rem", outline: "none",
-                }}
+                style={inputStyle}
                 onFocus={(e) => { e.target.style.borderColor = "var(--color-primary-dark)"; }}
                 onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; }}
               />
@@ -166,27 +158,10 @@ export default function DepartmentsPageClient() {
               <p style={{ color: "var(--color-error)", fontSize: "0.82rem", margin: 0 }}>{createError}</p>
             )}
             <div style={{ display: "flex", gap: "0.625rem" }}>
-              <button
-                onClick={handleCreate}
-                disabled={creating || !newName.trim()}
-                style={{
-                  padding: "0.6rem 1.25rem", borderRadius: "var(--radius-md)",
-                  background: "linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)",
-                  color: "#fff", border: "none", fontWeight: 600, fontSize: "0.875rem",
-                  cursor: creating || !newName.trim() ? "not-allowed" : "pointer",
-                  opacity: creating || !newName.trim() ? 0.65 : 1,
-                }}
-              >
-                {creating ? "Creating…" : "Create Department"}
+              <button onClick={handleCreate} disabled={creating || !newName.trim()} className="btn-primary" style={{ padding: "0.6rem 1.3rem", fontSize: "0.85rem" }}>
+                {creating ? "Creating…" : "Create department"}
               </button>
-              <button
-                onClick={() => { setShowCreate(false); setNewName(""); setNewDesc(""); setCreateError(null); }}
-                style={{
-                  padding: "0.6rem 1rem", borderRadius: "var(--radius-md)",
-                  background: "transparent", border: "1px solid var(--color-border)",
-                  fontSize: "0.875rem", cursor: "pointer", color: "var(--color-text-muted)",
-                }}
-              >
+              <button onClick={() => { setShowCreate(false); setNewName(""); setNewDesc(""); setCreateError(null); }} className="btn-back" style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.6rem 1.1rem" }}>
                 Cancel
               </button>
             </div>
@@ -199,27 +174,17 @@ export default function DepartmentsPageClient() {
         <div style={{ textAlign: "center", padding: "4rem 2rem" }}>
           <div style={{
             width: 64, height: 64, borderRadius: "var(--radius-lg)",
-            background: "var(--color-primary-light)", border: "1px solid rgba(155,135,245,0.2)",
+            background: "var(--color-primary-light)", border: "1px solid var(--color-border)",
             display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.5rem",
           }}>
             <Users size={28} color="var(--color-primary-dark)" />
           </div>
-          <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1.25rem", marginBottom: "0.5rem" }}>
-            No departments yet
-          </h2>
+          <h2 className="display-serif" style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>No departments yet</h2>
           <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", maxWidth: 360, margin: "0 auto 1.5rem" }}>
-            Create your first department to start organising uniforms and members.
+            Create your first department to start organising your wardrobe and roster.
           </p>
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: "0.5rem",
-              padding: "0.65rem 1.25rem", borderRadius: "var(--radius-md)",
-              background: "linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)",
-              color: "#fff", border: "none", fontWeight: 600, fontSize: "0.875rem", cursor: "pointer",
-            }}
-          >
-            <Plus size={15} /> Create First Department
+          <button onClick={() => setShowCreate(true)} className="btn-primary" style={{ padding: "0.7rem 1.4rem" }}>
+            <Plus size={15} /> Create first department
           </button>
         </div>
       )}

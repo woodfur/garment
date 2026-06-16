@@ -41,7 +41,7 @@ function LoginForm() {
   }
 
   const inputStyle: React.CSSProperties = {
-    background: "#FFFFFF",
+    background: "var(--color-bg-elevated)",
     border: "1px solid var(--color-border)",
     borderRadius: "var(--radius-md)",
     padding: "0.7rem 0.875rem",
@@ -77,14 +77,9 @@ function LoginForm() {
 
         {/* Heading */}
         <div style={{ marginBottom: "2rem", textAlign: "center" }}>
-          <h1 style={{
-            fontFamily: "var(--font-heading)",
-            fontSize: "1.5rem",
-            fontWeight: 700,
-            color: "var(--color-text-primary)",
-            marginBottom: 0,
-          }}>
-            Garment
+          <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.5rem" }}>Uniform Studio</div>
+          <h1 className="display-serif" style={{ fontSize: "2.4rem", marginBottom: 0 }}>
+            <em className="serif-em">Garment</em>
           </h1>
         </div>
 
@@ -125,7 +120,7 @@ function LoginForm() {
                 style={inputStyle}
                 onFocus={(e) => {
                   e.target.style.borderColor = "var(--color-primary-dark)";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(155,135,245,0.15)";
+                  e.target.style.boxShadow = "0 0 0 3px rgba(71,39,67,0.15)";
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = "var(--color-border)";
@@ -150,7 +145,7 @@ function LoginForm() {
                 style={inputStyle}
                 onFocus={(e) => {
                   e.target.style.borderColor = "var(--color-primary-dark)";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(155,135,245,0.15)";
+                  e.target.style.boxShadow = "0 0 0 3px rgba(71,39,67,0.15)";
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = "var(--color-border)";
@@ -178,25 +173,13 @@ function LoginForm() {
               id="login-submit"
               type="submit"
               disabled={loading}
+              className="btn-primary"
               style={{
-                background: "linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)",
-                color: "#FFFFFF",
-                fontWeight: 600,
                 fontSize: "0.9rem",
                 padding: "0.8rem",
-                borderRadius: "var(--radius-md)",
-                border: "none",
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.65 : 1,
-                transition: "opacity 0.15s, transform 0.1s",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.5rem",
                 width: "100%",
+                opacity: loading ? 0.65 : 1,
               }}
-              onMouseEnter={(e) => !loading && ((e.currentTarget as HTMLButtonElement).style.opacity = "0.9")}
-              onMouseLeave={(e) => !loading && ((e.currentTarget as HTMLButtonElement).style.opacity = "1")}
             >
               {loading && <Loader2 size={16} className="animate-spin" />}
               {loading ? "Signing in…" : "Sign in"}

@@ -111,29 +111,29 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
           padding: "1rem",
         }}>
           <div style={{
-            background: "var(--color-bg-elevated)",
+            background: "var(--color-bg-card)",
             border: "1px solid var(--color-border)",
             borderRadius: "var(--radius-lg)",
             padding: "2rem",
             maxWidth: 460,
             width: "100%",
-            boxShadow: "0 8px 32px rgba(155,135,245,0.15)",
+            boxShadow: "var(--shadow-elevated)",
           }}>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
               <div style={{
                 width: 42, height: 42,
-                background: "rgba(155,135,245,0.15)",
-                border: "1px solid rgba(155,135,245,0.3)",
+                background: "var(--color-primary-light)",
+                border: "1px solid var(--color-border)",
                 borderRadius: "var(--radius-md)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0,
               }}>
-                <UserPlus size={20} color="var(--color-gold)" />
+                <UserPlus size={20} color="var(--color-primary-dark)" />
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: "1rem", fontFamily: "var(--font-heading)" }}>
-                  Account Created
+                <div style={{ fontWeight: 500, fontSize: "1.15rem", fontFamily: "var(--font-heading)" }}>
+                  Account created
                 </div>
                 <div style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
                   Share these credentials securely
@@ -144,14 +144,14 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
             {/* Warning */}
             <div style={{
               display: "flex", alignItems: "flex-start", gap: "0.625rem",
-              background: "rgba(255,160,0,0.08)",
-              border: "1px solid rgba(255,160,0,0.25)",
+              background: "var(--color-warning-bg)",
+              border: "1px solid var(--color-warning)",
               borderRadius: "var(--radius-md)",
               padding: "0.75rem 0.875rem",
               marginBottom: "1.25rem",
             }}>
-              <ShieldAlert size={16} color="#FFA000" style={{ flexShrink: 0, marginTop: 1 }} />
-              <p style={{ fontSize: "0.78rem", color: "#FFA000", lineHeight: 1.5, margin: 0 }}>
+              <ShieldAlert size={16} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <p style={{ fontSize: "0.78rem", color: "var(--color-warning)", lineHeight: 1.5, margin: 0 }}>
                 This password will <strong>not be shown again</strong>. Copy it now and share it with the branch leader securely.
               </p>
             </div>
@@ -224,17 +224,8 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
             <button
               id="credentials-done-btn"
               onClick={handleDone}
-              style={{
-                width: "100%",
-                background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-                color: "#FFFFFF",
-                fontWeight: 700,
-                fontSize: "0.9rem",
-                padding: "0.75rem",
-                borderRadius: "var(--radius-md)",
-                border: "none",
-                cursor: "pointer",
-              }}
+              className="btn-primary"
+              style={{ width: "100%", fontSize: "0.9rem", padding: "0.8rem" }}
             >
               Done — I&apos;ve copied the password
             </button>
@@ -302,16 +293,11 @@ export default function CreateLeaderForm({ branchId, branchName }: CreateLeaderF
           id="create-leader-btn"
           type="submit"
           disabled={loading}
-          style={{
-            background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-            color: "#FFFFFF", fontWeight: 600, fontSize: "0.875rem",
-            padding: "0.65rem", borderRadius: "var(--radius-md)", border: "none",
-            cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-          }}
+          className="btn-primary"
+          style={{ fontSize: "0.875rem", padding: "0.7rem", opacity: loading ? 0.7 : 1 }}
         >
           {loading && <Loader2 size={15} className="animate-spin" />}
-          {loading ? "Creating Account…" : "Create Account"}
+          {loading ? "Creating account…" : "Create account"}
         </button>
       </form>
     </>

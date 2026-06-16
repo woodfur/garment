@@ -2,29 +2,28 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutDashboard, Shirt, Layers, Calendar, Package, Megaphone, LogOut, ChevronRight, Users,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getInitials } from "@/lib/utils";
 
 interface BranchSidebarProps {
   branchName: string;
   leaderName: string | null;
 }
 
+// Roman numerals give the rail its editorial, lookbook-index feel.
+// The Wardrobe now holds both finished looks and individual pieces.
 const navItems = [
-  { href: "/branch/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
-  { href: "/branch/departments",   label: "Departments",   icon: Users },
-  { href: "/branch/uniforms",      label: "Uniforms",      icon: Shirt },
-  { href: "/branch/combinations",  label: "Combinations",  icon: Layers },
-  { href: "/branch/schedule",      label: "Schedule",      icon: Calendar },
-  { href: "/branch/inventory",     label: "Inventory",     icon: Package },
-  { href: "/branch/announcements", label: "Announcements", icon: Megaphone },
+  { href: "/branch/dashboard",     label: "The Studio",   ix: "i" },
+  { href: "/branch/departments",   label: "Departments",  ix: "ii" },
+  { href: "/branch/uniforms",      label: "Wardrobe",     ix: "iii" },
+  { href: "/branch/schedule",      label: "Schedule",     ix: "iv" },
 ];
 
 export default function BranchSidebar({ branchName, leaderName }: BranchSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const displayName = leaderName ?? "Branch Leader";
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -34,105 +33,98 @@ export default function BranchSidebar({ branchName, leaderName }: BranchSidebarP
   }
 
   return (
-    <aside style={{
-      width: 240,
-      background: "var(--color-bg-surface)",
-      borderRight: "1px solid var(--color-border)",
-      display: "flex",
-      flexDirection: "column",
-      padding: "1.5rem 0",
-      flexShrink: 0,
-    }}>
-      {/* Logo */}
-      <div style={{ padding: "0 1.5rem 2rem" }}>
-        <Link href="/branch/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "0.625rem" }}>
-          <div style={{
-            width: 32, height: 32,
-            background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-            borderRadius: "var(--radius-md)",
-            flexShrink: 0,
-          }} />
-          <span className="text-gold-gradient" style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: "1.25rem" }}>
-            Garment
-          </span>
-        </Link>
-        <div style={{
-          marginTop: "0.5rem",
-          fontSize: "0.7rem",
-          color: "var(--color-text-disabled)",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          paddingLeft: "0.25rem",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>
-          {branchName}
+    <aside
+      className="branch-sidebar"
+      style={{
+        width: 228,
+        background: "var(--color-bg-surface)",
+        borderRight: "1px solid var(--color-border)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "2.25rem",
+        padding: "1.875rem 1.375rem",
+        flexShrink: 0,
+      }}
+    >
+      {/* Brand */}
+      <Link
+        href="/branch/dashboard"
+        style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "0.7rem", color: "inherit" }}
+      >
+        <div
+          style={{
+            width: 34, height: 34, flexShrink: 0,
+            background: "var(--color-primary-dark)",
+            borderRadius: "9px",
+            display: "grid", placeItems: "center",
+            color: "#fff", fontFamily: "var(--font-heading)", fontSize: "1.125rem",
+            boxShadow: "0 8px 18px -8px rgba(71,39,67,0.6)",
+          }}
+        >
+          G
         </div>
-      </div>
+        <div>
+          <div style={{ fontFamily: "var(--font-heading)", fontWeight: 400, fontSize: "1.3rem", letterSpacing: "-0.01em", lineHeight: 1 }}>
+            Garment
+          </div>
+          <div style={{ fontSize: "0.53rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "var(--color-text-faint)", marginTop: 3 }}>
+            Atelier · Lookbook
+          </div>
+        </div>
+      </Link>
 
       {/* Nav */}
-      <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.25rem", padding: "0 0.75rem" }}>
-        {navItems.map(({ href, label, icon: Icon }) => {
+      <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ fontSize: "0.56rem", letterSpacing: "0.24em", textTransform: "uppercase", color: "var(--color-text-faint)", fontWeight: 700, margin: "0 0 0.75rem 0.625rem" }}>
+          Studio
+        </div>
+        {navItems.map(({ href, label, ix }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
               key={href}
               href={href}
               prefetch={true}
-              id={`branch-nav-${label.toLowerCase()}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                padding: "0.625rem 0.875rem",
-                borderRadius: "var(--radius-md)",
-                textDecoration: "none",
-                fontSize: "0.875rem",
-                fontWeight: active ? 600 : 400,
-                color: active ? "var(--color-primary-dark)" : "var(--color-text-muted)",
-                background: active ? "var(--color-primary-light)" : "transparent",
-                border: active ? "1px solid rgba(155,135,245,0.25)" : "1px solid transparent",
-                transition: "all 0.15s",
-              }}
+              id={`branch-nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
+              className={`rail-link${active ? " on" : ""}`}
             >
-              <Icon size={17} />
+              <span className="ix">{ix}</span>
               {label}
-              {active && <ChevronRight size={14} style={{ marginLeft: "auto" }} />}
             </Link>
           );
         })}
       </nav>
 
-      {/* Sign out */}
-      <div style={{ padding: "0 0.75rem", borderTop: "1px solid var(--color-border)", paddingTop: "1rem", marginTop: "1rem" }}>
+      {/* Footer: identity + sign out */}
+      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1.1rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+          <div
+            style={{
+              width: 32, height: 32, flexShrink: 0, borderRadius: "50%",
+              background: "var(--color-primary-light)", display: "grid", placeItems: "center",
+              fontFamily: "var(--font-heading)", color: "var(--color-primary-dark)", fontSize: "0.875rem",
+            }}
+          >
+            {getInitials(displayName)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: "0.78rem", fontWeight: 600, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {displayName}
+            </div>
+            <div style={{ fontSize: "0.66rem", color: "var(--color-text-faint)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {branchName} · Lead
+            </div>
+          </div>
+        </div>
         <button
           id="branch-signout"
           onClick={handleSignOut}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            padding: "0.625rem 0.875rem",
-            borderRadius: "var(--radius-md)",
-            background: "transparent",
-            border: "1px solid transparent",
-            color: "var(--color-text-muted)",
-            fontSize: "0.875rem",
-            cursor: "pointer",
-            width: "100%",
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = "var(--color-error)";
-            (e.currentTarget as HTMLButtonElement).style.background = "var(--color-error-bg)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-muted)";
-            (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-          }}
+          className="rail-link"
+          style={{ background: "transparent", border: "1px solid transparent", cursor: "pointer", width: "100%", font: "inherit", fontSize: "0.82rem" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--color-error)"; (e.currentTarget as HTMLButtonElement).style.background = "var(--color-error-bg)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = ""; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
         >
-          <LogOut size={17} />
+          <LogOut size={16} style={{ width: 15 }} />
           Sign out
         </button>
       </div>

@@ -24,38 +24,39 @@ export default function BranchTopbar({ branchName, leaderName, email }: BranchTo
   }
 
   return (
-    <header style={{
-      height: 60,
-      background: "var(--color-bg-surface)",
-      borderBottom: "1px solid var(--color-border)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: "0 1.75rem",
-      flexShrink: 0,
-    }}>
-      {/* Left: branch name + role */}
+    <header
+      className="branch-topbar"
+      style={{
+        height: 62,
+        background: "var(--color-bg-surface)",
+        borderBottom: "1px solid var(--color-border)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 2rem",
+        flexShrink: 0,
+      }}
+    >
+      {/* Left: masthead — eyebrow + branch name in serif */}
       <div>
-        <div style={{ fontWeight: 700, fontSize: "0.9rem", fontFamily: "var(--font-heading)" }}>
+        <div className="eyebrow eyebrow-accent">Uniform Studio</div>
+        <div style={{ fontFamily: "var(--font-heading)", fontStyle: "italic", fontWeight: 400, fontSize: "1.05rem", lineHeight: 1.1, marginTop: 1 }}>
           {branchName}
-        </div>
-        <div style={{ fontSize: "0.7rem", color: "var(--color-text-disabled)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-          Branch Leader
         </div>
       </div>
 
-      {/* Right: avatar + name + sign out */}
+      {/* Right: identity + sign out */}
       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-        {/* Avatar + name */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-          <div style={{
-            width: 34, height: 34,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontWeight: 700, fontSize: "0.75rem", color: "#FFFFFF",
-            flexShrink: 0,
-          }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <div
+            style={{
+              width: 34, height: 34, borderRadius: "50%",
+              background: "var(--color-primary-light)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: "0.8rem", color: "var(--color-primary-dark)",
+              flexShrink: 0,
+            }}
+          >
             {initials}
           </div>
           <span style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", fontWeight: 500 }}>
@@ -63,10 +64,8 @@ export default function BranchTopbar({ branchName, leaderName, email }: BranchTo
           </span>
         </div>
 
-        {/* Divider */}
         <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
 
-        {/* Sign out */}
         <button
           id="branch-topbar-signout"
           onClick={handleSignOut}

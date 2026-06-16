@@ -1,18 +1,22 @@
 import type { Metadata } from "next";
-import { Nunito, DM_Sans } from "next/font/google";
+import { Fraunces, Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const dm_serif = Nunito({
+/* ── Atelier × Lookbook design system ──
+   Fraunces (editorial display, with italics) + Hanken Grotesk (UI/body).
+   These power the whole app — desktop and mobile share one type system. */
+const fraunces = Fraunces({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-heading",
+  weight: ["300", "400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-display",
   display: "swap",
 });
 
-const dm_sans = DM_Sans({
+const hanken = Hanken_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-body",
+  variable: "--font-ui",
   display: "swap",
 });
 
@@ -32,9 +36,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${dm_serif.variable} ${dm_sans.variable}`}>
+    <html lang="en" className={`${fraunces.variable} ${hanken.variable}`}>
       <head>
-        <meta name="theme-color" content="#7C5CBF" />
+        <meta name="theme-color" content="#472743" />
       </head>
       <body className="antialiased">{children}</body>
     </html>
