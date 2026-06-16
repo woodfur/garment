@@ -15,6 +15,14 @@ type OutfitState = { male: ZoneMap; female: ZoneMap };
 
 type Step = 1 | 2 | 3;
 
+/** Readable text colour (ink or paper) for a label sitting on a colour swatch. */
+function textOn(hex: string): string {
+  const c = hex.replace("#", "");
+  if (c.length < 6) return "#211C19";
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#211C19" : "#FBF9F4";
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -73,7 +81,7 @@ export default function CombinationBuilderClient() {
   // Has bg_removed issues
   const bgWarnings = (() => {
     const all = [...Object.values(outfit.male), ...Object.values(outfit.female)] as CombinationZoneItemWithUniform[];
-    return all.filter((item) => item?.uniform && !item.uniform.bg_removed).map((item) => item.uniform!.name);
+    return all.filter((item) => item?.uniform && item.uniform.image_url && !item.uniform.bg_removed).map((item) => item.uniform!.name);
   })();
 
   // ---------------------------------------------------------------------------
@@ -330,6 +338,12 @@ export default function CombinationBuilderClient() {
                       {assigned.uniform.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={assigned.uniform.image_url} alt={assigned.uniform.name} className="fit-stage-img" />
+                      ) : assigned.uniform.color ? (
+                        <div style={{ width: "100%", height: "100%", background: assigned.uniform.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: textOn(assigned.uniform.color), background: "rgba(0,0,0,0.12)", padding: "0.25rem 0.6rem", borderRadius: 999 }}>
+                            {assigned.uniform.color_label || assigned.uniform.color}
+                          </span>
+                        </div>
                       ) : (
                         <span className="fit-stage-initial">{assigned.uniform.name[0]}</span>
                       )}
@@ -337,7 +351,7 @@ export default function CombinationBuilderClient() {
                     <div className="fit-stage-meta">
                       <span className="eyebrow eyebrow-accent">{ZONE_POSITIONS[activeZone].label}</span>
                       <span className="fit-stage-name">{assigned.uniform.name}</span>
-                      {!assigned.uniform.bg_removed && (
+                      {assigned.uniform.image_url && !assigned.uniform.bg_removed && (
                         <span className="fit-stage-warn">⚠️ Background not removed</span>
                       )}
                       <button
@@ -389,11 +403,13 @@ export default function CombinationBuilderClient() {
                       <div className="fit-piece-frame">
                         {u.image_url ? (
                           <Image src={u.image_url} alt={u.name} fill sizes="(max-width: 560px) 45vw, 140px" className="fit-piece-img" />
+                        ) : u.color ? (
+                          <div style={{ position: "absolute", inset: 0, background: u.color }} />
                         ) : (
                           <span className="fit-piece-initial">{u.name[0]}</span>
                         )}
                         {selected && <span className="fit-piece-check">✓</span>}
-                        {!u.bg_removed && <span className="fit-piece-warn" title="Background not removed">⚠️</span>}
+                        {u.image_url && !u.bg_removed && <span className="fit-piece-warn" title="Background not removed">⚠️</span>}
                       </div>
                       <span className="fit-piece-name">{u.name}</span>
                     </button>
@@ -438,7 +454,7 @@ export default function CombinationBuilderClient() {
                       <li key={zone} className="summary-item">
                         <span className="summary-zone">{ZONE_POSITIONS[zone].label}</span>
                         <span className="summary-uniform">{item.uniform?.name ?? "[Deleted]"}</span>
-                        {item.uniform && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
+                        {item.uniform && item.uniform.image_url && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
                       </li>
                     ))}
                   </ul>

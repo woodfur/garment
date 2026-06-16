@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { compositeNextGarment, generateVideoFromImage, type ZoneItem } from "@/lib/replicate";
+import { startCompositeChain, compositeNextGarment, generateVideoFromImage, type ZoneItem } from "@/lib/replicate";
 import { ZONE_LAYER_ORDER } from "@/types/zones";
 import type { Gender } from "@/types/database";
 
@@ -154,6 +154,50 @@ export async function POST(req: Request) {
   await db.from("replicate_jobs")
     .update({ status: "done", current_image_url: outputUrl })
     .eq("prediction_id", body.id);
+
+  // --- Colour base (Flux) step completed ---
+  // The generated figure already wears the colour pieces. Chain any photo pieces on
+  // top of it, or — if the look is all colour — store it as the composite and animate.
+  if (jobType.startsWith("colorbase_")) {
+    try {
+      const { data: zoneItems } = await db
+        .from("combination_zone_items")
+        .select("*, uniform:uniforms(id, name, image_url)")
+        .eq("combination_id", combinationId)
+        .eq("gender", gender);
+
+      const typedItems = (zoneItems ?? []) as Array<{
+        zone: string;
+        uniform_id: string;
+        uniform: { id: string; name: string; image_url: string | null } | null;
+      }>;
+
+      const photoItems: ZoneItem[] = ZONE_LAYER_ORDER
+        .filter((zone) => typedItems.some((i) => i.zone === zone && i.uniform?.image_url))
+        .map((zone) => {
+          const item = typedItems.find((i) => i.zone === zone)!;
+          return {
+            zone: item.zone as ZoneItem["zone"],
+            uniform_id: item.uniform_id,
+            uniform_image_url: item.uniform!.image_url!,
+            uniform_name: item.uniform!.name,
+          };
+        });
+
+      if (photoItems.length > 0) {
+        await startCompositeChain(combinationId, gender, photoItems, outputUrl);
+      } else {
+        const col = gender === "male" ? "male_composite_url" : "female_composite_url";
+        await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
+        await generateVideoFromImage(outputUrl, combinationId, gender);
+      }
+    } catch (colorErr) {
+      console.error("[webhook] colour base continuation error:", colorErr);
+      await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
+      return NextResponse.json({ received: true, error: "colour base step failed" });
+    }
+    return NextResponse.json({ received: true });
+  }
 
   // --- Composite step completed ---
   // GAP-2 FIX: Wrap chain continuation in try/catch and return 200 on error.

@@ -37,6 +37,14 @@ export interface ZoneItem {
   uniform_name: string;
 }
 
+/** A colour-based piece — no photo; rendered into the figure via a Flux text prompt. */
+export interface ColorZoneItem {
+  zone: BodyZone;
+  category: string;
+  color: string;             // hex, e.g. "#3A6B8C"
+  color_label: string | null;
+}
+
 export interface CompositeJobMeta {
   combination_id: string;
   gender: Gender;
@@ -275,10 +283,160 @@ export async function generateCharacterImage(gender: Gender): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Colour-based looks — build a Flux prompt from colour swatches
+// ---------------------------------------------------------------------------
+const GARMENT_NOUN: Record<string, string> = {
+  top:       "shirt",
+  outer:     "jacket",
+  bottom:    "trousers",
+  footwear:  "shoes",
+  head:      "hat",
+  accessory: "accessory",
+};
+
+/** Nearest basic colour name from a small palette — keeps the Flux prompt literal. */
+function hexToColorName(hex: string): string {
+  const palette: Array<[string, [number, number, number]]> = [
+    ["black", [0, 0, 0]], ["white", [255, 255, 255]], ["grey", [128, 128, 128]],
+    ["silver", [192, 192, 192]], ["charcoal", [54, 54, 54]],
+    ["red", [200, 30, 30]], ["maroon", [120, 20, 20]], ["orange", [230, 126, 34]],
+    ["gold", [212, 175, 55]], ["yellow", [240, 220, 60]], ["cream", [245, 240, 220]],
+    ["green", [40, 150, 60]], ["olive", [110, 120, 50]], ["teal", [30, 140, 140]],
+    ["navy", [20, 30, 90]], ["blue", [40, 90, 200]], ["sky blue", [120, 180, 230]],
+    ["purple", [120, 50, 150]], ["plum", [90, 40, 85]], ["pink", [230, 130, 180]],
+    ["brown", [110, 70, 40]], ["tan", [190, 150, 110]], ["beige", [225, 200, 160]],
+  ];
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  let best = palette[0][0], bestD = Infinity;
+  for (const [name, [pr, pg, pb]] of palette) {
+    const d = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2;
+    if (d < bestD) { bestD = d; best = name; }
+  }
+  return best;
+}
+
+function buildColorPrompt(gender: Gender, colorItems: ColorZoneItem[]): string {
+  const person = gender === "male" ? "young adult African man" : "young adult African woman";
+  const order = ["head", "outer", "top", "bottom", "footwear", "accessory"];
+  const sorted = [...colorItems].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+  const clauses = sorted.map((it) => `a ${hexToColorName(it.color)} ${GARMENT_NOUN[it.category] ?? "garment"}`);
+  const garments = clauses.length > 1
+    ? `${clauses.slice(0, -1).join(", ")} and ${clauses[clauses.length - 1]}`
+    : (clauses[0] ?? "plain clothing");
+  return `Full body fashion photograph of a ${person} wearing ${garments}, neutral standing pose, arms slightly away from body, plain white background, professional studio lighting, front view, full length head to toe, high quality realistic fashion photography`;
+}
+
+// ---------------------------------------------------------------------------
+// startColorBaseGeneration
+// Generates (via Flux) a figure wearing the COLOUR pieces. The result becomes the
+// base for any photo pieces (chained via IDM-VTON), or — if the look is all colour —
+// the final composite that gets animated. Mirrors startCompositeChain's prod/dev split.
+// ---------------------------------------------------------------------------
+export async function startColorBaseGeneration(
+  combinationId: string,
+  gender: Gender,
+  colorItems: ColorZoneItem[],
+  photoItems: ZoneItem[],   // photo pieces to chain on top afterwards (may be empty)
+): Promise<{ predictionId: string }> {
+  const admin = createAdminClient();
+  const db = admin as any;
+
+  if (colorItems.length === 0) {
+    throw new Error("startColorBaseGeneration requires at least one colour item");
+  }
+
+  const meta: CompositeJobMeta = {
+    combination_id: combinationId,
+    gender,
+    sequence_index: 0,
+    total_steps: photoItems.length,
+    job_type: `colorbase_${gender}`,
+  };
+
+  const prediction = await replicate.predictions.create({
+    model: MODELS.characterGen,
+    input: {
+      prompt: buildColorPrompt(gender, colorItems),
+      aspect_ratio: "3:4",
+      num_outputs: 1,
+      num_inference_steps: 28,
+      guidance: 3.5,
+      output_format: "png",
+      go_fast: false,
+    },
+    ...(IS_PROD ? { webhook: webhookUrl(meta), webhook_events_filter: ["completed"] } : {}),
+  });
+
+  await db.from("replicate_jobs").insert({
+    combination_id: combinationId,
+    prediction_id: prediction.id,
+    job_type: meta.job_type,
+    gender,
+    sequence_index: 0,
+    total_steps: photoItems.length,
+    current_image_url: null,
+    next_uniform_id: null,
+    status: "pending",
+  });
+
+  if (!IS_PROD) {
+    void pollAndContinueColorBase(prediction.id, combinationId, gender, photoItems);
+  }
+
+  return { predictionId: prediction.id };
+}
+
+// ---------------------------------------------------------------------------
 // getPredictionStatus (used by dev polling)
 // ---------------------------------------------------------------------------
 export async function getPredictionStatus(predictionId: string) {
   return replicate.predictions.get(predictionId);
+}
+
+// ---------------------------------------------------------------------------
+// Dev-only: poll the colour-base (Flux) job, then chain photos or finalise.
+// Prod uses the webhook's `colorbase_` branch instead.
+// ---------------------------------------------------------------------------
+async function pollAndContinueColorBase(
+  predictionId: string,
+  combinationId: string,
+  gender: Gender,
+  photoItems: ZoneItem[],
+) {
+  const MAX_ATTEMPTS = 200;
+  for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
+    await sleep(3000);
+    const prediction = await getPredictionStatus(predictionId);
+
+    if (prediction.status === "failed" || prediction.status === "canceled") {
+      await markFailed(combinationId, predictionId);
+      return;
+    }
+    if (prediction.status !== "succeeded") continue;
+
+    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : String(prediction.output ?? "");
+    if (!outputUrl) {
+      await markFailed(combinationId, predictionId, "Colour base generation returned no output URL");
+      return;
+    }
+
+    const admin = createAdminClient();
+    const db = admin as any;
+    await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
+
+    if (photoItems.length > 0) {
+      // Chain photo garments on top of the generated colour base.
+      void startCompositeChain(combinationId, gender, photoItems, outputUrl);
+    } else {
+      // All-colour look — the Flux output IS the composite. Animate it.
+      const col = gender === "male" ? "male_composite_url" : "female_composite_url";
+      await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
+      void generateVideoFromImage(outputUrl, combinationId, gender);
+    }
+    return;
+  }
+  await markFailed(combinationId, predictionId);
 }
 
 // ---------------------------------------------------------------------------
