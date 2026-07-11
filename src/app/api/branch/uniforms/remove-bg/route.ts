@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
+
+const REPLICATE_REMOVE_BG_VERSION = "95fcc2a26d3899cd6c2691c900465aaeff466285a65c14638cc5f36f34befaf1";
 
 /**
  * POST /api/branch/uniforms/remove-bg
@@ -9,7 +12,7 @@ import { requireBranchLeader } from "@/lib/api-auth";
  * Accepts { uniformId, storagePath } and:
  *  1. Fetches the raw image from Supabase storage
  *  2. Sends to Replicate rembg for fast server-side removal (~3-5s)
- *  3. Uploads the result PNG to uniforms/bg-removed/...
+ *  3. Converts the result to a compact transparent WebP and uploads to uniforms/bg-removed/...
  *  4. Updates the uniforms row with the new image_url + bg_removed = true
  */
 export async function POST(request: Request) {
@@ -28,6 +31,8 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+    // Database types lag the live Supabase schema in this repo; keep this route aligned with the existing admin-client pattern.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = admin as any;
 
     // Verify uniform belongs to this branch
@@ -56,7 +61,7 @@ export async function POST(request: Request) {
       .getPublicUrl(storagePath);
 
     // Call Replicate rembg — synchronous (short model, usually <5s)
-    const response = await fetch("https://api.replicate.com/v1/models/lucataco/remove-bg/predictions", {
+    const response = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -64,6 +69,7 @@ export async function POST(request: Request) {
         "Prefer": "wait", // wait for result synchronously (up to 60s)
       },
       body: JSON.stringify({
+        version: REPLICATE_REMOVE_BG_VERSION,
         input: { image: rawPublicUrl },
       }),
     });
@@ -94,14 +100,18 @@ export async function POST(request: Request) {
     if (!imgRes.ok) {
       return NextResponse.json({ error: "Failed to download processed image" }, { status: 502 });
     }
-    const imgBuffer = await imgRes.arrayBuffer();
+    const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+    const processedImage = await sharp(imgBuffer)
+      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 88, effort: 4 })
+      .toBuffer();
 
     // Upload to uniforms/bg-removed/... in Supabase storage
-    const bgPath = `bg-removed/${storagePath.replace(/\.[^.]+$/, ".png")}`;
+    const bgPath = `bg-removed/${storagePath.replace(/\.[^.]+$/, ".webp")}`;
     const { error: uploadError } = await admin.storage
       .from("uniforms")
-      .upload(bgPath, imgBuffer, {
-        contentType: "image/png",
+      .upload(bgPath, processedImage, {
+        contentType: "image/webp",
         upsert: true,
       });
 
