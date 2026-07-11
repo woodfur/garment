@@ -287,6 +287,7 @@ export async function generateCharacterImage(gender: Gender): Promise<string> {
 // ---------------------------------------------------------------------------
 const GARMENT_NOUN: Record<string, string> = {
   top:       "shirt",
+  full_body: "dress",
   outer:     "jacket",
   bottom:    "trousers",
   footwear:  "shoes",
@@ -318,7 +319,7 @@ function hexToColorName(hex: string): string {
 
 function buildColorPrompt(gender: Gender, colorItems: ColorZoneItem[]): string {
   const person = gender === "male" ? "young adult African man" : "young adult African woman";
-  const order = ["head", "outer", "top", "bottom", "footwear", "accessory"];
+  const order = ["head", "outer", "full_body", "top", "bottom", "footwear", "accessory"];
   const sorted = [...colorItems].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
   const clauses = sorted.map((it) => `a ${hexToColorName(it.color)} ${GARMENT_NOUN[it.category] ?? "garment"}`);
   const garments = clauses.length > 1

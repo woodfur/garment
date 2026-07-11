@@ -81,7 +81,7 @@ export async function POST(
     const coreItems = genderItems.filter((i) => !i.zone.startsWith("accessory_"));
     if (coreItems.length === 0) {
       return NextResponse.json(
-        { error: `No core zone items for ${gender} outfit. Assign at least one item (top, bottom, footwear, head, or outer).` },
+        { error: `No core zone items for ${gender} outfit. Assign at least one item (dress, top, bottom, footwear, head, or outer).` },
         { status: 400 }
       );
     }

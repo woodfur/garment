@@ -8,7 +8,7 @@ import type { UniformCategory } from "@/types/database";
 
 type Department = { id: string; name: string };
 type Uniform = {
-  id: string; name: string; category: string; department_id: string;
+  id: string; name: string; category: UniformCategory; department_id: string;
   image_url: string | null; raw_image_url: string | null; is_archived: boolean;
   bg_removed: boolean; storage_path: string | null; description: string | null; created_at: string;
   color: string | null; color_label: string | null;
@@ -29,12 +29,15 @@ type PreviewStatusResponse = { preview_status: PreviewStatus; male_gif_url: stri
 
 const CATEGORIES: { value: UniformCategory; label: string }[] = [
   { value: "top",       label: "Top" },
+  { value: "full_body", label: "Dress" },
   { value: "bottom",    label: "Bottom" },
   { value: "footwear",  label: "Footwear" },
   { value: "accessory", label: "Accessory" },
   { value: "outer",     label: "Outer" },
   { value: "head",      label: "Head" },
 ];
+
+const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map((category) => [category.value, category.label])) as Record<UniformCategory, string>;
 
 const POLL_INTERVAL = 5000;
 const POLL_TIMEOUT = 10 * 60 * 1000;
@@ -342,8 +345,9 @@ export default function UniformsPageClient() {
   const looks = combinations.filter((c) => filterDept === "all" || c.department_id === filterDept);
   const pieces = uniforms.filter((u) => filterDept === "all" || u.department_id === filterDept);
 
-  const categoryColor: Record<string, string> = {
-    top: "var(--color-primary-dark)", bottom: "var(--color-info)",
+  const categoryColor: Record<UniformCategory, string> = {
+    top: "var(--color-primary-dark)", full_body: "var(--color-accent)",
+    bottom: "var(--color-info)",
     footwear: "var(--color-sage)", accessory: "var(--color-gold-leaf)",
     outer: "var(--color-primary)", head: "var(--color-warning)",
   };
@@ -479,7 +483,7 @@ export default function UniformsPageClient() {
                 <div style={{ padding: "0.875rem" }}>
                   <div style={{ fontWeight: 600, fontSize: "0.875rem", marginBottom: "0.3rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</div>
                   <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-                    <span style={{ fontSize: "0.7rem", fontWeight: 600, padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", background: `${categoryColor[u.category] ?? "#999"}20`, color: categoryColor[u.category] ?? "#999", textTransform: "capitalize" }}>{u.category}</span>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 600, padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", background: `${categoryColor[u.category]}20`, color: categoryColor[u.category], textTransform: "capitalize" }}>{CATEGORY_LABELS[u.category]}</span>
                     {u.departments?.name && (
                       <span style={{ fontSize: "0.7rem", fontWeight: 500, padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", background: "var(--color-primary-light)", color: "var(--color-primary-dark)" }}>{u.departments.name}</span>
                     )}

@@ -1,10 +1,10 @@
 export type UserRole = "super_admin" | "branch_leader";
 export type InvitationStatus = "pending" | "accepted" | "expired";
-export type UniformCategory = "top" | "bottom" | "footwear" | "accessory" | "outer" | "head";
+export type UniformCategory = "top" | "bottom" | "footwear" | "accessory" | "outer" | "head" | "full_body";
 export type PreviewStatus = "none" | "processing" | "ready" | "failed";
 export type Gender = "male" | "female";
 export type BodyZone =
-  | "head" | "top" | "outer" | "bottom" | "footwear"
+  | "head" | "top" | "outer" | "bottom" | "footwear" | "full_body"
   | "accessory_neck" | "accessory_wrist_left" | "accessory_wrist_right"
   | "accessory_belt" | "accessory_chest_pin" | "accessory_bag";
 

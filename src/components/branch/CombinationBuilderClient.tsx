@@ -379,7 +379,7 @@ export default function CombinationBuilderClient() {
               <div className="fit-picker-empty">
                 <p style={{ marginBottom: "0.75rem" }}>
                   {activeZone
-                    ? `No ${ZONE_CATEGORIES[activeZone]} pieces in ${selectedDept?.name}.`
+                    ? `No ${ZONE_POSITIONS[activeZone].label.toLowerCase()} pieces in ${selectedDept?.name}.`
                     : `No pieces in ${selectedDept?.name ?? "this department"} yet.`}
                 </p>
                 <a
