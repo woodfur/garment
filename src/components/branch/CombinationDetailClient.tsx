@@ -22,9 +22,11 @@ type ZoneMap = Partial<Record<BodyZone, ZoneItem>>;
 type PreviewStatus = "none" | "processing" | "ready" | "failed";
 type ComboDetail = {
   id: string; name: string; description: string | null;
+  preview_url: string | null;
   preview_status: PreviewStatus;
   male_gif_url: string | null; female_gif_url: string | null;
   male_composite_url: string | null; female_composite_url: string | null;
+  canvas_data: { mode?: string; palette?: Array<{ hex: string; label: string | null }> } | null;
   departments: { name: string } | null;
 };
 
@@ -123,6 +125,8 @@ export default function CombinationDetailClient({ combinationId }: { combination
 
   const allZones = [...STANDARD_ZONES, ...ACCESSORY_ZONES];
   const genderGif = activeGender === "male" ? combo.male_gif_url : combo.female_gif_url;
+  const isPaletteLook = combo.canvas_data?.mode === "palette";
+  const paletteColors = combo.canvas_data?.palette ?? [];
   const activeZoneList = allZones
     .map((zone) => ({ zone, item: zones[activeGender][zone] }))
     .filter((z) => z.item);
@@ -151,7 +155,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
       <section style={{ marginBottom: "2.5rem" }}>
         <div className="dash-sec" style={{ padding: "0 0 1.1rem" }}>
           <div className="lt"><span className="num">01</span><h2>The <em>render</em></h2></div>
-          {combo.preview_status !== "processing" && (
+          {!isPaletteLook && combo.preview_status !== "processing" && (
             <button onClick={() => handleGenerate(combo.preview_status === "ready")} disabled={generating}
               className="btn-primary" style={{ padding: "0.5rem 1.1rem", fontSize: "0.8rem" }}>
               {generating ? <Loader2 size={13} className="animate-spin" /> :
@@ -161,7 +165,18 @@ export default function CombinationDetailClient({ combinationId }: { combination
           )}
         </div>
 
-        {combo.preview_status === "ready" && (combo.male_gif_url || combo.female_gif_url) ? (
+        {isPaletteLook && combo.preview_status === "ready" && combo.preview_url ? (
+          <div style={{ maxWidth: 720 }}>
+            <Image
+              src={combo.preview_url}
+              alt={combo.name}
+              width={1200}
+              height={1400}
+              style={{ width: "100%", height: "auto", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", background: "var(--color-bg-board)" }}
+              unoptimized
+            />
+          </div>
+        ) : combo.preview_status === "ready" && (combo.male_gif_url || combo.female_gif_url) ? (
           <div style={{ display: "grid", gridTemplateColumns: combo.male_gif_url && combo.female_gif_url ? "1fr 1fr" : "1fr", gap: "1.25rem", maxWidth: combo.male_gif_url && combo.female_gif_url ? "none" : 340 }}>
             {(["male", "female"] as Gender[]).map((g) => {
               const gif = g === "male" ? combo.male_gif_url : combo.female_gif_url;
@@ -199,7 +214,21 @@ export default function CombinationDetailClient({ combinationId }: { combination
           <div className="lt"><span className="num">02</span><h2>The <em>pieces</em></h2></div>
         </div>
 
-        {!genderHasAny("male") && !genderHasAny("female") ? (
+        {isPaletteLook ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.75rem" }}>
+            {paletteColors.map((color) => (
+              <div key={color.hex} className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <div style={{ height: 110, background: color.hex, display: "grid", placeItems: "center" }}>
+                  <span style={{ color: textOn(color.hex), fontSize: "0.72rem", fontWeight: 800, background: "rgba(0,0,0,0.12)", padding: "0.2rem 0.55rem", borderRadius: "var(--radius-full)" }}>{color.hex}</span>
+                </div>
+                <div style={{ padding: "0.75rem" }}>
+                  <div style={{ fontWeight: 700, fontSize: "0.85rem" }}>{color.label || color.hex}</div>
+                  <div style={{ color: "var(--color-text-faint)", fontSize: "0.75rem", marginTop: 2 }}>{color.hex}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !genderHasAny("male") && !genderHasAny("female") ? (
           <div className="card" style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
             No pieces recorded for this look. <Link href="/branch/combinations/new" style={{ color: "var(--color-primary-dark)", fontWeight: 600 }}>Build a new one →</Link>
           </div>

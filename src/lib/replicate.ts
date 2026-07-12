@@ -23,7 +23,8 @@ const MODELS = {
   // ':latest' tag only works with replicate.run(), not predictions.create().
   // Version 0513734a = latest as of 2025-03-25 (updated from old e3893af4 version).
   composite:   "cuuupid/idm-vton:0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985",
-  animation:   "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3d",
+  // stability-ai/stable-video-diffusion — predictions.create({ version }) needs the full version hash.
+  animation:   "3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
   characterGen: "black-forest-labs/flux-dev",
 } as const;
 
@@ -218,7 +219,7 @@ export async function generateVideoFromImage(
   };
 
   const prediction = await replicate.predictions.create({
-    model: MODELS.animation,
+    version: MODELS.animation,
     input: {
       input_image: compositeImageUrl,
       frames_per_second: 6,
@@ -279,6 +280,34 @@ export async function generateCharacterImage(gender: Gender): Promise<string> {
 
   const url = String(raw ?? "");
   if (!url) throw new Error("Character generation returned no output");
+  return url;
+}
+
+export async function generatePalettePersonImage(prompt: string): Promise<string> {
+  const output = await replicate.run(MODELS.characterGen as `${string}/${string}`, {
+    input: {
+      prompt,
+      aspect_ratio: "3:4",
+      num_outputs: 1,
+      num_inference_steps: 28,
+      guidance: 3.5,
+      output_format: "png",
+      go_fast: false,
+    },
+  });
+
+  const raw = Array.isArray(output) ? output[0] : output;
+
+  if (raw && typeof raw === "object" && "url" in raw && typeof raw.url === "function") {
+    return String(raw.url());
+  }
+
+  if (raw && typeof raw === "object") {
+    throw new Error("generatePalettePersonImage: unexpected non-string output");
+  }
+
+  const url = String(raw ?? "");
+  if (!url) throw new Error("Palette generation returned no output");
   return url;
 }
 
@@ -424,7 +453,7 @@ async function pollAndContinueColorBase(
 
     const admin = createAdminClient();
     const db = admin as any;
-    await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
+    await db.from("replicate_jobs").update({ status: "completed", current_image_url: outputUrl }).eq("prediction_id", predictionId);
 
     if (photoItems.length > 0) {
       // Chain photo garments on top of the generated colour base.
@@ -433,7 +462,7 @@ async function pollAndContinueColorBase(
       // All-colour look — the Flux output IS the composite. Animate it.
       const col = gender === "male" ? "male_composite_url" : "female_composite_url";
       await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-      void generateVideoFromImage(outputUrl, combinationId, gender);
+      await generateVideoFromImage(outputUrl, combinationId, gender);
     }
     return;
   }
@@ -478,7 +507,7 @@ async function pollAndContinueChain(
 
     const admin = createAdminClient();
     const db = admin as any;
-    await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
+    await db.from("replicate_jobs").update({ status: "completed", current_image_url: outputUrl }).eq("prediction_id", predictionId);
 
     const nextIndex = currentIndex + 1;
     if (nextIndex < allItems.length) {
@@ -491,7 +520,7 @@ async function pollAndContinueChain(
       // Chain complete — store composite, start animation
       const col = gender === "male" ? "male_composite_url" : "female_composite_url";
       await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-      void generateVideoFromImage(outputUrl, combinationId, gender);
+      await generateVideoFromImage(outputUrl, combinationId, gender);
     }
     return;
   }
@@ -536,7 +565,7 @@ async function pollAndFinaliseVideo(
     const admin = createAdminClient();
     const db = admin as any;
     const col = gender === "male" ? "male_gif_url" : "female_gif_url";
-    await db.from("replicate_jobs").update({ status: "done" }).eq("prediction_id", predictionId);
+    await db.from("replicate_jobs").update({ status: "completed" }).eq("prediction_id", predictionId);
     await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
     await checkAndMarkReady(combinationId);
     return;
@@ -594,7 +623,7 @@ async function markFailed(combinationId: string, predictionId: string, reason = 
     .eq("prediction_id", predictionId);
   // Check if ALL active jobs for this combination are failed
   const { data: jobs } = await db.from("replicate_jobs").select("status").eq("combination_id", combinationId);
-  const allFailed = (jobs as Array<{ status: string }> | null)?.every((j) => j.status === "failed" || j.status === "done");
+  const allFailed = (jobs as Array<{ status: string }> | null)?.every((j) => j.status === "failed" || j.status === "completed");
   if (allFailed) {
     await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
   }

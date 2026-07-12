@@ -19,14 +19,15 @@ export async function GET(
 
   const { data, error } = await db
     .from("combinations")
-    .select("id, branch_id, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url")
+    .select("id, branch_id, preview_url, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url")
     .eq("id", combinationId)
-    .single() as { data: { id: string; branch_id: string; preview_status: string; male_composite_url: string | null; female_composite_url: string | null; male_gif_url: string | null; female_gif_url: string | null } | null; error: { message: string } | null };
+    .single() as { data: { id: string; branch_id: string; preview_url: string | null; preview_status: string; male_composite_url: string | null; female_composite_url: string | null; male_gif_url: string | null; female_gif_url: string | null } | null; error: { message: string } | null };
 
   if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (data.branch_id !== auth.branchId) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({
+    preview_url:          data.preview_url,
     preview_status:       data.preview_status,
     male_composite_url:   data.male_composite_url,
     female_composite_url: data.female_composite_url,

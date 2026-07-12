@@ -19,7 +19,7 @@ type Uniform = {
 type PreviewStatus = "none" | "processing" | "ready" | "failed";
 type Combination = {
   id: string; name: string; description: string | null;
-  department_id: string; preview_url: string | null; created_at: string;
+  department_id: string; canvas_data: Record<string, unknown> | null; preview_url: string | null; created_at: string;
   departments: { name: string } | null;
   preview_status: PreviewStatus;
   male_gif_url: string | null;
@@ -393,8 +393,11 @@ export default function UniformsPageClient() {
               <button onClick={openUpload} className="btn-secondary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem" }}>
                 <Plus size={15} /> Add uniform
               </button>
-              <Link href="/branch/combinations/new" className="btn-primary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem", textDecoration: "none" }}>
-                <Sparkles size={15} /> Compose look
+              <Link href="/branch/combinations/palette/new" className="btn-primary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem", textDecoration: "none" }}>
+                <Sparkles size={15} /> Compose palette
+              </Link>
+              <Link href="/branch/combinations/new" className="btn-secondary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem", textDecoration: "none" }}>
+                Advanced builder <ChevronRight size={14} />
               </Link>
             </>
           )}
@@ -429,8 +432,8 @@ export default function UniformsPageClient() {
             <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", maxWidth: 360, margin: "0 auto 1.5rem" }}>
               Compose your first look from this wardrobe&rsquo;s pieces, then let the studio render it.
             </p>
-            <Link href="/branch/combinations/new" className="btn-primary" style={{ padding: "0.7rem 1.5rem", textDecoration: "none" }}>
-              <Sparkles size={16} /> Compose a look
+            <Link href="/branch/combinations/palette/new" className="btn-primary" style={{ padding: "0.7rem 1.5rem", textDecoration: "none" }}>
+              <Sparkles size={16} /> Compose palette
             </Link>
           </div>
         ) : (
