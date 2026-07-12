@@ -22,10 +22,19 @@ type Combination = {
   department_id: string; canvas_data: Record<string, unknown> | null; preview_url: string | null; created_at: string;
   departments: { name: string } | null;
   preview_status: PreviewStatus;
+  male_composite_url: string | null;
+  female_composite_url: string | null;
   male_gif_url: string | null;
   female_gif_url: string | null;
 };
-type PreviewStatusResponse = { preview_status: PreviewStatus; male_gif_url: string | null; female_gif_url: string | null };
+type PreviewStatusResponse = {
+  preview_url: string | null;
+  preview_status: PreviewStatus;
+  male_composite_url: string | null;
+  female_composite_url: string | null;
+  male_gif_url: string | null;
+  female_gif_url: string | null;
+};
 
 const CATEGORIES: { value: UniformCategory; label: string }[] = [
   { value: "top",       label: "Top" },
@@ -113,12 +122,23 @@ function LookPlate({ combo, idx, onDelete, onPreviewUpdate }: {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ gender: "both", force }),
     });
-    if (res.ok) { onPreviewUpdate(combo.id, { preview_status: "processing", male_gif_url: null, female_gif_url: null }); startPolling(); }
+    if (res.ok) {
+      onPreviewUpdate(combo.id, {
+        preview_url: combo.preview_url,
+        preview_status: "processing",
+        male_composite_url: null,
+        female_composite_url: null,
+        male_gif_url: null,
+        female_gif_url: null,
+      });
+      startPolling();
+    }
     setBusy(false);
   };
 
+  const image = combo.preview_url ?? combo.male_composite_url ?? combo.female_composite_url;
   const gif = combo.male_gif_url ?? combo.female_gif_url;
-  const ready = combo.preview_status === "ready" && gif;
+  const ready = combo.preview_status === "ready" && (image || gif);
   const roman = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"][idx] ?? String(idx + 1);
 
   return (
@@ -138,7 +158,10 @@ function LookPlate({ combo, idx, onDelete, onPreviewUpdate }: {
         <button onClick={handleDelete} disabled={busy} title="Delete"><Trash2 size={13} /></button>
       </div>
 
-      {ready ? (
+      {ready && image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="pl-media" src={image} alt={combo.name} />
+      ) : ready && gif ? (
         <video className="pl-media" src={gif!} autoPlay loop muted playsInline />
       ) : combo.preview_url ? (
         // eslint-disable-next-line @next/next/no-img-element

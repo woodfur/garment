@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 
 // GET /api/branch/combinations/[combinationId]/preview-status
-// Lightweight polling endpoint — returns only status + gif URLs
+// Lightweight polling endpoint — returns status + generated preview URLs
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ combinationId: string }> }

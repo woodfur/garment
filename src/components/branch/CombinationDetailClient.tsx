@@ -124,9 +124,10 @@ export default function CombinationDetailClient({ combinationId }: { combination
   );
 
   const allZones = [...STANDARD_ZONES, ...ACCESSORY_ZONES];
-  const genderGif = activeGender === "male" ? combo.male_gif_url : combo.female_gif_url;
   const isPaletteLook = combo.canvas_data?.mode === "palette";
   const paletteColors = combo.canvas_data?.palette ?? [];
+  const hasCompositePreview = !!(combo.male_composite_url || combo.female_composite_url);
+  const hasVideoPreview = !!(combo.male_gif_url || combo.female_gif_url);
   const activeZoneList = allZones
     .map((zone) => ({ zone, item: zones[activeGender][zone] }))
     .filter((z) => z.item);
@@ -176,7 +177,21 @@ export default function CombinationDetailClient({ combinationId }: { combination
               unoptimized
             />
           </div>
-        ) : combo.preview_status === "ready" && (combo.male_gif_url || combo.female_gif_url) ? (
+        ) : combo.preview_status === "ready" && hasCompositePreview ? (
+          <div style={{ display: "grid", gridTemplateColumns: combo.male_composite_url && combo.female_composite_url ? "1fr 1fr" : "1fr", gap: "1.25rem", maxWidth: combo.male_composite_url && combo.female_composite_url ? "none" : 420 }}>
+            {(["male", "female"] as Gender[]).map((g) => {
+              const image = g === "male" ? combo.male_composite_url : combo.female_composite_url;
+              if (!image) return null;
+              return (
+                <div key={g}>
+                  <div className="rule-label" style={{ marginBottom: "0.6rem" }}><span>{g === "male" ? "Male" : "Female"}</span><span className="rule" /></div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={image} alt={`${combo.name} ${g} preview`} style={{ width: "100%", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", background: "var(--color-bg-board)" }} />
+                </div>
+              );
+            })}
+          </div>
+        ) : combo.preview_status === "ready" && hasVideoPreview ? (
           <div style={{ display: "grid", gridTemplateColumns: combo.male_gif_url && combo.female_gif_url ? "1fr 1fr" : "1fr", gap: "1.25rem", maxWidth: combo.male_gif_url && combo.female_gif_url ? "none" : 340 }}>
             {(["male", "female"] as Gender[]).map((g) => {
               const gif = g === "male" ? combo.male_gif_url : combo.female_gif_url;

@@ -14,6 +14,8 @@ interface Combination {
   name: string;
   department_id: string;
   preview_status: "none" | "processing" | "ready" | "failed";
+  male_composite_url: string | null;
+  female_composite_url: string | null;
   male_gif_url: string | null;
   female_gif_url: string | null;
 }
@@ -1090,28 +1092,42 @@ export default function SchedulePageClient() {
                       {/* Previews */}
                       {a.combination?.preview_status === "ready" ? (
                         <div className="spc-assignment-previews">
-                          <div className="spc-preview-thumb">
-                            <span className="spc-preview-label">M</span>
-                            <video
-                              src={a.combination.male_gif_url ?? undefined}
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
-                              className="spc-preview-video"
-                            />
-                          </div>
-                          <div className="spc-preview-thumb">
-                            <span className="spc-preview-label">F</span>
-                            <video
-                              src={a.combination.female_gif_url ?? undefined}
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
-                              className="spc-preview-video"
-                            />
-                          </div>
+                          {(a.combination.male_composite_url || a.combination.male_gif_url) && (
+                            <div className="spc-preview-thumb">
+                              <span className="spc-preview-label">M</span>
+                              {a.combination.male_composite_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={a.combination.male_composite_url} alt={`${a.combination.name} male preview`} className="spc-preview-video" />
+                              ) : (
+                                <video
+                                  src={a.combination.male_gif_url ?? undefined}
+                                  autoPlay
+                                  loop
+                                  muted
+                                  playsInline
+                                  className="spc-preview-video"
+                                />
+                              )}
+                            </div>
+                          )}
+                          {(a.combination.female_composite_url || a.combination.female_gif_url) && (
+                            <div className="spc-preview-thumb">
+                              <span className="spc-preview-label">F</span>
+                              {a.combination.female_composite_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={a.combination.female_composite_url} alt={`${a.combination.name} female preview`} className="spc-preview-video" />
+                              ) : (
+                                <video
+                                  src={a.combination.female_gif_url ?? undefined}
+                                  autoPlay
+                                  loop
+                                  muted
+                                  playsInline
+                                  className="spc-preview-video"
+                                />
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <PreviewBadge

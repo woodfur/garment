@@ -45,7 +45,7 @@ export async function POST(
       { onConflict: "schedule_id,department_id" }
     )
     .select(
-      "*, department:departments(id, name), combination:combinations(id, name, preview_status, male_gif_url, female_gif_url)"
+      "*, department:departments(id, name), combination:combinations(id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url)"
     )
     .single();
 

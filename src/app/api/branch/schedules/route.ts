@@ -17,7 +17,7 @@ export async function GET(_req: Request) {
       assignments:schedule_assignments(
         *,
         department:departments(id, name),
-        combination:combinations(id, name, preview_status, male_gif_url, female_gif_url, department_id)
+        combination:combinations(id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, department_id)
       )
     `
     )

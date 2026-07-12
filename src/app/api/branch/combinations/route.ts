@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     let query = (admin as any)
       .from("combinations")
-      .select("id, name, description, department_id, canvas_data, preview_url, preview_status, male_gif_url, female_gif_url, created_by, created_at, departments(name)")
+      .select("id, name, description, department_id, canvas_data, preview_url, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, created_by, created_at, departments(name)")
       .eq("branch_id", auth.branchId)
       .order("created_at", { ascending: false });
 

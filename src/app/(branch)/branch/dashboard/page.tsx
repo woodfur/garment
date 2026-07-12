@@ -20,6 +20,8 @@ type LookRow = {
   id: string;
   name: string;
   preview_status: "none" | "processing" | "ready" | "failed";
+  male_composite_url: string | null;
+  female_composite_url: string | null;
   male_gif_url: string | null;
   female_gif_url: string | null;
   departments: { name: string } | null;
@@ -73,7 +75,7 @@ export default async function BranchDashboardPage() {
       const adminClient = createAdminClient();
       const res = await (adminClient as any)
         .from("combinations")
-        .select("id, name, preview_status, male_gif_url, female_gif_url, departments(name)")
+        .select("id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, departments(name)")
         .eq("branch_id", branchId)
         .order("created_at", { ascending: false })
         .limit(6);
@@ -141,13 +143,17 @@ export default async function BranchDashboardPage() {
       ) : (
         <section className="dash-gallery">
           {recentLooks.map((look, i) => {
+            const image = look.male_composite_url ?? look.female_composite_url;
             const gif = look.male_gif_url ?? look.female_gif_url;
-            const ready = look.preview_status === "ready" && gif;
+            const ready = look.preview_status === "ready" && (image || gif);
             return (
               <Link key={look.id} href={`/branch/combinations/${look.id}`} className={`plate-look ${galleryClasses[i] ?? "g-md"}`}>
                 <span className="no">{toRoman(i + 1)}</span>
                 {ready && <span className="badge">Ready</span>}
-                {ready ? (
+                {ready && image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="pl-media" src={image} alt={look.name} />
+                ) : ready && gif ? (
                   <video className="pl-media" src={gif!} autoPlay loop muted playsInline />
                 ) : (
                   <div className={`silh${i % 2 === 0 ? " p" : ""}`} />

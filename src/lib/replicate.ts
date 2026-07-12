@@ -54,6 +54,39 @@ export interface CompositeJobMeta {
   job_type: string;
 }
 
+export async function persistCompositeImage(
+  sourceUrl: string,
+  combinationId: string,
+  gender: Gender
+): Promise<string> {
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download ${gender} composite image`);
+  }
+
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  const extension = contentType.includes("png")
+    ? "png"
+    : contentType.includes("webp")
+      ? "webp"
+      : "jpg";
+  const image = Buffer.from(await response.arrayBuffer());
+  const path = `composites/${combinationId}/${gender}-${Date.now()}.${extension}`;
+
+  const admin = createAdminClient();
+  const { error } = await admin.storage
+    .from("combination-previews")
+    .upload(path, image, { contentType, upsert: true });
+
+  if (error) throw error;
+
+  const { data: { publicUrl } } = admin.storage
+    .from("combination-previews")
+    .getPublicUrl(path);
+
+  return publicUrl;
+}
+
 // ---------------------------------------------------------------------------
 // Internal: build webhook URL
 // ---------------------------------------------------------------------------
@@ -459,10 +492,11 @@ async function pollAndContinueColorBase(
       // Chain photo garments on top of the generated colour base.
       void startCompositeChain(combinationId, gender, photoItems, outputUrl);
     } else {
-      // All-colour look — the Flux output IS the composite. Animate it.
+      // All-colour look — the Flux output IS the composite.
       const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-      await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-      await generateVideoFromImage(outputUrl, combinationId, gender);
+      const permanentUrl = await persistCompositeImage(outputUrl, combinationId, gender);
+      await db.from("combinations").update({ [col]: permanentUrl }).eq("id", combinationId);
+      await checkAndMarkReady(combinationId);
     }
     return;
   }
@@ -517,10 +551,11 @@ async function pollAndContinueChain(
       const nextId = await compositeNextGarment(outputUrl, allItems[nextIndex], combinationId, gender, nextIndex, allItems.length);
       void pollAndContinueChain(nextId, combinationId, gender, allItems, nextIndex, outputUrl);
     } else {
-      // Chain complete — store composite, start animation
+      // Chain complete — store composite. Animation is intentionally disabled for now.
       const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-      await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-      await generateVideoFromImage(outputUrl, combinationId, gender);
+      const permanentUrl = await persistCompositeImage(outputUrl, combinationId, gender);
+      await db.from("combinations").update({ [col]: permanentUrl }).eq("id", combinationId);
+      await checkAndMarkReady(combinationId);
     }
     return;
   }
@@ -581,10 +616,10 @@ async function pollAndFinaliseVideo(
 
 /**
  * GAP-11 FIX: Checks if the combination preview is ready based on which
- * genders have zone items assigned. Only requires GIFs for genders that
- * actually have items — a male-only combination marks ready after male GIF.
+ * genders have zone items assigned. Only requires composite images for genders
+ * that actually have items — animation is currently disabled.
  */
-async function checkAndMarkReady(combinationId: string) {
+export async function checkAndMarkReady(combinationId: string) {
   const admin = createAdminClient();
   const db = admin as any;
 
@@ -603,12 +638,12 @@ async function checkAndMarkReady(combinationId: string) {
 
   const { data: combo } = await db
     .from("combinations")
-    .select("male_gif_url, female_gif_url")
+    .select("male_composite_url, female_composite_url")
     .eq("id", combinationId)
-    .single() as { data: { male_gif_url: string | null; female_gif_url: string | null } | null };
+    .single() as { data: { male_composite_url: string | null; female_composite_url: string | null } | null };
 
-  const maleReady   = !needsMale   || !!combo?.male_gif_url;
-  const femaleReady = !needsFemale || !!combo?.female_gif_url;
+  const maleReady   = !needsMale   || !!combo?.male_composite_url;
+  const femaleReady = !needsFemale || !!combo?.female_composite_url;
 
   if (maleReady && femaleReady) {
     await db.from("combinations").update({ preview_status: "ready" }).eq("id", combinationId);
