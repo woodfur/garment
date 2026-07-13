@@ -3,8 +3,23 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 import { startCompositeChain, startColorBaseGeneration, type ZoneItem, type ColorZoneItem } from "@/lib/replicate";
 import { ZONE_LAYER_ORDER } from "@/types/zones";
-import { MANNEQUIN_MALE_URL, MANNEQUIN_FEMALE_URL } from "@/lib/mannequin-config";
+import { MANNEQUIN_MALE_URL, MANNEQUIN_FEMALE_URL, MANNEQUIN_FEMALE_TWO_PIECE_URL } from "@/lib/mannequin-config";
 import type { Gender } from "@/types/database";
+
+type CombinationZoneItem = {
+  gender: Gender;
+  zone: string;
+  uniform_id: string;
+  uniform: { id: string; name: string; image_url: string | null; bg_removed: boolean; category: string; color: string | null; color_label: string | null } | null;
+};
+
+function baseCharacterUrlFor(gender: Gender, items: CombinationZoneItem[]): string {
+  if (gender === "male") return MANNEQUIN_MALE_URL;
+
+  const zones = new Set(items.map((item) => item.zone));
+  const isTwoPiece = zones.has("top") && zones.has("bottom") && !zones.has("full_body");
+  return isTwoPiece ? MANNEQUIN_FEMALE_TWO_PIECE_URL : MANNEQUIN_FEMALE_URL;
+}
 
 // POST /api/branch/combinations/[combinationId]/generate-preview
 // Body: { gender?: 'male' | 'female' | 'both', force?: boolean }
@@ -56,12 +71,7 @@ export async function POST(
 
   if (zoneErr) return NextResponse.json({ error: zoneErr.message }, { status: 500 });
 
-  const typedZoneItems = (zoneItems ?? []) as Array<{
-    gender: Gender;
-    zone: string;
-    uniform_id: string;
-    uniform: { id: string; name: string; image_url: string | null; bg_removed: boolean; category: string; color: string | null; color_label: string | null } | null;
-  }>;
+  const typedZoneItems = (zoneItems ?? []) as CombinationZoneItem[];
 
   // GAP-1 FIX: When 'both' is requested, only process genders that have zone items.
   // Genders with no assignments are silently skipped — not treated as an error.
@@ -99,7 +109,7 @@ export async function POST(
     const hasColor = items.some((i) => i.uniform?.color && !i.uniform?.image_url);
     return !hasColor;
   });
-  if (needsMannequin && (!MANNEQUIN_MALE_URL || !MANNEQUIN_FEMALE_URL)) {
+  if (needsMannequin && (!MANNEQUIN_MALE_URL || !MANNEQUIN_FEMALE_URL || !MANNEQUIN_FEMALE_TWO_PIECE_URL)) {
     return NextResponse.json({ error: "Mannequin characters not yet configured. Contact administrator." }, { status: 503 });
   }
 
@@ -154,7 +164,7 @@ export async function POST(
     }
 
     // All-photo look — composite onto the static mannequin.
-    const baseUrl = gender === "male" ? MANNEQUIN_MALE_URL : MANNEQUIN_FEMALE_URL;
+    const baseUrl = baseCharacterUrlFor(gender, genderItems);
     const estimatedSeconds = photoOrdered.length * 20 + 45;
     return startCompositeChain(combinationId, gender, photoOrdered, baseUrl).then((r) => ({
       gender, predictionId: r.predictionId, estimatedSeconds,

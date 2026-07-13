@@ -54,13 +54,15 @@ export function buildPalettePrompt({
 }): string {
   const colors = palette.map((color) => color.label ?? color.hex).join(", ");
   return [
-    "Realistic full body fashion photograph of one modestly dressed young adult African person",
+    "Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of one modestly dressed adult Black African church uniform model",
     `wearing a coordinated church service uniform outfit for the ${departmentName} department`,
     `using this color palette: ${colors}`,
-    "let the outfit naturally distribute the colors across shirt, trousers, skirt, dress, shoes, belt, or accessories",
-    "front-facing neutral standing pose, head to toe visible, professional studio lighting",
-    "clean light background, realistic fabric, polished but not luxury editorial styling",
-    "no text, no color cards, no logos, no watermark",
+    "let the outfit naturally distribute the colors across a modest blouse or collared shirt, tailored trousers, a knee-to-mid-calf A-line skirt, a knee-to-mid-calf dress, shoes, belt, or accessories",
+    "front-facing pose with hands gently clasped or relaxed at the front, head to toe visible",
+    "seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet",
+    "natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and shoes, polished but respectful church styling",
+    "covered chest, clearly separate blouse plus knee-to-mid-calf skirt when a two-piece female outfit is used, closed-toe dress shoes, no low neckline, no off-shoulder top, no strapless top, no shorts, no mini skirt, no tight bodycon fit, no bare shoulders",
+    "no blur, no shallow depth of field, no cropped feet, no text, no color cards, no logos, no watermark",
   ].join(", ");
 }
 

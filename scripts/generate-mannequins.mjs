@@ -40,8 +40,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const replicate = new Replicate({ auth: REPLICATE_API_KEY });
 
 const PROMPTS = {
-  male: "Full body portrait of a young adult African man, neutral standing pose, arms slightly away from body, plain white background, high quality fashion photography, front view, full length head to toe, minimal plain white t-shirt and grey trousers, professional studio lighting",
-  female: "Full body portrait of a young adult African woman, neutral standing pose, arms slightly away from body, plain white background, high quality fashion photography, front view, full length head to toe, minimal plain white blouse and grey trousers, professional studio lighting",
+  male: "Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of an adult Black African man church uniform model standing upright and facing directly toward the camera, warm friendly smile, polished grooming, short neat hair, clean-shaven or neatly trimmed beard, wearing a plain light neutral grey modest church-service base outfit as a clean virtual try-on base, short-sleeve collared shirt, tailored trousers, simple black belt, glossy black closed-toe dress shoes, hands gently clasped together in front of his waist, entire body visible from top of head to bottom of shoes with generous white space, seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet, natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, shirt, trousers and shoes, realistic proportions, centered symmetrical composition, portrait orientation, no blur, no shallow depth of field, no tight fit, no cropped feet, no text, no logo, no watermark",
+  female: "Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of an adult Black African woman church uniform model standing upright and facing directly toward the camera, warm friendly smile, natural polished makeup, neatly shaped eyebrows, smooth dark hair styled in a sleek side part gathered into a low bun, small pearl stud earrings, wearing a plain light neutral grey modest knee-to-mid-calf A-line uniform dress as a clean virtual try-on base, short sleeves, tailored lapels or modest square neckline, fitted waist with simple belt, softly flared skirt, covered chest, simple glossy black closed-toe court shoes with a low heel, hands gently clasped together in front of her waist, entire body visible from top of head to bottom of shoes with generous white space, seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet, natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, dress and shoes, realistic proportions, centered symmetrical composition, portrait orientation, no blur, no shallow depth of field, no low neckline, no mini skirt, no tight bodycon fit, no bare shoulders, no cropped feet, no text, no logo, no watermark",
 };
 
 /** Read a ReadableStream (FileOutput) into a Buffer */
@@ -59,12 +59,12 @@ async function generateAndUpload(gender) {
   const output = await replicate.run(CHARACTER_GEN_MODEL, {
     input: {
       prompt: PROMPTS[gender],
-      width: 768,
-      height: 1024,
+      aspect_ratio: "3:4",
       num_outputs: 1,
-      go_fast: false,
+      num_inference_steps: 35,
       guidance: 3.5,
-      num_inference_steps: 28,
+      output_format: "png",
+      go_fast: false,
     },
   });
 
