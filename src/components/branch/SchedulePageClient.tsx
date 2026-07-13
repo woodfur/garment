@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import PublicScheduleShareButton from "@/components/branch/PublicScheduleShareButton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -13,7 +14,10 @@ interface Combination {
   id: string;
   name: string;
   department_id: string;
+  gender: "male" | "female" | null;
   preview_status: "none" | "processing" | "ready" | "failed";
+  male_composite_url: string | null;
+  female_composite_url: string | null;
   male_gif_url: string | null;
   female_gif_url: string | null;
 }
@@ -21,6 +25,7 @@ interface Combination {
 interface Assignment {
   id: string;
   department_id: string;
+  gender: "male" | "female" | null;
   combination_id: string;
   department: Department | null;
   combination: Combination | null;
@@ -63,6 +68,7 @@ function AssignForm({
   const [departments, setDepartments] = useState<Department[]>([]);
   const [combinations, setCombinations] = useState<Combination[]>([]);
   const [selectedDeptId, setSelectedDeptId] = useState("");
+  const [selectedGender, setSelectedGender] = useState<"male" | "female" | "">("");
   const [selectedComboId, setSelectedComboId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +89,7 @@ function AssignForm({
 
   // Load combinations when department changes
   useEffect(() => {
-    if (!selectedDeptId) {
+    if (!selectedDeptId || !selectedGender) {
       setCombinations([]);
       setSelectedComboId("");
       return;
@@ -93,19 +99,18 @@ function AssignForm({
     fetch(`/api/branch/combinations?department_id=${selectedDeptId}`)
       .then((r) => r.json())
       .then((data: Combination[]) => {
-        // Filter to matching department
         const filtered = Array.isArray(data)
-          ? data.filter((c) => c.department_id === selectedDeptId)
+          ? data.filter((c) => c.department_id === selectedDeptId && (c.gender === selectedGender || c.gender === null))
           : [];
         setCombinations(filtered);
       })
       .catch(() => setError("Failed to load combinations"))
       .finally(() => setLoadingCombos(false));
-  }, [selectedDeptId]);
+  }, [selectedDeptId, selectedGender]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedDeptId || !selectedComboId) return;
+    if (!selectedDeptId || !selectedGender || !selectedComboId) return;
     setLoading(true);
     setError(null);
     try {
@@ -117,6 +122,7 @@ function AssignForm({
           body: JSON.stringify({
             department_id: selectedDeptId,
             combination_id: selectedComboId,
+            gender: selectedGender,
           }),
         }
       );
@@ -150,7 +156,11 @@ function AssignForm({
             id="dept-select"
             className="spc-select"
             value={selectedDeptId}
-            onChange={(e) => setSelectedDeptId(e.target.value)}
+            onChange={(e) => {
+              setSelectedDeptId(e.target.value);
+              setSelectedGender("");
+              setSelectedComboId("");
+            }}
             required
           >
             <option value="">Select department…</option>
@@ -161,6 +171,29 @@ function AssignForm({
             ))}
           </select>
         )}
+      </div>
+
+      <div className="spc-form-row">
+        <label className="spc-label" htmlFor="gender-select">
+          Gender
+        </label>
+        <select
+          id="gender-select"
+          className="spc-select"
+          value={selectedGender}
+          onChange={(e) => {
+            setSelectedGender(e.target.value as "male" | "female" | "");
+            setSelectedComboId("");
+          }}
+          required
+          disabled={!selectedDeptId}
+        >
+          <option value="">
+            {selectedDeptId ? "Select gender…" : "Select a department first"}
+          </option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
       </div>
 
       <div className="spc-form-row">
@@ -176,18 +209,20 @@ function AssignForm({
             value={selectedComboId}
             onChange={(e) => setSelectedComboId(e.target.value)}
             required
-            disabled={!selectedDeptId}
+            disabled={!selectedDeptId || !selectedGender}
           >
             <option value="">
-              {selectedDeptId
-                ? combinations.length === 0
-                  ? "No combinations for this department"
-                  : "Select combination…"
-                : "Select a department first"}
+              {!selectedDeptId
+                ? "Select a department first"
+                : !selectedGender
+                  ? "Select gender first"
+                  : combinations.length === 0
+                    ? "No combinations for this department and gender"
+                    : "Select combination…"}
             </option>
             {combinations.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.gender ? `${c.name} (${c.gender})` : `${c.name} (legacy, assign as ${selectedGender})`}
               </option>
             ))}
           </select>
@@ -206,7 +241,7 @@ function AssignForm({
         <button
           type="submit"
           className="spc-btn spc-btn-primary"
-          disabled={loading || !selectedDeptId || !selectedComboId}
+          disabled={loading || !selectedDeptId || !selectedGender || !selectedComboId}
         >
           {loading ? "Assigning…" : "Assign Outfit"}
         </button>
@@ -228,11 +263,20 @@ function PreviewBadge({ status }: { status: string }) {
   return <span className={`spc-badge ${cls}`}>{label}</span>;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+function getAssignmentPreview(assignment: Assignment): { url: string; gender: "male" | "female"; isVideo: boolean } | null {
+  const combo = assignment.combination;
+  if (!combo || !assignment.gender) return null;
+  if (assignment.gender === "male") {
+    if (combo.male_composite_url) return { url: combo.male_composite_url, gender: "male", isVideo: false };
+    if (combo.male_gif_url) return { url: combo.male_gif_url, gender: "male", isVideo: true };
+    return null;
+  }
+  if (combo.female_composite_url) return { url: combo.female_composite_url, gender: "female", isVideo: false };
+  if (combo.female_gif_url) return { url: combo.female_gif_url, gender: "female", isVideo: true };
+  return null;
+}
 
-// Regular weekly services — Wednesday + Sunday — are pre-filled automatically.
-// "Add service" is reserved for special / one-off services.
-const REGULAR_WEEKS_AHEAD = 5;
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 /** Local "YYYY-MM-DD" for a Date (matches how service_date is stored/compared). */
 function localDateStr(d: Date): string {
@@ -243,13 +287,12 @@ function nextRegularServices(): { date: string; title: string }[] {
   const out: { date: string; title: string }[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < REGULAR_WEEKS_AHEAD * 7; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
+  const end = new Date(today.getFullYear(), 8, 30);
+  if (today > end) return out;
+  for (const d = new Date(today); d <= end; d.setDate(d.getDate() + 1)) {
     const day = d.getDay(); // 0 = Sunday, 3 = Wednesday
     if (day === 0 || day === 3) {
-      const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      out.push({ date, title: day === 0 ? "Sunday Service" : "Wednesday Service" });
+      out.push({ date: localDateStr(d), title: day === 0 ? "Sunday Service" : "Wednesday Service" });
     }
   }
   return out;
@@ -459,6 +502,7 @@ export default function SchedulePageClient() {
   async function handleRemoveAssignment(
     scheduleId: string,
     departmentId: string,
+    gender: string | undefined,
     assignmentId: string
   ) {
     try {
@@ -467,7 +511,7 @@ export default function SchedulePageClient() {
         {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ department_id: departmentId }),
+          body: JSON.stringify({ department_id: departmentId, gender }),
         }
       );
       if (res.ok) {
@@ -498,7 +542,7 @@ export default function SchedulePageClient() {
       prev.map((s) => {
         if (s.id !== scheduleId) return s;
         const others = s.assignments.filter(
-          (a) => a.department_id !== assignment.department_id
+          (a) => a.department_id !== assignment.department_id || a.gender !== assignment.gender
         );
         return { ...s, assignments: [...others, assignment] };
       })
@@ -534,9 +578,9 @@ export default function SchedulePageClient() {
         });
       } else {
         g.ids.push(s.id);
-        // Dedupe by department — first row wins if the same dept appears twice.
+        // Dedupe by department + gender — first row wins if a legacy duplicate exists.
         for (const a of tagged) {
-          if (!g.assignments.some((x) => x.department_id === a.department_id)) {
+          if (!g.assignments.some((x) => x.department_id === a.department_id && x.gender === a.gender)) {
             g.assignments.push(a);
           }
         }
@@ -658,6 +702,7 @@ export default function SchedulePageClient() {
           display: inline-flex;
           align-items: center;
           gap: 6px;
+          text-decoration: none;
         }
         .spc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .spc-btn-primary {
@@ -820,6 +865,14 @@ export default function SchedulePageClient() {
           border: 1.5px solid var(--color-border);
           background: var(--color-bg-elevated);
         }
+        .spc-preview-download {
+          font-size: 0.68rem;
+          font-weight: 700;
+          color: var(--color-primary-dark);
+          text-decoration: none;
+          border-bottom: 1px solid currentColor;
+          line-height: 1;
+        }
 
         /* ── Status badge ── */
         .spc-badge {
@@ -924,6 +977,9 @@ export default function SchedulePageClient() {
         <p className="spc-page-subtitle">
           Wednesday &amp; Sunday services appear automatically. Assign a look to each department.
         </p>
+        <div style={{ marginTop: "1rem" }}>
+          <PublicScheduleShareButton className="spc-btn spc-btn-primary" />
+        </div>
       </div>
 
       {/* Create a special / one-off service */}
@@ -1057,6 +1113,12 @@ export default function SchedulePageClient() {
                   )}
                 </div>
                 <div className="spc-schedule-actions">
+                  <a
+                    className="spc-btn spc-btn-ghost spc-btn-sm"
+                    href={`/api/branch/schedules/${schedule.id}/package`}
+                  >
+                    Download package
+                  </a>
                   <button
                     className="spc-btn spc-btn-danger"
                     onClick={() => handleDeleteGroup(schedule.ids)}
@@ -1076,7 +1138,9 @@ export default function SchedulePageClient() {
                   </p>
                 )}
 
-                {schedule.assignments.map((a) => (
+                {schedule.assignments.map((a) => {
+                  const preview = getAssignmentPreview(a);
+                  return (
                   <div key={a.id} className="spc-assignment-row">
                     <div className="spc-assignment-dept">
                       {a.department?.name ?? "—"}
@@ -1085,32 +1149,37 @@ export default function SchedulePageClient() {
                       <div className="spc-assignment-combo-name">
                         {a.combination?.name ?? "—"}
                       </div>
+                      {a.gender && (
+                        <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", textTransform: "capitalize" }}>
+                          {a.gender}
+                        </div>
+                      )}
                     </div>
                     <div className="spc-assignment-right">
-                      {/* Previews */}
-                      {a.combination?.preview_status === "ready" ? (
+                      {/* Preview */}
+                      {a.combination?.preview_status === "ready" && preview ? (
                         <div className="spc-assignment-previews">
                           <div className="spc-preview-thumb">
-                            <span className="spc-preview-label">M</span>
-                            <video
-                              src={a.combination.male_gif_url ?? undefined}
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
-                              className="spc-preview-video"
-                            />
-                          </div>
-                          <div className="spc-preview-thumb">
-                            <span className="spc-preview-label">F</span>
-                            <video
-                              src={a.combination.female_gif_url ?? undefined}
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
-                              className="spc-preview-video"
-                            />
+                            <span className="spc-preview-label">{preview.gender === "male" ? "M" : "F"}</span>
+                            {preview.isVideo ? (
+                              <video
+                                src={preview.url}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="spc-preview-video"
+                              />
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={preview.url} alt={`${a.combination.name} ${preview.gender} preview`} className="spc-preview-video" />
+                            )}
+                            <a
+                              href={`/api/branch/combinations/${a.combination.id}/download?gender=${preview.gender}`}
+                              className="spc-preview-download"
+                            >
+                              Download
+                            </a>
                           </div>
                         </div>
                       ) : (
@@ -1124,6 +1193,7 @@ export default function SchedulePageClient() {
                           handleRemoveAssignment(
                             a._scheduleId,
                             a.department_id,
+                            a.gender ?? undefined,
                             a.id
                           )
                         }
@@ -1133,7 +1203,8 @@ export default function SchedulePageClient() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* Inline assign form */}
                 {isAssigning ? (

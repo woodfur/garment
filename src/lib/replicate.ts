@@ -23,7 +23,8 @@ const MODELS = {
   // ':latest' tag only works with replicate.run(), not predictions.create().
   // Version 0513734a = latest as of 2025-03-25 (updated from old e3893af4 version).
   composite:   "cuuupid/idm-vton:0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985",
-  animation:   "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3d",
+  // stability-ai/stable-video-diffusion — predictions.create({ version }) needs the full version hash.
+  animation:   "3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
   characterGen: "black-forest-labs/flux-dev",
 } as const;
 
@@ -53,6 +54,39 @@ export interface CompositeJobMeta {
   job_type: string;
 }
 
+export async function persistCompositeImage(
+  sourceUrl: string,
+  combinationId: string,
+  gender: Gender
+): Promise<string> {
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download ${gender} composite image`);
+  }
+
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  const extension = contentType.includes("png")
+    ? "png"
+    : contentType.includes("webp")
+      ? "webp"
+      : "jpg";
+  const image = Buffer.from(await response.arrayBuffer());
+  const path = `composites/${combinationId}/${gender}-${Date.now()}.${extension}`;
+
+  const admin = createAdminClient();
+  const { error } = await admin.storage
+    .from("combination-previews")
+    .upload(path, image, { contentType, upsert: true });
+
+  if (error) throw error;
+
+  const { data: { publicUrl } } = admin.storage
+    .from("combination-previews")
+    .getPublicUrl(path);
+
+  return publicUrl;
+}
+
 // ---------------------------------------------------------------------------
 // Internal: build webhook URL
 // ---------------------------------------------------------------------------
@@ -76,6 +110,55 @@ function zoneToCategory(zone: string): "upper_body" | "lower_body" | "dresses" {
   if (zone === "full_body") return "dresses";
   // top, outer, head, accessory_* → upper_body
   return "upper_body";
+}
+
+function buildGarmentDescription(gender: Gender, item: ZoneItem): string {
+  const name = item.uniform_name;
+
+  if (gender === "female") {
+    if (item.zone === "top") {
+      return `${name}, interpreted as a modest female church uniform blouse or top with covered shoulders, covered chest, high neckline, respectful fit, not off-shoulder, not strapless, not cropped`;
+    }
+    if (item.zone === "bottom") {
+      return `${name}, interpreted as a modest female church uniform knee-to-mid-calf A-line skirt, respectful fit, not shorts, not mini skirt, not tight bodycon`;
+    }
+    if (item.zone === "full_body") {
+      return `${name}, interpreted as a modest female church uniform knee-to-mid-calf A-line dress with covered chest and covered shoulders`;
+    }
+    if (item.zone === "outer") {
+      return `${name}, interpreted as a modest tailored female church uniform jacket or blazer`;
+    }
+    if (item.zone === "footwear") {
+      return `${name}, interpreted as modest closed-toe low-heel church shoes`;
+    }
+    return `${name}, modest female church uniform accessory`;
+  }
+
+  if (item.zone === "top") {
+    return `${name}, interpreted as a modest male church uniform collared shirt with respectful fit`;
+  }
+  if (item.zone === "bottom") {
+    return `${name}, interpreted as modest male church uniform tailored trousers, not shorts`;
+  }
+  if (item.zone === "full_body") {
+    return `${name}, interpreted as a modest coordinated male church uniform outfit`;
+  }
+  if (item.zone === "outer") {
+    return `${name}, interpreted as a modest tailored male church uniform coat, suit jacket, blazer, or waistcoat layered over the shirt`;
+  }
+  if (item.zone === "footwear") {
+    return `${name}, interpreted as closed-toe black church dress shoes`;
+  }
+  if (item.zone === "accessory_neck") {
+    return `${name}, interpreted as a modest male church uniform tie, bow tie, cravat, or neck accessory worn neatly over the shirt`;
+  }
+  if (item.zone === "accessory_belt") {
+    return `${name}, interpreted as a simple male church uniform belt at the trouser waist`;
+  }
+  if (item.zone === "accessory_chest_pin") {
+    return `${name}, interpreted as a small male church uniform lapel pin or chest badge`;
+  }
+  return `${name}, modest male church uniform accessory`;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +197,7 @@ export async function startCompositeChain(
     input: {
       human_img: baseCharacterUrl,
       garm_img:  firstItem.uniform_image_url,
-      garment_des: firstItem.uniform_name,
+      garment_des: buildGarmentDescription(gender, firstItem),
       // New IDM-VTON schema: category enum instead of is_checked/is_checked_crop
       category: zoneToCategory(firstItem.zone),
       crop: true, // mannequin images may not be exactly 3:4 ratio
@@ -173,7 +256,7 @@ export async function compositeNextGarment(
     input: {
       human_img: currentImageUrl,
       garm_img:  nextItem.uniform_image_url,
-      garment_des: nextItem.uniform_name,
+      garment_des: buildGarmentDescription(gender, nextItem),
       category: zoneToCategory(nextItem.zone),
       crop: true,
       steps: 30,
@@ -218,7 +301,7 @@ export async function generateVideoFromImage(
   };
 
   const prediction = await replicate.predictions.create({
-    model: MODELS.animation,
+    version: MODELS.animation,
     input: {
       input_image: compositeImageUrl,
       frames_per_second: 6,
@@ -254,26 +337,28 @@ export async function generateVideoFromImage(
 // ---------------------------------------------------------------------------
 export async function generateCharacterImage(gender: Gender): Promise<string> {
   const prompt = gender === "male"
-    ? "Full body portrait of a young adult African man, neutral standing pose, arms slightly away from body, plain white background, high quality fashion photography, front view, full length head to toe, minimal plain white t-shirt and grey trousers, professional studio lighting"
-    : "Full body portrait of a young adult African woman, neutral standing pose, arms slightly away from body, plain white background, high quality fashion photography, front view, full length head to toe, minimal plain white blouse and grey trousers, professional studio lighting";
+    ? "Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of an adult Black African man church uniform model standing upright and facing directly toward the camera, warm friendly smile, polished grooming, short neat hair, clean-shaven or neatly trimmed beard, wearing a plain light neutral grey modest church-service base outfit as a clean virtual try-on base, short-sleeve collared shirt, tailored trousers, simple black belt, glossy black closed-toe dress shoes, hands gently clasped together in front of his waist, entire body visible from top of head to bottom of shoes with generous white space, seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet, natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, shirt, trousers and shoes, realistic proportions, centered symmetrical composition, portrait orientation, no blur, no shallow depth of field, no tight fit, no cropped feet, no text, no logo, no watermark"
+    : "Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of an adult Black African woman church uniform model standing upright and facing directly toward the camera, warm friendly smile, natural polished makeup, neatly shaped eyebrows, smooth dark hair styled in a sleek side part gathered into a low bun, small pearl stud earrings, wearing a plain light neutral grey modest knee-to-mid-calf A-line uniform dress as a clean virtual try-on base, short sleeves, tailored lapels or modest square neckline, fitted waist with simple belt, softly flared skirt, covered chest, simple glossy black closed-toe court shoes with a low heel, hands gently clasped together in front of her waist, entire body visible from top of head to bottom of shoes with generous white space, seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet, natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, dress and shoes, realistic proportions, centered symmetrical composition, portrait orientation, no blur, no shallow depth of field, no low neckline, no mini skirt, no tight bodycon fit, no bare shoulders, no cropped feet, no text, no logo, no watermark";
 
   const output = await replicate.run(MODELS.characterGen as `${string}/${string}`, {
     input: {
       prompt,
-      width: 768,
-      height: 1024,
+      aspect_ratio: "3:4",
       num_outputs: 1,
-      go_fast: false,
+      num_inference_steps: 35,
       guidance: 3.5,
-      num_inference_steps: 28,
+      output_format: "png",
+      go_fast: false,
     },
   });
 
   const raw = Array.isArray(output) ? output[0] : output;
 
-  // GAP-9 FIX: SDK v1.4+ may return FileOutput (ReadableStream) for some models.
-  // String(stream) returns '[object ReadableStream]' which passes the !url guard.
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+  if (raw && typeof raw === "object" && "url" in raw && typeof raw.url === "function") {
+    return String(raw.url());
+  }
+
+  if (raw && typeof raw === "object") {
     throw new Error("generateCharacterImage: unexpected non-string output — check Replicate SDK version");
   }
 
@@ -282,18 +367,37 @@ export async function generateCharacterImage(gender: Gender): Promise<string> {
   return url;
 }
 
+export async function generatePalettePersonImage(prompt: string): Promise<string> {
+  const output = await replicate.run(MODELS.characterGen as `${string}/${string}`, {
+    input: {
+      prompt,
+      aspect_ratio: "3:4",
+      num_outputs: 1,
+      num_inference_steps: 28,
+      guidance: 3.5,
+      output_format: "png",
+      go_fast: false,
+    },
+  });
+
+  const raw = Array.isArray(output) ? output[0] : output;
+
+  if (raw && typeof raw === "object" && "url" in raw && typeof raw.url === "function") {
+    return String(raw.url());
+  }
+
+  if (raw && typeof raw === "object") {
+    throw new Error("generatePalettePersonImage: unexpected non-string output");
+  }
+
+  const url = String(raw ?? "");
+  if (!url) throw new Error("Palette generation returned no output");
+  return url;
+}
+
 // ---------------------------------------------------------------------------
 // Colour-based looks — build a Flux prompt from colour swatches
 // ---------------------------------------------------------------------------
-const GARMENT_NOUN: Record<string, string> = {
-  top:       "shirt",
-  outer:     "jacket",
-  bottom:    "trousers",
-  footwear:  "shoes",
-  head:      "hat",
-  accessory: "accessory",
-};
-
 /** Nearest basic colour name from a small palette — keeps the Flux prompt literal. */
 function hexToColorName(hex: string): string {
   const palette: Array<[string, [number, number, number]]> = [
@@ -316,15 +420,51 @@ function hexToColorName(hex: string): string {
   return best;
 }
 
+function colorName(item: ColorZoneItem): string {
+  return item.color_label?.trim() || hexToColorName(item.color);
+}
+
+function colorGarmentClause(gender: Gender, item: ColorZoneItem): string {
+  const color = colorName(item);
+  const category = item.category;
+
+  if (gender === "female") {
+    if (category === "top") return `a ${color} modest high-neck blouse or church uniform top with covered shoulders`;
+    if (category === "bottom") return `a ${color} knee-to-mid-calf A-line church uniform skirt`;
+    if (category === "full_body") return `a ${color} modest knee-to-mid-calf A-line church uniform dress with a covered chest`;
+    if (category === "outer") return `a ${color} tailored church uniform jacket or blazer`;
+    if (category === "footwear") return `${color} glossy closed-toe low-heel court shoes`;
+    if (category === "head") return `a ${color} modest church headpiece`;
+    return `a ${color} modest church accessory`;
+  }
+
+  if (category === "top") return `a ${color} short-sleeve collared church uniform shirt`;
+  if (category === "bottom") return `${color} tailored church uniform trousers`;
+  if (category === "full_body") return `a ${color} coordinated modest church uniform outfit`;
+  if (category === "outer") return `a ${color} tailored church uniform jacket or blazer`;
+  if (category === "footwear") return `${color} glossy black closed-toe dress shoes`;
+  if (category === "head") return `a ${color} modest church hat`;
+  return `a ${color} modest church accessory`;
+}
+
 function buildColorPrompt(gender: Gender, colorItems: ColorZoneItem[]): string {
-  const person = gender === "male" ? "young adult African man" : "young adult African woman";
-  const order = ["head", "outer", "top", "bottom", "footwear", "accessory"];
+  const person = gender === "male" ? "adult African man" : "adult African woman";
+  const order = ["head", "outer", "full_body", "top", "bottom", "footwear", "accessory"];
   const sorted = [...colorItems].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
-  const clauses = sorted.map((it) => `a ${hexToColorName(it.color)} ${GARMENT_NOUN[it.category] ?? "garment"}`);
+  const clauses = sorted.map((it) => colorGarmentClause(gender, it));
   const garments = clauses.length > 1
     ? `${clauses.slice(0, -1).join(", ")} and ${clauses[clauses.length - 1]}`
     : (clauses[0] ?? "plain clothing");
-  return `Full body fashion photograph of a ${person} wearing ${garments}, neutral standing pose, arms slightly away from body, plain white background, professional studio lighting, front view, full length head to toe, high quality realistic fashion photography`;
+
+  const categories = new Set(colorItems.map((item) => item.category));
+  const hasTopAndBottom = categories.has("top") && categories.has("bottom") && !categories.has("full_body");
+  const structure = gender === "female" && hasTopAndBottom
+    ? "The outfit must be a clearly separated two-piece female church uniform: blouse/top on the upper body and a knee-to-mid-calf A-line skirt on the lower body. Do not generate a dress, jumpsuit, romper, shorts, trousers, off-shoulder top, strapless top, or mini skirt."
+    : gender === "male" && hasTopAndBottom
+      ? "The outfit must be a clearly separated two-piece male church uniform: collared shirt on the upper body and tailored trousers on the lower body. Do not generate a robe, jumpsuit, shorts, or casual outfit."
+      : "Render only the selected garment categories and keep every visible garment modest, structured, and appropriate for church service.";
+
+  return `Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of a ${person} church uniform model wearing ${garments}. ${structure} Match the approved white-studio mannequin style: front-facing pose with hands gently clasped or relaxed at the front, seamless pure white studio background, head to toe visible with generous white space, covered chest, respectful fit, closed-toe dress shoes, soft even professional e-commerce lighting, subtle realistic shadow beneath feet, natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and shoes, realistic proportions, centered symmetrical composition, no blur, no shallow depth of field, no low neckline, no mini skirt, no tight bodycon fit, no bare shoulders, no cropped feet, no text, no logo, no watermark`;
 }
 
 // ---------------------------------------------------------------------------
@@ -423,16 +563,17 @@ async function pollAndContinueColorBase(
 
     const admin = createAdminClient();
     const db = admin as any;
-    await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
+    await db.from("replicate_jobs").update({ status: "completed", current_image_url: outputUrl }).eq("prediction_id", predictionId);
 
     if (photoItems.length > 0) {
       // Chain photo garments on top of the generated colour base.
       void startCompositeChain(combinationId, gender, photoItems, outputUrl);
     } else {
-      // All-colour look — the Flux output IS the composite. Animate it.
+      // All-colour look — the Flux output IS the composite.
       const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-      await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-      void generateVideoFromImage(outputUrl, combinationId, gender);
+      const permanentUrl = await persistCompositeImage(outputUrl, combinationId, gender);
+      await db.from("combinations").update({ [col]: permanentUrl }).eq("id", combinationId);
+      await checkAndMarkReady(combinationId);
     }
     return;
   }
@@ -477,7 +618,7 @@ async function pollAndContinueChain(
 
     const admin = createAdminClient();
     const db = admin as any;
-    await db.from("replicate_jobs").update({ status: "done", current_image_url: outputUrl }).eq("prediction_id", predictionId);
+    await db.from("replicate_jobs").update({ status: "completed", current_image_url: outputUrl }).eq("prediction_id", predictionId);
 
     const nextIndex = currentIndex + 1;
     if (nextIndex < allItems.length) {
@@ -487,10 +628,11 @@ async function pollAndContinueChain(
       const nextId = await compositeNextGarment(outputUrl, allItems[nextIndex], combinationId, gender, nextIndex, allItems.length);
       void pollAndContinueChain(nextId, combinationId, gender, allItems, nextIndex, outputUrl);
     } else {
-      // Chain complete — store composite, start animation
+      // Chain complete — store composite. Animation is intentionally disabled for now.
       const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-      await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-      void generateVideoFromImage(outputUrl, combinationId, gender);
+      const permanentUrl = await persistCompositeImage(outputUrl, combinationId, gender);
+      await db.from("combinations").update({ [col]: permanentUrl }).eq("id", combinationId);
+      await checkAndMarkReady(combinationId);
     }
     return;
   }
@@ -535,7 +677,7 @@ async function pollAndFinaliseVideo(
     const admin = createAdminClient();
     const db = admin as any;
     const col = gender === "male" ? "male_gif_url" : "female_gif_url";
-    await db.from("replicate_jobs").update({ status: "done" }).eq("prediction_id", predictionId);
+    await db.from("replicate_jobs").update({ status: "completed" }).eq("prediction_id", predictionId);
     await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
     await checkAndMarkReady(combinationId);
     return;
@@ -551,10 +693,10 @@ async function pollAndFinaliseVideo(
 
 /**
  * GAP-11 FIX: Checks if the combination preview is ready based on which
- * genders have zone items assigned. Only requires GIFs for genders that
- * actually have items — a male-only combination marks ready after male GIF.
+ * genders have zone items assigned. Only requires composite images for genders
+ * that actually have items — animation is currently disabled.
  */
-async function checkAndMarkReady(combinationId: string) {
+export async function checkAndMarkReady(combinationId: string) {
   const admin = createAdminClient();
   const db = admin as any;
 
@@ -573,12 +715,12 @@ async function checkAndMarkReady(combinationId: string) {
 
   const { data: combo } = await db
     .from("combinations")
-    .select("male_gif_url, female_gif_url")
+    .select("male_composite_url, female_composite_url")
     .eq("id", combinationId)
-    .single() as { data: { male_gif_url: string | null; female_gif_url: string | null } | null };
+    .single() as { data: { male_composite_url: string | null; female_composite_url: string | null } | null };
 
-  const maleReady   = !needsMale   || !!combo?.male_gif_url;
-  const femaleReady = !needsFemale || !!combo?.female_gif_url;
+  const maleReady   = !needsMale   || !!combo?.male_composite_url;
+  const femaleReady = !needsFemale || !!combo?.female_composite_url;
 
   if (maleReady && femaleReady) {
     await db.from("combinations").update({ preview_status: "ready" }).eq("id", combinationId);
@@ -593,7 +735,7 @@ async function markFailed(combinationId: string, predictionId: string, reason = 
     .eq("prediction_id", predictionId);
   // Check if ALL active jobs for this combination are failed
   const { data: jobs } = await db.from("replicate_jobs").select("status").eq("combination_id", combinationId);
-  const allFailed = (jobs as Array<{ status: string }> | null)?.every((j) => j.status === "failed" || j.status === "done");
+  const allFailed = (jobs as Array<{ status: string }> | null)?.every((j) => j.status === "failed" || j.status === "completed");
   if (allFailed) {
     await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
   }

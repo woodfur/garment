@@ -1,10 +1,10 @@
 export type UserRole = "super_admin" | "branch_leader";
 export type InvitationStatus = "pending" | "accepted" | "expired";
-export type UniformCategory = "top" | "bottom" | "footwear" | "accessory" | "outer" | "head";
+export type UniformCategory = "top" | "bottom" | "footwear" | "accessory" | "outer" | "head" | "full_body";
 export type PreviewStatus = "none" | "processing" | "ready" | "failed";
 export type Gender = "male" | "female";
 export type BodyZone =
-  | "head" | "top" | "outer" | "bottom" | "footwear"
+  | "head" | "top" | "outer" | "bottom" | "footwear" | "full_body"
   | "accessory_neck" | "accessory_wrist_left" | "accessory_wrist_right"
   | "accessory_belt" | "accessory_chest_pin" | "accessory_bag";
 
@@ -66,6 +66,7 @@ export interface Database {
           id: string;
           branch_id: string;
           department_id: string;
+          gender: Gender | null;
           name: string;
           category: UniformCategory;
           image_url: string | null;
@@ -88,6 +89,7 @@ export interface Database {
           id: string;
           branch_id: string;
           department_id: string;
+          gender: Gender | null;
           name: string;
           description: string | null;
           canvas_data: Record<string, unknown> | null;
@@ -138,11 +140,28 @@ export interface Database {
           id: string;
           schedule_id: string;
           department_id: string;
+          gender: Gender | null;
           combination_id: string;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["schedule_assignments"]["Row"], "id" | "created_at">;
         Update: Partial<Database["public"]["Tables"]["schedule_assignments"]["Insert"]>;
+      };
+      uniform_reminder_deliveries: {
+        Row: {
+          id: string;
+          branch_id: string;
+          schedule_id: string;
+          target_service_date: string;
+          reminder_kind: "wednesday" | "sunday";
+          delivery_status: "sent" | "failed";
+          zapier_response_status: number | null;
+          error_message: string | null;
+          sent_at: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["uniform_reminder_deliveries"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["uniform_reminder_deliveries"]["Insert"]>;
       };
       department_members: {
         Row: {
@@ -260,6 +279,7 @@ export type CombinationZoneItem = Database["public"]["Tables"]["combination_zone
 export type ReplicateJob = Database["public"]["Tables"]["replicate_jobs"]["Row"];
 export type Schedule = Database["public"]["Tables"]["schedules"]["Row"];
 export type ScheduleAssignment = Database["public"]["Tables"]["schedule_assignments"]["Row"];
+export type UniformReminderDelivery = Database["public"]["Tables"]["uniform_reminder_deliveries"]["Row"];
 export type InventoryItem = Database["public"]["Tables"]["inventory_items"]["Row"];
 export type InventoryTransaction = Database["public"]["Tables"]["inventory_transactions"]["Row"];
 export type Announcement = Database["public"]["Tables"]["announcements"]["Row"];

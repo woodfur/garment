@@ -52,7 +52,7 @@ create table if not exists uniforms (
   id               uuid primary key default gen_random_uuid(),
   branch_id        uuid not null references branches(id) on delete cascade,
   name             text not null,
-  category         text not null check (category in ('top','bottom','footwear','accessory','outer','head')),
+  category         text not null check (category in ('top','bottom','footwear','accessory','outer','head','full_body')),
   image_url        text,
   raw_image_url    text,
   storage_path     text,

@@ -1,4 +1,4 @@
-import type { BodyZone } from "./database";
+import type { BodyZone, UniformCategory } from "./database";
 
 export type { Gender, BodyZone, PreviewStatus } from "./database";
 
@@ -8,6 +8,7 @@ export const ZONE_POSITIONS: Record<BodyZone, { x: number; y: number; label: str
   head:                  { x: 50, y: 10,  label: "Head" },
   top:                   { x: 50, y: 32,  label: "Top" },
   outer:                 { x: 50, y: 28,  label: "Outer" },
+  full_body:             { x: 50, y: 45,  label: "Dress" },
   bottom:                { x: 50, y: 58,  label: "Bottom" },
   footwear:              { x: 50, y: 88,  label: "Footwear" },
   accessory_neck:        { x: 50, y: 22,  label: "Neck" },
@@ -19,10 +20,11 @@ export const ZONE_POSITIONS: Record<BodyZone, { x: number; y: number; label: str
 };
 
 /** Uniform category that maps to each zone */
-export const ZONE_CATEGORIES: Record<BodyZone, string> = {
+export const ZONE_CATEGORIES: Record<BodyZone, UniformCategory> = {
   head:                  "head",
   top:                   "top",
   outer:                 "outer",
+  full_body:             "full_body",
   bottom:                "bottom",
   footwear:              "footwear",
   accessory_neck:        "accessory",
@@ -35,6 +37,7 @@ export const ZONE_CATEGORIES: Record<BodyZone, string> = {
 
 /** Body zones in layering order — outermost items composited last */
 export const ZONE_LAYER_ORDER: BodyZone[] = [
+  "full_body",
   "top",
   "outer",
   "bottom",
@@ -49,7 +52,7 @@ export const ZONE_LAYER_ORDER: BodyZone[] = [
 ];
 
 /** Standard body zones (non-accessory) */
-export const STANDARD_ZONES: BodyZone[] = ["head", "top", "outer", "bottom", "footwear"];
+export const STANDARD_ZONES: BodyZone[] = ["head", "top", "outer", "full_body", "bottom", "footwear"];
 
 /** Accessory zones */
 export const ACCESSORY_ZONES: BodyZone[] = [

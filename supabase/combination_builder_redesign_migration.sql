@@ -13,7 +13,7 @@ ALTER TABLE combinations
 -- Phase 1b: body_zone ENUM (extensible via ALTER TYPE ... ADD VALUE)
 DO $$ BEGIN
   CREATE TYPE body_zone AS ENUM (
-    'head','top','outer','bottom','footwear',
+    'head','top','outer','full_body','bottom','footwear',
     'accessory_neck','accessory_wrist_left',
     'accessory_wrist_right','accessory_belt',
     'accessory_chest_pin','accessory_bag'

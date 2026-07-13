@@ -2,17 +2,31 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 import { revalidateTag } from "next/cache";
+import type { Gender } from "@/types/database";
 
 type Params = { params: Promise<{ uniformId: string }> };
 
+function isGender(value: unknown): value is Gender {
+  return value === "male" || value === "female";
+}
+
 async function verifyUniform(uniformId: string, branchId: string) {
   const admin = createAdminClient();
+  // Database types lag the live Supabase schema in this repo; keep this route aligned with the existing admin-client pattern.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (admin as any)
     .from("uniforms")
-    .select("id, branch_id, storage_path")
+    .select("id, branch_id, storage_path, image_url")
     .eq("id", uniformId)
-    .single() as { data: { id: string; branch_id: string; storage_path: string | null } | null };
+    .single() as { data: { id: string; branch_id: string; storage_path: string | null; image_url: string | null } | null };
   return data?.branch_id === branchId ? data : null;
+}
+
+function storagePathFromPublicUrl(url: string | null): string | null {
+  if (!url) return null;
+  const marker = "/storage/v1/object/public/uniforms/";
+  const markerIndex = url.indexOf(marker);
+  return markerIndex === -1 ? null : decodeURIComponent(url.slice(markerIndex + marker.length));
 }
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -31,10 +45,15 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.category !== undefined) updates.category = body.category;
     if (body.description !== undefined) updates.description = body.description?.trim() || null;
     if (body.department_id !== undefined) updates.department_id = body.department_id;
+    if (body.gender !== undefined) {
+      if (!isGender(body.gender)) return NextResponse.json({ error: "Gender must be male or female" }, { status: 400 });
+      updates.gender = body.gender;
+    }
     if (body.image_url !== undefined) updates.image_url = body.image_url;
     if (body.bg_removed !== undefined) updates.bg_removed = body.bg_removed;
 
     const admin = createAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (admin as any)
       .from("uniforms")
       .update(updates)
@@ -64,9 +83,18 @@ export async function DELETE(_request: Request, { params }: Params) {
 
     // Delete storage files if they exist
     if (uniform.storage_path) {
-      await admin.storage.from("uniforms").remove([uniform.storage_path, `bg-removed/${uniform.storage_path}`]);
+      const pathsToRemove = new Set<string>([
+        uniform.storage_path,
+        `bg-removed/${uniform.storage_path}`,
+        `bg-removed/${uniform.storage_path.replace(/\.[^.]+$/, ".png")}`,
+        `bg-removed/${uniform.storage_path.replace(/\.[^.]+$/, ".webp")}`,
+      ]);
+      const processedPath = storagePathFromPublicUrl(uniform.image_url);
+      if (processedPath) pathsToRemove.add(processedPath);
+      await admin.storage.from("uniforms").remove([...pathsToRemove]);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (admin as any).from("uniforms").delete().eq("id", uniformId);
     if (error) throw error;
 

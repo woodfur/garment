@@ -34,6 +34,8 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !REPLICATE_API_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const replicate = new Replicate({ auth: REPLICATE_API_KEY });
 const CHARACTER_GEN_MODEL = "black-forest-labs/flux-dev";
+const PREVIEW_ONLY = process.argv.includes("--preview");
+const PREVIEW_OUTPUT_PATH = "/private/tmp/female-character-candidate.png";
 
 async function streamToBuffer(stream) {
   const chunks = [];
@@ -48,13 +50,13 @@ async function main() {
 
   const output = await replicate.run(CHARACTER_GEN_MODEL, {
     input: {
-      prompt: "Full body portrait of a young adult African woman, neutral standing pose, arms slightly away from body, plain white background, high quality fashion photography, front view, full length head to toe, minimal plain white blouse and grey trousers, professional studio lighting",
-      width: 768,
-      height: 1024,
+      prompt: "Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of an adult Black African woman church uniform model standing upright and facing directly toward the camera, warm friendly smile, natural polished makeup, neatly shaped eyebrows, smooth dark hair styled in a sleek side part gathered into a low bun, small pearl stud earrings, wearing a plain light neutral grey modest knee-to-mid-calf A-line uniform dress as a clean virtual try-on base, short sleeves, tailored lapels or modest square neckline, fitted waist with simple belt, softly flared skirt, covered chest, simple glossy black closed-toe court shoes with a low heel, hands gently clasped together in front of her waist, entire body visible from top of head to bottom of shoes with generous white space, seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet, natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, dress and shoes, realistic proportions, centered symmetrical composition, portrait orientation, no blur, no shallow depth of field, no low neckline, no mini skirt, no tight bodycon fit, no bare shoulders, no cropped feet, no text, no logo, no watermark",
+      aspect_ratio: "3:4",
       num_outputs: 1,
-      go_fast: false,
+      num_inference_steps: 35,
       guidance: 3.5,
-      num_inference_steps: 28,
+      output_format: "png",
+      go_fast: false,
     },
   });
 
@@ -74,6 +76,13 @@ async function main() {
     buffer = Buffer.from(await res.arrayBuffer());
   }
   console.log(`   ${Math.round(buffer.length / 1024)} KB downloaded`);
+
+  if (PREVIEW_ONLY) {
+    fs.writeFileSync(PREVIEW_OUTPUT_PATH, buffer);
+    console.log(`\n👀 Preview saved: ${PREVIEW_OUTPUT_PATH}`);
+    console.log("No Supabase upload or .env.local changes were made.");
+    return;
+  }
 
   console.log("📤 Uploading to Supabase...");
   const { error } = await supabase.storage

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { startCompositeChain, compositeNextGarment, generateVideoFromImage, type ZoneItem } from "@/lib/replicate";
+import { startCompositeChain, compositeNextGarment, checkAndMarkReady, persistCompositeImage, type ZoneItem } from "@/lib/replicate";
 import { ZONE_LAYER_ORDER } from "@/types/zones";
 import type { Gender } from "@/types/database";
 
@@ -128,7 +128,7 @@ export async function POST(req: Request) {
     // makes allSettled undefined (falsy), silently skipping the failed status update.
     const { data: jobs, error: jobsErr } = await db.from("replicate_jobs").select("status").eq("combination_id", combinationId);
     if (!jobsErr && jobs) {
-      const allSettled = (jobs as Array<{ status: string }>).every((j) => j.status === "done" || j.status === "failed");
+      const allSettled = (jobs as Array<{ status: string }>).every((j) => j.status === "completed" || j.status === "failed");
       if (allSettled) {
         await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
       }
@@ -150,9 +150,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true, warning: "No output URL" });
   }
 
-  // Mark current job done
+  // Mark current job completed
   await db.from("replicate_jobs")
-    .update({ status: "done", current_image_url: outputUrl })
+    .update({ status: "completed", current_image_url: outputUrl })
     .eq("prediction_id", body.id);
 
   // --- Colour base (Flux) step completed ---
@@ -188,8 +188,9 @@ export async function POST(req: Request) {
         await startCompositeChain(combinationId, gender, photoItems, outputUrl);
       } else {
         const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-        await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-        await generateVideoFromImage(outputUrl, combinationId, gender);
+        const permanentUrl = await persistCompositeImage(outputUrl, combinationId, gender);
+        await db.from("combinations").update({ [col]: permanentUrl }).eq("id", combinationId);
+        await checkAndMarkReady(combinationId);
       }
     } catch (colorErr) {
       console.error("[webhook] colour base continuation error:", colorErr);
@@ -244,10 +245,11 @@ export async function POST(req: Request) {
           );
         }
       } else {
-        // All garments composited — store composite URL and fire animation
+        // All garments composited — store composite URL. Animation is intentionally disabled for now.
         const col = gender === "male" ? "male_composite_url" : "female_composite_url";
-        await db.from("combinations").update({ [col]: outputUrl }).eq("id", combinationId);
-        await generateVideoFromImage(outputUrl, combinationId, gender);
+        const permanentUrl = await persistCompositeImage(outputUrl, combinationId, gender);
+        await db.from("combinations").update({ [col]: permanentUrl }).eq("id", combinationId);
+        await checkAndMarkReady(combinationId);
       }
     } catch (chainErr) {
       console.error("[webhook] composite chain error:", chainErr);
@@ -275,12 +277,12 @@ export async function POST(req: Request) {
 
     const { data: combo } = await db
       .from("combinations")
-      .select("male_gif_url, female_gif_url")
+      .select("male_composite_url, female_composite_url")
       .eq("id", combinationId)
-      .single() as { data: { male_gif_url: string | null; female_gif_url: string | null } | null };
+      .single() as { data: { male_composite_url: string | null; female_composite_url: string | null } | null };
 
-    const maleReady   = !assignedGenders.has("male")   || !!combo?.male_gif_url;
-    const femaleReady = !assignedGenders.has("female") || !!combo?.female_gif_url;
+    const maleReady   = !assignedGenders.has("male")   || !!combo?.male_composite_url;
+    const femaleReady = !assignedGenders.has("female") || !!combo?.female_composite_url;
 
     if (maleReady && femaleReady) {
       await db.from("combinations").update({ preview_status: "ready" }).eq("id", combinationId);

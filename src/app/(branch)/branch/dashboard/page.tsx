@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { formatDate, truncate } from "@/lib/utils";
 import Link from "next/link";
 import type { Metadata } from "next";
+import PublicScheduleShareButton from "@/components/branch/PublicScheduleShareButton";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Dashboard | Garment" };
@@ -20,6 +21,8 @@ type LookRow = {
   id: string;
   name: string;
   preview_status: "none" | "processing" | "ready" | "failed";
+  male_composite_url: string | null;
+  female_composite_url: string | null;
   male_gif_url: string | null;
   female_gif_url: string | null;
   departments: { name: string } | null;
@@ -73,7 +76,7 @@ export default async function BranchDashboardPage() {
       const adminClient = createAdminClient();
       const res = await (adminClient as any)
         .from("combinations")
-        .select("id, name, preview_status, male_gif_url, female_gif_url, departments(name)")
+        .select("id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, departments(name)")
         .eq("branch_id", branchId)
         .order("created_at", { ascending: false })
         .limit(6);
@@ -118,6 +121,7 @@ export default async function BranchDashboardPage() {
           <div className="dash-cta">
             <Link href="/branch/combinations/new" className="btn-primary">Open the Fitting Room →</Link>
             <Link href="/branch/uniforms" className="btn-secondary">Add a uniform</Link>
+            <PublicScheduleShareButton className="btn-secondary" />
           </div>
         </div>
       </section>
@@ -141,13 +145,17 @@ export default async function BranchDashboardPage() {
       ) : (
         <section className="dash-gallery">
           {recentLooks.map((look, i) => {
+            const image = look.male_composite_url ?? look.female_composite_url;
             const gif = look.male_gif_url ?? look.female_gif_url;
-            const ready = look.preview_status === "ready" && gif;
+            const ready = look.preview_status === "ready" && (image || gif);
             return (
               <Link key={look.id} href={`/branch/combinations/${look.id}`} className={`plate-look ${galleryClasses[i] ?? "g-md"}`}>
                 <span className="no">{toRoman(i + 1)}</span>
                 {ready && <span className="badge">Ready</span>}
-                {ready ? (
+                {ready && image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="pl-media" src={image} alt={look.name} />
+                ) : ready && gif ? (
                   <video className="pl-media" src={gif!} autoPlay loop muted playsInline />
                 ) : (
                   <div className={`silh${i % 2 === 0 ? " p" : ""}`} />
@@ -191,6 +199,7 @@ export default async function BranchDashboardPage() {
           <p>Publish a schedule and your congregation can browse this Sunday&rsquo;s looks from a shareable viewer code.</p>
           <div className="links">
             <Link href="/branch/schedule">Publish a schedule <span>→</span></Link>
+            <PublicScheduleShareButton className="btn-secondary" label="Copy public link" style={{ justifyContent: "center" }} />
             <Link href="/branch/combinations/new">Compose a look <span>＋</span></Link>
             <Link href="/branch/departments">Manage the roster <span>→</span></Link>
           </div>
