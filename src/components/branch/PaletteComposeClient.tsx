@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, ArrowUp, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import type { Gender } from "@/types/database";
 
 type Department = { id: string; name: string; description: string | null };
 type PaletteColor = { id: string; hex: string; label: string };
@@ -30,6 +31,7 @@ export default function PaletteComposeClient() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDeptId, setSelectedDeptId] = useState("");
+  const [selectedGender, setSelectedGender] = useState<Gender>("female");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [colors, setColors] = useState<PaletteColor[]>(DEFAULT_COLORS);
@@ -100,6 +102,7 @@ export default function PaletteComposeClient() {
           name: name.trim(),
           description: description.trim() || null,
           department_id: selectedDeptId,
+          gender: selectedGender,
           palette: colors.map((color) => ({
             hex: color.hex,
             label: color.label.trim() || null,
@@ -167,6 +170,30 @@ export default function PaletteComposeClient() {
                   })}
                 </div>
               )}
+            </section>
+
+            <section style={{ marginBottom: "2rem" }}>
+              <div className="rule-label" style={{ marginBottom: "0.8rem" }}>
+                <span>Gender</span><span className="rule" />
+              </div>
+              <div className="gender-toggle" role="tablist" aria-label="Choose gender">
+                <button
+                  role="tab"
+                  aria-selected={selectedGender === "female"}
+                  className={selectedGender === "female" ? "on" : ""}
+                  onClick={() => setSelectedGender("female")}
+                >
+                  ♀ Female
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={selectedGender === "male"}
+                  className={selectedGender === "male" ? "on" : ""}
+                  onClick={() => setSelectedGender("male")}
+                >
+                  ♂ Male
+                </button>
+              </div>
             </section>
 
             <section style={{ marginBottom: "2rem" }}>

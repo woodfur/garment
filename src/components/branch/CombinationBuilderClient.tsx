@@ -38,6 +38,7 @@ export default function CombinationBuilderClient() {
   const [uniforms, setUniforms] = useState<Uniform[]>([]);
   const [outfit, setOutfit] = useState<OutfitState>({ male: {}, female: {} });
   const [activeGender, setActiveGender] = useState<Gender>("male");
+  const [genderLocked, setGenderLocked] = useState(false);
   const [activeZone, setActiveZone] = useState<BodyZone | null>("top");
   const [showAccessories, setShowAccessories] = useState(false);
 
@@ -64,14 +65,14 @@ export default function CombinationBuilderClient() {
       .catch(console.error);
   }, []);
 
-  // Load uniforms when department selected
+  // Load uniforms when department and gender are selected
   useEffect(() => {
-    if (!selectedDept) return;
-    fetch(`/api/branch/uniforms?department_id=${selectedDept.id}&include_archived=false`)
+    if (!selectedDept || !genderLocked) return;
+    fetch(`/api/branch/uniforms?department_id=${selectedDept.id}&gender=${activeGender}&include_archived=false`)
       .then((r) => r.json())
       .then((d) => setUniforms(Array.isArray(d) ? d : d.uniforms ?? []))
       .catch(console.error);
-  }, [selectedDept]);
+  }, [selectedDept, activeGender, genderLocked]);
 
   // Uniforms filtered to active zone category
   const filteredUniforms = activeZone
@@ -80,7 +81,7 @@ export default function CombinationBuilderClient() {
 
   // Has bg_removed issues
   const bgWarnings = (() => {
-    const all = [...Object.values(outfit.male), ...Object.values(outfit.female)] as CombinationZoneItemWithUniform[];
+    const all = Object.values(outfit[activeGender]) as CombinationZoneItemWithUniform[];
     return all.filter((item) => item?.uniform && item.uniform.image_url && !item.uniform.bg_removed).map((item) => item.uniform!.name);
   })();
 
@@ -128,7 +129,7 @@ export default function CombinationBuilderClient() {
         const res = await fetch("/api/branch/combinations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), description: description.trim() || null, department_id: selectedDept.id }),
+          body: JSON.stringify({ name: name.trim(), description: description.trim() || null, department_id: selectedDept.id, gender: activeGender }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? "Failed to create combination");
         const combo = await res.json();
@@ -151,8 +152,7 @@ export default function CombinationBuilderClient() {
       }
 
       const allItems = [
-        ...Object.entries(outfit.male).map(([zone, item]) => ({ gender: "male" as Gender, zone: zone as BodyZone, uniform_id: item!.uniform_id })),
-        ...Object.entries(outfit.female).map(([zone, item]) => ({ gender: "female" as Gender, zone: zone as BodyZone, uniform_id: item!.uniform_id })),
+        ...Object.entries(outfit[activeGender]).map(([zone, item]) => ({ gender: activeGender, zone: zone as BodyZone, uniform_id: item!.uniform_id })),
       ];
 
       // GAP-5 FIX: Sequential inserts instead of Promise.all.
@@ -176,7 +176,7 @@ export default function CombinationBuilderClient() {
         const previewRes = await fetch(`/api/branch/combinations/${comboId}/generate-preview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gender: "both" }),
+          body: JSON.stringify({ gender: activeGender }),
         });
         // GAP-3 FIX: Check response status — a 400/500 (e.g. 'no zone items') was previously
         // silently ignored, causing a redirect with no error feedback and preview stuck at 'none'.
@@ -206,7 +206,7 @@ export default function CombinationBuilderClient() {
     ? [...STANDARD_ZONES, ...ACCESSORY_ZONES]
     : STANDARD_ZONES;
 
-  const totalAssigned = Object.keys(outfit.male).length + Object.keys(outfit.female).length;
+  const totalAssigned = Object.keys(outfit[activeGender]).length;
   const canProceed = totalAssigned > 0;
 
   return (
@@ -218,7 +218,7 @@ export default function CombinationBuilderClient() {
         {([1, 2, 3] as Step[]).map((s) => (
           <div key={s} className={`builder-step-dot ${step >= s ? "active" : ""}`}>
             <span>{s}</span>
-            <label>{s === 1 ? "Department" : s === 2 ? "Assign Zones" : "Save"}</label>
+            <label>{s === 1 ? "Department" : s === 2 ? "Gender & Pieces" : "Save"}</label>
           </div>
         ))}
         <div className="builder-progress-line" style={{ width: `${((step - 1) / 2) * 100}%` }} />
@@ -239,7 +239,12 @@ export default function CombinationBuilderClient() {
                 <button
                   key={dept.id}
                   className={`dept-card ${selected ? "selected" : ""}`}
-                  onClick={() => setSelectedDept(dept)}
+                  onClick={() => {
+                    setSelectedDept(dept);
+                    setGenderLocked(false);
+                    setUniforms([]);
+                    setOutfit({ male: {}, female: {} });
+                  }}
                 >
                   {selected && <span className="dept-card-check">✓</span>}
                   <span className="dept-card-mono">{dept.name.charAt(0).toUpperCase()}</span>
@@ -270,18 +275,18 @@ export default function CombinationBuilderClient() {
       {step === 2 && (
         <div className="builder-step">
           <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.5rem" }}>Step two</div>
-          <h2 className="builder-step-title">Style the <em className="serif-em">look</em></h2>
+          <h2 className="builder-step-title">Choose gender, then style the <em className="serif-em">look</em></h2>
           <p className="builder-step-subtitle">
-            Pick a zone, then choose a piece — each one shows up large so you can see it clearly.
+            Only pieces for the selected department and gender will appear.
           </p>
 
-          {/* Gender toggle — style one figure at a time */}
+          {/* Gender selection — locks the look to one gender */}
           <div className="gender-toggle" role="tablist" aria-label="Choose figure">
             <button
               role="tab"
               aria-selected={activeGender === "male"}
               className={activeGender === "male" ? "on" : ""}
-              onClick={() => setActiveGender("male")}
+              onClick={() => { setActiveGender("male"); setGenderLocked(true); setUniforms([]); }}
             >
               ♂ Male
             </button>
@@ -289,14 +294,16 @@ export default function CombinationBuilderClient() {
               role="tab"
               aria-selected={activeGender === "female"}
               className={activeGender === "female" ? "on" : ""}
-              onClick={() => setActiveGender("female")}
+              onClick={() => { setActiveGender("female"); setGenderLocked(true); setUniforms([]); }}
             >
               ♀ Female
             </button>
           </div>
           <p className="gender-caption">
-            Styling the <b>{activeGender}</b> look · {Object.keys(outfit[activeGender]).length}{" "}
-            {Object.keys(outfit[activeGender]).length === 1 ? "piece" : "pieces"} placed
+            {genderLocked
+              ? <>Styling the <b>{activeGender}</b> look · {Object.keys(outfit[activeGender]).length}{" "}
+                {Object.keys(outfit[activeGender]).length === 1 ? "piece" : "pieces"} placed</>
+              : "Select a gender to load matching pieces."}
           </p>
 
           {/* Zone chips — replaces the mannequin hotspots */}
@@ -375,12 +382,16 @@ export default function CombinationBuilderClient() {
 
           {/* Picker — pieces for the active zone, always visible (no scrolling) */}
           <div className="fit-picker">
-            {filteredUniforms.length === 0 ? (
+            {!genderLocked ? (
+              <div className="fit-picker-empty">
+                <p>Select a gender above to show matching pieces.</p>
+              </div>
+            ) : filteredUniforms.length === 0 ? (
               <div className="fit-picker-empty">
                 <p style={{ marginBottom: "0.75rem" }}>
                   {activeZone
-                    ? `No ${ZONE_POSITIONS[activeZone].label.toLowerCase()} pieces in ${selectedDept?.name}.`
-                    : `No pieces in ${selectedDept?.name ?? "this department"} yet.`}
+                    ? `No ${activeGender} ${ZONE_POSITIONS[activeZone].label.toLowerCase()} pieces in ${selectedDept?.name}.`
+                    : `No ${activeGender} pieces in ${selectedDept?.name ?? "this department"} yet.`}
                 </p>
                 <a
                   href="/branch/uniforms"
@@ -423,7 +434,7 @@ export default function CombinationBuilderClient() {
             <button className="btn-back" onClick={() => setStep(1)}>← Back</button>
             <button
               className="btn-primary"
-              disabled={!canProceed}
+              disabled={!genderLocked || !canProceed}
               onClick={() => setStep(3)}
             >
               Continue → ({totalAssigned} placed)
@@ -443,24 +454,18 @@ export default function CombinationBuilderClient() {
 
           {/* Zone summary */}
           <div className="summary-grid">
-            {(["male", "female"] as Gender[]).map((gender) => (
-              <div key={gender} className="summary-card">
-                <h4 className="summary-gender">{gender === "male" ? "♂ Male look" : "♀ Female look"}</h4>
-                {Object.keys(outfit[gender]).length === 0 ? (
-                  <p className="summary-empty">No zones assigned</p>
-                ) : (
-                  <ul className="summary-list">
-                    {(Object.entries(outfit[gender]) as [BodyZone, CombinationZoneItemWithUniform][]).map(([zone, item]) => (
-                      <li key={zone} className="summary-item">
-                        <span className="summary-zone">{ZONE_POSITIONS[zone].label}</span>
-                        <span className="summary-uniform">{item.uniform?.name ?? "[Deleted]"}</span>
-                        {item.uniform && item.uniform.image_url && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
+            <div className="summary-card">
+              <h4 className="summary-gender">{activeGender === "male" ? "♂ Male look" : "♀ Female look"}</h4>
+              <ul className="summary-list">
+                {(Object.entries(outfit[activeGender]) as [BodyZone, CombinationZoneItemWithUniform][]).map(([zone, item]) => (
+                  <li key={zone} className="summary-item">
+                    <span className="summary-zone">{ZONE_POSITIONS[zone].label}</span>
+                    <span className="summary-uniform">{item.uniform?.name ?? "[Deleted]"}</span>
+                    {item.uniform && item.uniform.image_url && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
 
           {bgWarnings.length > 0 && (

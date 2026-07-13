@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 import { revalidateTag } from "next/cache";
+import type { Gender } from "@/types/database";
 
 type Params = { params: Promise<{ uniformId: string }> };
+
+function isGender(value: unknown): value is Gender {
+  return value === "male" || value === "female";
+}
 
 async function verifyUniform(uniformId: string, branchId: string) {
   const admin = createAdminClient();
@@ -40,6 +45,10 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.category !== undefined) updates.category = body.category;
     if (body.description !== undefined) updates.description = body.description?.trim() || null;
     if (body.department_id !== undefined) updates.department_id = body.department_id;
+    if (body.gender !== undefined) {
+      if (!isGender(body.gender)) return NextResponse.json({ error: "Gender must be male or female" }, { status: 400 });
+      updates.gender = body.gender;
+    }
     if (body.image_url !== undefined) updates.image_url = body.image_url;
     if (body.bg_removed !== undefined) updates.bg_removed = body.bg_removed;
 

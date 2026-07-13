@@ -40,7 +40,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { data, error } = await (admin as any)
       .from("combinations")
       .select(`
-        id, name, description, department_id, canvas_data, preview_url, created_at,
+        id, name, description, department_id, gender, canvas_data, preview_url, created_at,
         preview_status, male_gif_url, female_gif_url, male_composite_url, female_composite_url,
         departments(name),
         combination_items(
@@ -73,6 +73,12 @@ export async function PATCH(request: Request, { params }: Params) {
     const updates: Record<string, unknown> = {};
     if (body.name !== undefined) updates.name = body.name.trim();
     if (body.description !== undefined) updates.description = body.description?.trim() || null;
+    if (body.gender !== undefined) {
+      if (body.gender !== "male" && body.gender !== "female") {
+        return NextResponse.json({ error: "Gender must be male or female" }, { status: 400 });
+      }
+      updates.gender = body.gender;
+    }
     if (body.canvas_data !== undefined) updates.canvas_data = body.canvas_data;
     if (body.preview_url !== undefined) updates.preview_url = body.preview_url;
 

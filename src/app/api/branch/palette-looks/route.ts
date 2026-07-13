@@ -9,6 +9,11 @@ import {
   uploadPaletteMoodBoard,
   validatePalette,
 } from "@/lib/palette-compose";
+import type { Gender } from "@/types/database";
+
+function isGender(value: unknown): value is Gender {
+  return value === "male" || value === "female";
+}
 
 export async function POST(request: Request) {
   const result = await requireBranchLeader();
@@ -26,10 +31,12 @@ export async function POST(request: Request) {
       ? body.description.trim()
       : null;
     const departmentId = typeof body.department_id === "string" ? body.department_id : "";
+    const gender = isGender(body.gender) ? body.gender : null;
     const palette = validatePalette(body.palette);
 
     if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (!departmentId) return NextResponse.json({ error: "Department is required" }, { status: 400 });
+    if (!gender) return NextResponse.json({ error: "Gender is required" }, { status: 400 });
 
     const { data: department } = await db
       .from("departments")
@@ -46,6 +53,7 @@ export async function POST(request: Request) {
         name,
         description,
         department_id: departmentId,
+        gender,
         branch_id: auth.branchId,
         created_by: auth.userId,
         preview_status: "processing",
@@ -54,13 +62,13 @@ export async function POST(request: Request) {
           palette,
         },
       })
-      .select("id, name, description, department_id, canvas_data, preview_url, preview_status, created_at")
+      .select("id, name, description, department_id, gender, canvas_data, preview_url, preview_status, created_at")
       .single();
 
     if (comboErr || !combination) throw comboErr ?? new Error("Failed to create palette look");
     combinationId = combination.id;
 
-    const prompt = buildPalettePrompt({ departmentName: department.name, palette });
+    const prompt = buildPalettePrompt({ departmentName: department.name, gender, palette });
     const personImageUrl = await generatePalettePersonImage(prompt);
     const board = await createPaletteMoodBoard({
       personImageUrl,
@@ -79,10 +87,10 @@ export async function POST(request: Request) {
       .update({
         preview_url: previewUrl,
         preview_status: "ready",
-        male_composite_url: personImageUrl,
+        [gender === "male" ? "male_composite_url" : "female_composite_url"]: personImageUrl,
       })
       .eq("id", combinationId)
-      .select("id, name, description, department_id, canvas_data, preview_url, preview_status, created_at")
+      .select("id, name, description, department_id, gender, canvas_data, preview_url, preview_status, created_at")
       .single();
 
     if (updateErr || !updated) throw updateErr ?? new Error("Failed to save palette preview");

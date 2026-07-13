@@ -47,17 +47,23 @@ export function validatePalette(raw: unknown): PaletteColor[] {
 
 export function buildPalettePrompt({
   departmentName,
+  gender,
   palette,
 }: {
   departmentName: string;
+  gender: "male" | "female";
   palette: PaletteColor[];
 }): string {
   const colors = palette.map((color) => color.label ?? color.hex).join(", ");
+  const model = gender === "male" ? "male" : "female";
+  const garmentGuidance = gender === "male"
+    ? "let the outfit naturally distribute the colors across a modest collared shirt, jacket, tailored trousers, shoes, belt, or accessories"
+    : "let the outfit naturally distribute the colors across a modest blouse, knee-to-mid-calf A-line skirt, knee-to-mid-calf dress, shoes, belt, or accessories";
   return [
-    "Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of one modestly dressed adult Black African church uniform model",
+    `Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of one modestly dressed adult Black African ${model} church uniform model`,
     `wearing a coordinated church service uniform outfit for the ${departmentName} department`,
     `using this color palette: ${colors}`,
-    "let the outfit naturally distribute the colors across a modest blouse or collared shirt, tailored trousers, a knee-to-mid-calf A-line skirt, a knee-to-mid-calf dress, shoes, belt, or accessories",
+    garmentGuidance,
     "front-facing pose with hands gently clasped or relaxed at the front, head to toe visible",
     "seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet",
     "natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and shoes, polished but respectful church styling",

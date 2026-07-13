@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/uniform-reminders",
+      "schedule": "0 10 * * 1"
+    },
+    {
+      "path": "/api/cron/uniform-reminders",
+      "schedule": "0 10 * * 4"
+    }
+  ]
+}

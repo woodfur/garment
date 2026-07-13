@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { formatDate, truncate } from "@/lib/utils";
 import Link from "next/link";
 import type { Metadata } from "next";
+import PublicScheduleShareButton from "@/components/branch/PublicScheduleShareButton";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Dashboard | Garment" };
@@ -120,6 +121,7 @@ export default async function BranchDashboardPage() {
           <div className="dash-cta">
             <Link href="/branch/combinations/new" className="btn-primary">Open the Fitting Room →</Link>
             <Link href="/branch/uniforms" className="btn-secondary">Add a uniform</Link>
+            <PublicScheduleShareButton className="btn-secondary" />
           </div>
         </div>
       </section>
@@ -197,6 +199,7 @@ export default async function BranchDashboardPage() {
           <p>Publish a schedule and your congregation can browse this Sunday&rsquo;s looks from a shareable viewer code.</p>
           <div className="links">
             <Link href="/branch/schedule">Publish a schedule <span>→</span></Link>
+            <PublicScheduleShareButton className="btn-secondary" label="Copy public link" style={{ justifyContent: "center" }} />
             <Link href="/branch/combinations/new">Compose a look <span>＋</span></Link>
             <Link href="/branch/departments">Manage the roster <span>→</span></Link>
           </div>

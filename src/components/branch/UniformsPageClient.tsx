@@ -1,25 +1,27 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Shirt, Archive, ArchiveRestore, Trash2, Upload, X, Loader2, AlertTriangle, Sparkles, RefreshCw, ChevronRight } from "lucide-react";
+import { Plus, Shirt, Archive, ArchiveRestore, Trash2, Upload, X, Loader2, AlertTriangle, Sparkles, RefreshCw, ChevronRight, Edit3, MoreHorizontal, CalendarPlus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import type { UniformCategory } from "@/types/database";
+import type { Gender, UniformCategory } from "@/types/database";
 
 type Department = { id: string; name: string };
 type Uniform = {
   id: string; name: string; category: UniformCategory; department_id: string;
+  gender: Gender | null;
   image_url: string | null; raw_image_url: string | null; is_archived: boolean;
   bg_removed: boolean; storage_path: string | null; description: string | null; created_at: string;
   color: string | null; color_label: string | null;
   departments: { name: string } | null;
   _bgRemoving?: boolean; // client-only ephemeral flag
+  _bgError?: string; // client-only ephemeral flag
 };
 
 type PreviewStatus = "none" | "processing" | "ready" | "failed";
 type Combination = {
   id: string; name: string; description: string | null;
-  department_id: string; canvas_data: Record<string, unknown> | null; preview_url: string | null; created_at: string;
+  department_id: string; gender: Gender | null; canvas_data: Record<string, unknown> | null; preview_url: string | null; created_at: string;
   departments: { name: string } | null;
   preview_status: PreviewStatus;
   male_composite_url: string | null;
@@ -35,6 +37,7 @@ type PreviewStatusResponse = {
   male_gif_url: string | null;
   female_gif_url: string | null;
 };
+type ScheduleOption = { id: string; service_date: string; title: string };
 
 const CATEGORIES: { value: UniformCategory; label: string }[] = [
   { value: "top",       label: "Top" },
@@ -70,8 +73,8 @@ function StatusBadge({ status }: { status: PreviewStatus }) {
   };
   const m = map[status];
   return (
-    <span className="badge" style={{
-      position: "absolute", top: "0.7rem", left: "0.7rem", zIndex: 3,
+    <span style={{
+      display: "inline-flex", width: "fit-content", marginBottom: "0.35rem",
       fontSize: "0.5rem", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700,
       color: "#fff", background: m.color, padding: "0.25rem 0.5rem", borderRadius: 20,
     }}>{m.label}</span>
@@ -79,10 +82,11 @@ function StatusBadge({ status }: { status: PreviewStatus }) {
 }
 
 // ─── A single combined look (plate with live preview) ───────────────────────────
-function LookPlate({ combo, idx, onDelete, onPreviewUpdate }: {
+function LookPlate({ combo, idx, onDelete, onPreviewUpdate, onAssign }: {
   combo: Combination; idx: number;
   onDelete: (id: string) => void;
   onPreviewUpdate: (id: string, s: PreviewStatusResponse) => void;
+  onAssign: (combo: Combination) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -120,7 +124,7 @@ function LookPlate({ combo, idx, onDelete, onPreviewUpdate }: {
     setBusy(true);
     const res = await fetch(`/api/branch/combinations/${combo.id}/generate-preview`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gender: "both", force }),
+      body: JSON.stringify({ gender: combo.gender ?? "both", force }),
     });
     if (res.ok) {
       onPreviewUpdate(combo.id, {
@@ -144,9 +148,11 @@ function LookPlate({ combo, idx, onDelete, onPreviewUpdate }: {
   return (
     <Link href={`/branch/combinations/${combo.id}`} className="plate-look ward-plate">
       <span className="no">{roman}</span>
-      <StatusBadge status={combo.preview_status ?? "none"} />
 
       <div className="ward-plate-actions">
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAssign(combo); }} disabled={busy} title="Assign to service">
+          <CalendarPlus size={13} />
+        </button>
         {(combo.preview_status === "none" || combo.preview_status === "failed") && (
           <button onClick={(e) => handleGenerate(e, combo.preview_status === "failed")} disabled={busy} title="Generate AI preview">
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
@@ -171,6 +177,7 @@ function LookPlate({ combo, idx, onDelete, onPreviewUpdate }: {
       )}
 
       <div className="cap">
+        <StatusBadge status={combo.preview_status ?? "none"} />
         <div className="t">{combo.name}</div>
         {combo.departments?.name && <div className="d">{combo.departments.name}</div>}
       </div>
@@ -187,23 +194,31 @@ export default function UniformsPageClient() {
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
   const [filterDept, setFilterDept] = useState<string>("all");
+  const [showCreateLook, setShowCreateLook] = useState(false);
 
   // Upload form
   const [showForm, setShowForm] = useState(false);
-  const [formMode, setFormMode] = useState<"photo" | "color">("photo");
   const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState<UniformCategory>("top");
   const [formDept, setFormDept] = useState("");
+  const [formGender, setFormGender] = useState<Gender>("female");
   const [formDesc, setFormDesc] = useState("");
   const [formFile, setFormFile] = useState<File | null>(null);
   const [formPreview, setFormPreview] = useState<string | null>(null);
-  const [formColor, setFormColor] = useState("#7C4E78");
-  const [formColorLabel, setFormColorLabel] = useState("");
   const [uploading, setUploading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingPiece, setEditingPiece] = useState<Uniform | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [assigningLook, setAssigningLook] = useState<Combination | null>(null);
+  const [scheduleOptions, setScheduleOptions] = useState<ScheduleOption[]>([]);
+  const [selectedScheduleId, setSelectedScheduleId] = useState("");
+  const [assignGender, setAssignGender] = useState<Gender | "">("");
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   // Looks + departments load once
   const fetchLooks = useCallback(async () => {
@@ -235,43 +250,10 @@ export default function UniformsPageClient() {
     setFormError(null);
   }
 
-  async function handleColorCreate() {
-    if (!formName.trim()) { setFormError("Name is required"); return; }
-    if (!formDept) { setFormError("Select a department"); return; }
-    if (!/^#[0-9a-fA-F]{6}$/.test(formColor)) { setFormError("Pick a colour"); return; }
-
-    setUploading(true);
-    setFormError(null);
-    try {
-      const createRes = await fetch("/api/branch/uniforms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formName.trim(), category: formCategory, department_id: formDept,
-          description: formDesc.trim() || null,
-          color: formColor, color_label: formColorLabel.trim() || null,
-        }),
-      });
-      const created = await createRes.json();
-      if (!createRes.ok) { setFormError(created.error ?? "Failed to save"); setUploading(false); return; }
-
-      const dept = departments.find(d => d.id === formDept);
-      const newUniform: Uniform = { ...created, departments: dept ? { name: dept.name } : null };
-      setUniforms((prev) => [newUniform, ...prev]);
-      resetForm();
-      setUploading(false);
-      setView("pieces");
-    } catch (err) {
-      console.error(err);
-      setFormError("Failed to save. Please try again.");
-      setUploading(false);
-    }
-  }
-
   async function handleUpload() {
-    if (formMode === "color") return handleColorCreate();
     if (!formName.trim()) { setFormError("Name is required"); return; }
     if (!formDept) { setFormError("Select a department"); return; }
+    if (!formGender) { setFormError("Select a gender"); return; }
     if (!formFile) { setFormError("Upload a uniform image"); return; }
 
     setUploading(true);
@@ -295,7 +277,7 @@ export default function UniformsPageClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formName.trim(), category: formCategory, department_id: formDept,
+          name: formName.trim(), category: formCategory, department_id: formDept, gender: formGender,
           description: formDesc.trim() || null, storage_path: storagePath,
           raw_image_url: rawUrl, image_url: rawUrl, bg_removed: false,
         }),
@@ -329,17 +311,17 @@ export default function UniformsPageClient() {
       if (res.ok && data.image_url) {
         setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, image_url: data.image_url, bg_removed: true, _bgRemoving: false } : u));
       } else {
-        setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, _bgRemoving: false } : u));
+        setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, _bgRemoving: false, _bgError: data.error ?? "Background removal failed" } : u));
       }
     } catch {
-      setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, _bgRemoving: false } : u));
+      setUniforms((prev) => prev.map((u) => u.id === uniformId ? { ...u, _bgRemoving: false, _bgError: "Background removal failed" } : u));
     }
   }
 
   function resetForm() {
-    setShowForm(false); setFormMode("photo"); setFormName(""); setFormCategory("top");
-    setFormDept(""); setFormDesc(""); setFormFile(null);
-    setFormPreview(null); setFormColor("#7C4E78"); setFormColorLabel("");
+    setShowForm(false); setFormName(""); setFormCategory("top");
+    setFormDept(""); setFormGender("female"); setFormDesc(""); setFormFile(null);
+    setFormPreview(null);
     setFormError(null); setUploading(false);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -360,6 +342,92 @@ export default function UniformsPageClient() {
     setDeletingId(null);
   }
 
+  function openEditPiece(uniform: Uniform) {
+    setEditingPiece(uniform);
+    setEditError(null);
+  }
+
+  async function handleSaveEdit() {
+    if (!editingPiece) return;
+    if (!editingPiece.name.trim()) { setEditError("Name is required"); return; }
+    if (!editingPiece.department_id) { setEditError("Select a department"); return; }
+    if (!editingPiece.gender) { setEditError("Select a gender"); return; }
+
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/branch/uniforms/${editingPiece.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editingPiece.name.trim(),
+          category: editingPiece.category,
+          department_id: editingPiece.department_id,
+          gender: editingPiece.gender,
+          description: editingPiece.description?.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEditError(data.error ?? "Failed to save"); return; }
+
+      const dept = departments.find((d) => d.id === data.department_id);
+      setUniforms((prev) => prev.map((u) => u.id === data.id ? { ...u, ...data, departments: dept ? { name: dept.name } : u.departments } : u));
+      setEditingPiece(null);
+    } catch {
+      setEditError("Failed to save. Please try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function openAssignLook(combo: Combination) {
+    setAssigningLook(combo);
+    setAssignError(null);
+    setSelectedScheduleId("");
+    setAssignGender(combo.gender ?? "");
+    try {
+      const res = await fetch("/api/branch/schedules");
+      const data = await res.json();
+      const today = new Date().toISOString().split("T")[0];
+      const list = Array.isArray(data)
+        ? data.filter((s) => s.service_date >= today).map((s) => ({ id: s.id, service_date: s.service_date, title: s.title }))
+        : [];
+      setScheduleOptions(list);
+      setSelectedScheduleId(list[0]?.id ?? "");
+    } catch {
+      setAssignError("Failed to load services");
+    }
+  }
+
+  async function handleAssignLook() {
+    if (!assigningLook || !selectedScheduleId) return;
+    const gender = assigningLook.gender ?? assignGender;
+    if (!gender) {
+      setAssignError("Choose a gender before assigning this look");
+      return;
+    }
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      const res = await fetch(`/api/branch/schedules/${selectedScheduleId}/assignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          department_id: assigningLook.department_id,
+          combination_id: assigningLook.id,
+          gender,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setAssignError(data.error ?? "Failed to assign look"); return; }
+      setAssigningLook(null);
+    } catch {
+      setAssignError("Failed to assign look. Please try again.");
+    } finally {
+      setAssigning(false);
+    }
+  }
+
   const handleDeleteLook = (id: string) => setCombinations((p) => p.filter((c) => c.id !== id));
   const handlePreviewUpdate = useCallback((id: string, s: PreviewStatusResponse) => {
     setCombinations((p) => p.map((c) => c.id === id ? { ...c, ...s } : c));
@@ -375,7 +443,7 @@ export default function UniformsPageClient() {
     outer: "var(--color-primary)", head: "var(--color-warning)",
   };
 
-  const openUpload = () => { setShowForm(true); setFormDept(departments[0]?.id ?? ""); };
+  const openUpload = () => { setShowForm(true); setFormDept(departments[0]?.id ?? ""); setFormGender("female"); };
 
   return (
     <div style={{ maxWidth: 1040, margin: "0 auto" }}>
@@ -414,14 +482,11 @@ export default function UniformsPageClient() {
           ) : (
             <>
               <button onClick={openUpload} className="btn-secondary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem" }}>
-                <Plus size={15} /> Add uniform
+                <Plus size={15} /> Add piece
               </button>
-              <Link href="/branch/combinations/palette/new" className="btn-primary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem", textDecoration: "none" }}>
-                <Sparkles size={15} /> Compose palette
-              </Link>
-              <Link href="/branch/combinations/new" className="btn-secondary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem", textDecoration: "none" }}>
-                Advanced builder <ChevronRight size={14} />
-              </Link>
+              <button onClick={() => setShowCreateLook(true)} className="btn-primary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem" }}>
+                <Sparkles size={15} /> Create look
+              </button>
             </>
           )}
         </div>
@@ -455,14 +520,14 @@ export default function UniformsPageClient() {
             <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", maxWidth: 360, margin: "0 auto 1.5rem" }}>
               Compose your first look from this wardrobe&rsquo;s pieces, then let the studio render it.
             </p>
-            <Link href="/branch/combinations/palette/new" className="btn-primary" style={{ padding: "0.7rem 1.5rem", textDecoration: "none" }}>
-              <Sparkles size={16} /> Compose palette
-            </Link>
+            <button onClick={() => setShowCreateLook(true)} className="btn-primary" style={{ padding: "0.7rem 1.5rem" }}>
+              <Sparkles size={16} /> Create look
+            </button>
           </div>
         ) : (
           <div className="ward-gallery">
             {looks.map((c, i) => (
-              <LookPlate key={c.id} combo={c} idx={i} onDelete={handleDeleteLook} onPreviewUpdate={handlePreviewUpdate} />
+              <LookPlate key={c.id} combo={c} idx={i} onDelete={handleDeleteLook} onPreviewUpdate={handlePreviewUpdate} onAssign={openAssignLook} />
             ))}
           </div>
         )
@@ -502,6 +567,11 @@ export default function UniformsPageClient() {
                   {!u._bgRemoving && u.bg_removed && (
                     <div style={{ position: "absolute", top: "0.5rem", left: "0.5rem", background: "var(--color-sage)", color: "#fff", fontSize: "0.6rem", fontWeight: 700, padding: "0.2rem 0.45rem", borderRadius: "var(--radius-full)", textTransform: "uppercase" }}>✓ BG removed</div>
                   )}
+                  {u._bgError && (
+                    <div style={{ position: "absolute", left: "0.5rem", right: "0.5rem", bottom: "0.5rem", background: "var(--color-error-bg)", color: "var(--color-error)", fontSize: "0.65rem", fontWeight: 700, padding: "0.35rem 0.5rem", borderRadius: "var(--radius-md)" }}>
+                      {u._bgError}
+                    </div>
+                  )}
                   {u.is_archived && (
                     <div style={{ position: "absolute", top: "0.5rem", right: "0.5rem", background: "var(--color-warning)", color: "#fff", fontSize: "0.65rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "var(--radius-full)", textTransform: "uppercase" }}>Archived</div>
                   )}
@@ -513,10 +583,16 @@ export default function UniformsPageClient() {
                     {u.departments?.name && (
                       <span style={{ fontSize: "0.7rem", fontWeight: 500, padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", background: "var(--color-primary-light)", color: "var(--color-primary-dark)" }}>{u.departments.name}</span>
                     )}
+                    {u.gender && (
+                      <span style={{ fontSize: "0.7rem", fontWeight: 600, padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", background: "var(--color-bg-elevated)", color: "var(--color-text-secondary)", textTransform: "capitalize" }}>{u.gender}</span>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: "0.375rem" }}>
-                    <button onClick={() => handleArchive(u)} title={u.is_archived ? "Unarchive" : "Archive"} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem", padding: "0.4rem", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "transparent", cursor: "pointer", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                      {u.is_archived ? <><ArchiveRestore size={12} /> Restore</> : <><Archive size={12} /> Archive</>}
+                    <button onClick={() => openEditPiece(u)} title="Edit piece" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem", padding: "0.4rem", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "transparent", cursor: "pointer", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      <Edit3 size={12} /> Edit
+                    </button>
+                    <button onClick={() => handleArchive(u)} title={u.is_archived ? "Restore" : "Archive"} style={{ padding: "0.4rem 0.55rem", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-muted)", display: "flex" }}>
+                      {u.is_archived ? <ArchiveRestore size={13} /> : <MoreHorizontal size={13} />}
                     </button>
                     <button onClick={() => handleDeletePiece(u.id)} disabled={deletingId === u.id} title="Delete" style={{ padding: "0.4rem 0.6rem", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-muted)", display: "flex" }}
                       onMouseEnter={(e) => { e.currentTarget.style.color = "var(--color-error)"; e.currentTarget.style.borderColor = "var(--color-error)"; }}
@@ -540,57 +616,32 @@ export default function UniformsPageClient() {
             <h2 className="display-serif" style={{ fontSize: "1.5rem", marginBottom: "1.25rem" }}>Add a <em className="serif-em">piece</em></h2>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {/* Photo vs Colour mode */}
-              <div className="gender-toggle" role="tablist" aria-label="Piece type" style={{ alignSelf: "flex-start" }}>
-                <button type="button" role="tab" aria-selected={formMode === "photo"} className={formMode === "photo" ? "on" : ""} onClick={() => { setFormMode("photo"); setFormError(null); }}>📷 Photo</button>
-                <button type="button" role="tab" aria-selected={formMode === "color"} className={formMode === "color" ? "on" : ""} onClick={() => { setFormMode("color"); setFormError(null); }}>🎨 Colour</button>
-              </div>
-
-              {formMode === "photo" ? (
-                <div>
-                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.4rem" }}>
-                    Image <span style={{ color: "var(--color-error)" }}>*</span>
-                  </label>
-                  <div
-                    onClick={() => fileRef.current?.click()}
-                    style={{
-                      border: `2px dashed ${formPreview ? "var(--color-primary-dark)" : "var(--color-border)"}`,
-                      borderRadius: "var(--radius-md)", padding: "1.25rem", textAlign: "center", cursor: "pointer",
-                      background: formPreview ? "var(--color-primary-light)" : "var(--color-bg-elevated)", transition: "all 0.15s",
-                    }}
-                  >
-                    {formPreview ? (
-                      <div style={{ position: "relative", width: 100, height: 100, margin: "0 auto" }}>
-                        <Image src={formPreview} alt="Preview" fill style={{ objectFit: "contain" }} unoptimized />
-                      </div>
-                    ) : (
-                      <div>
-                        <Upload size={24} color="var(--color-text-faint)" style={{ margin: "0 auto 0.5rem" }} />
-                        <p style={{ fontSize: "0.82rem", color: "var(--color-text-muted)", margin: 0 }}>Click to upload image</p>
-                        <p style={{ fontSize: "0.75rem", color: "var(--color-text-faint)", margin: "0.25rem 0 0" }}>PNG, JPG, WEBP</p>
-                      </div>
-                    )}
-                  </div>
-                  <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
-                </div>
-              ) : (
-                <div>
-                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.4rem" }}>
-                    Colour <span style={{ color: "var(--color-error)" }}>*</span>
-                  </label>
-                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "stretch" }}>
-                    <input type="color" value={formColor} onChange={(e) => setFormColor(e.target.value)} aria-label="Pick colour"
-                      style={{ width: 64, height: 48, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "none", cursor: "pointer", padding: 2, flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <input value={formColorLabel} onChange={(e) => setFormColorLabel(e.target.value)} placeholder="Colour name (optional) — e.g. Baltic Sea"
-                        style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }} />
-                      <p style={{ fontSize: "0.72rem", color: "var(--color-text-faint)", margin: "0.4rem 0 0" }}>
-                        The AI renders a real garment in this colour for the category you choose.
-                      </p>
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.4rem" }}>
+                  Image <span style={{ color: "var(--color-error)" }}>*</span>
+                </label>
+                <div
+                  onClick={() => fileRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${formPreview ? "var(--color-primary-dark)" : "var(--color-border)"}`,
+                    borderRadius: "var(--radius-md)", padding: "1.25rem", textAlign: "center", cursor: "pointer",
+                    background: formPreview ? "var(--color-primary-light)" : "var(--color-bg-elevated)", transition: "all 0.15s",
+                  }}
+                >
+                  {formPreview ? (
+                    <div style={{ position: "relative", width: 100, height: 100, margin: "0 auto" }}>
+                      <Image src={formPreview} alt="Preview" fill style={{ objectFit: "contain" }} unoptimized />
                     </div>
-                  </div>
+                  ) : (
+                    <div>
+                      <Upload size={24} color="var(--color-text-faint)" style={{ margin: "0 auto 0.5rem" }} />
+                      <p style={{ fontSize: "0.82rem", color: "var(--color-text-muted)", margin: 0 }}>Click to upload image</p>
+                      <p style={{ fontSize: "0.75rem", color: "var(--color-text-faint)", margin: "0.25rem 0 0" }}>PNG, JPG, WEBP</p>
+                    </div>
+                  )}
                 </div>
-              )}
+                <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
+              </div>
 
               <div>
                 <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Name <span style={{ color: "var(--color-error)" }}>*</span></label>
@@ -608,12 +659,20 @@ export default function UniformsPageClient() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Department <span style={{ color: "var(--color-error)" }}>*</span></label>
-                  <select value={formDept} onChange={(e) => setFormDept(e.target.value)}
+                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender <span style={{ color: "var(--color-error)" }}>*</span></label>
+                  <select value={formGender} onChange={(e) => setFormGender(e.target.value as Gender)}
                     style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
-                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Department <span style={{ color: "var(--color-error)" }}>*</span></label>
+                <select value={formDept} onChange={(e) => setFormDept(e.target.value)}
+                  style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
               </div>
 
               <div>
@@ -629,10 +688,110 @@ export default function UniformsPageClient() {
                 <button onClick={handleUpload} disabled={uploading} className="btn-primary" style={{ flex: 1, padding: "0.75rem" }}>
                   {uploading
                     ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
-                    : formMode === "color" ? <>🎨 Save colour</> : <><Upload size={15} /> Upload piece</>}
+                    : <><Upload size={15} /> Upload piece</>}
                 </button>
                 <button onClick={resetForm} className="btn-back" style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.75rem 1.1rem" }}>Cancel</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateLook && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(33,28,25,0.5)", backdropFilter: "blur(3px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div className="card" style={{ width: "100%", maxWidth: 460, padding: "1.75rem", position: "relative" }}>
+            <button onClick={() => setShowCreateLook(false)} style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}><X size={18} /></button>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>Create look</div>
+            <h2 className="display-serif" style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>Choose a <em className="serif-em">starting point</em></h2>
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              <Link href="/branch/combinations/palette/new" className="btn-primary" style={{ justifyContent: "space-between", padding: "0.85rem 1rem", textDecoration: "none" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}><Sparkles size={16} /> Use colour palette</span>
+                <ChevronRight size={16} />
+              </Link>
+              <Link href="/branch/combinations/new" className="btn-secondary" style={{ justifyContent: "space-between", padding: "0.85rem 1rem", textDecoration: "none" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}><Shirt size={16} /> Use uploaded pieces</span>
+                <ChevronRight size={16} />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingPiece && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(33,28,25,0.5)", backdropFilter: "blur(3px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div className="card" style={{ width: "100%", maxWidth: 520, padding: "1.75rem", position: "relative" }}>
+            <button onClick={() => setEditingPiece(null)} style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}><X size={18} /></button>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>The Wardrobe</div>
+            <h2 className="display-serif" style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>Edit <em className="serif-em">piece</em></h2>
+            <div style={{ display: "grid", gap: "0.9rem" }}>
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Name</label>
+                <input value={editingPiece.name} onChange={(e) => setEditingPiece({ ...editingPiece, name: e.target.value })} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.9rem", outline: "none", background: "var(--color-bg-elevated)" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Category</label>
+                  <select value={editingPiece.category} onChange={(e) => setEditingPiece({ ...editingPiece, category: e.target.value as UniformCategory })} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                    {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender</label>
+                  <select value={editingPiece.gender ?? ""} onChange={(e) => setEditingPiece({ ...editingPiece, gender: e.target.value as Gender })} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                    <option value="">Select gender</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Department</label>
+                <select value={editingPiece.department_id} onChange={(e) => setEditingPiece({ ...editingPiece, department_id: e.target.value })} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Description</label>
+                <input value={editingPiece.description ?? ""} onChange={(e) => setEditingPiece({ ...editingPiece, description: e.target.value })} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }} />
+              </div>
+              {editError && <p style={{ color: "var(--color-error)", fontSize: "0.82rem", margin: 0 }}>{editError}</p>}
+              <button onClick={handleSaveEdit} disabled={savingEdit} className="btn-primary" style={{ padding: "0.75rem" }}>
+                {savingEdit ? <><Loader2 size={15} className="animate-spin" /> Saving...</> : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assigningLook && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(33,28,25,0.5)", backdropFilter: "blur(3px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div className="card" style={{ width: "100%", maxWidth: 460, padding: "1.75rem", position: "relative" }}>
+            <button onClick={() => setAssigningLook(null)} style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}><X size={18} /></button>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>{assigningLook.departments?.name ?? "Look"}</div>
+            <h2 className="display-serif" style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>Assign <em className="serif-em">{assigningLook.name}</em></h2>
+            <div style={{ display: "grid", gap: "0.9rem" }}>
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Service</label>
+                <select value={selectedScheduleId} onChange={(e) => setSelectedScheduleId(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                  {scheduleOptions.map((s) => (
+                    <option key={s.id} value={s.id}>{s.service_date} - {s.title}</option>
+                  ))}
+                </select>
+              </div>
+              {!assigningLook.gender && (
+                <div>
+                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender</label>
+                  <select value={assignGender} onChange={(e) => setAssignGender(e.target.value as Gender | "")} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                    <option value="">Select gender...</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </div>
+              )}
+              {assignError && <p style={{ color: "var(--color-error)", fontSize: "0.82rem", margin: 0 }}>{assignError}</p>}
+              <button onClick={handleAssignLook} disabled={assigning || !selectedScheduleId || !(assigningLook.gender ?? assignGender)} className="btn-primary" style={{ padding: "0.75rem" }}>
+                {assigning ? <><Loader2 size={15} className="animate-spin" /> Assigning...</> : <><CalendarPlus size={15} /> Assign to service</>}
+              </button>
             </div>
           </div>
         </div>

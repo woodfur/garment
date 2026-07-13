@@ -30,25 +30,6 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-
-  // ── Viewer routes: require branch session cookie ───────────────────────────
-  if (pathname.match(/^\/view\/.+/)) {
-    const viewerSession = request.cookies.get("polar_branch_session");
-    if (!viewerSession) {
-      return NextResponse.redirect(new URL("/view", request.url));
-    }
-    try {
-      const sess = JSON.parse(viewerSession.value);
-      if (!sess.branchId || new Date(sess.expiresAt) < new Date()) {
-        const res = NextResponse.redirect(new URL("/view", request.url));
-        res.cookies.delete("polar_branch_session");
-        return res;
-      }
-    } catch {
-      return NextResponse.redirect(new URL("/view", request.url));
-    }
-  }
-
   return NextResponse.next();
 }
 

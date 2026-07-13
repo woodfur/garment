@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 import { revalidateTag } from "next/cache";
+import type { Gender } from "@/types/database";
+
+function isGender(value: unknown): value is Gender {
+  return value === "male" || value === "female";
+}
 
 export async function GET(request: Request) {
   const result = await requireBranchLeader();
@@ -11,15 +16,17 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("department_id");
+    const gender = searchParams.get("gender");
 
     const admin = createAdminClient();
     let query = (admin as any)
       .from("combinations")
-      .select("id, name, description, department_id, canvas_data, preview_url, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, created_by, created_at, departments(name)")
+      .select("id, name, description, department_id, gender, canvas_data, preview_url, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, created_by, created_at, departments(name)")
       .eq("branch_id", auth.branchId)
       .order("created_at", { ascending: false });
 
     if (departmentId) query = query.eq("department_id", departmentId);
+    if (isGender(gender)) query = query.eq("gender", gender);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -37,10 +44,11 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, description, department_id, canvas_data, preview_url, items } = body;
+    const { name, description, department_id, gender, canvas_data, preview_url, items } = body;
 
     if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (!department_id) return NextResponse.json({ error: "Department is required" }, { status: 400 });
+    if (!isGender(gender)) return NextResponse.json({ error: "Gender is required" }, { status: 400 });
 
     // Verify department belongs to this branch
     const admin = createAdminClient();
@@ -59,6 +67,7 @@ export async function POST(request: Request) {
         name: name.trim(),
         description: description?.trim() || null,
         department_id,
+        gender,
         canvas_data: canvas_data || null,
         preview_url: preview_url || null,
         branch_id: auth.branchId,

@@ -39,8 +39,9 @@ export default async function PublicViewerPage({ params }: PageProps) {
       id, service_date, title, notes,
       assignments:schedule_assignments(
         id,
+        gender,
         department:departments(id, name),
-        combination:combinations(id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url)
+        combination:combinations(id, name, gender, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url)
       )
     `
     )
@@ -82,6 +83,13 @@ export default async function PublicViewerPage({ params }: PageProps) {
               {schedule.notes && (
                 <p className="viewer-schedule-notes">{schedule.notes}</p>
               )}
+              <a
+                href={`/api/public/schedules/${schedule.id}/package?code=${encodeURIComponent(code)}`}
+                className="viewer-download-btn"
+                style={{ display: "inline-flex", marginTop: "0.75rem", textDecoration: "none" }}
+              >
+                Download package
+              </a>
             </div>
 
             {(!schedule.assignments || schedule.assignments.length === 0) && (
@@ -89,21 +97,38 @@ export default async function PublicViewerPage({ params }: PageProps) {
             )}
 
             <div className="viewer-assignments">
-              {schedule.assignments?.map((a: any) => (
+              {schedule.assignments?.map((a: any) => {
+                const gender = a.gender === "male" || a.gender === "female" ? a.gender : null;
+                const imageUrl = gender === "male"
+                  ? a.combination?.male_composite_url
+                  : gender === "female"
+                    ? a.combination?.female_composite_url
+                    : null;
+                const videoUrl = gender === "male"
+                  ? a.combination?.male_gif_url
+                  : gender === "female"
+                    ? a.combination?.female_gif_url
+                    : null;
+                const assetUrl = imageUrl || videoUrl;
+                return (
                 <div key={a.id} className="viewer-assignment">
                   <div className="viewer-dept-label">{a.department?.name}</div>
+                  {gender && (
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", textTransform: "capitalize", marginBottom: "0.5rem" }}>
+                      {gender}
+                    </div>
+                  )}
 
-                  {a.combination?.preview_status === "ready" ? (
+                  {a.combination?.preview_status === "ready" && assetUrl && gender ? (
                     <div className="viewer-previews">
-                      {(a.combination.male_composite_url || a.combination.male_gif_url) && (
                       <div className="viewer-preview-item">
-                        <span className="viewer-gender-label">Male</span>
-                        {a.combination.male_composite_url ? (
+                        <span className="viewer-gender-label">{gender === "male" ? "Male" : "Female"}</span>
+                        {imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={a.combination.male_composite_url} alt={`${a.combination.name} male preview`} className="viewer-video" />
+                          <img src={imageUrl} alt={`${a.combination.name} ${gender} preview`} className="viewer-video" />
                         ) : (
                           <video
-                            src={a.combination.male_gif_url}
+                            src={videoUrl}
                             autoPlay
                             loop
                             muted
@@ -112,39 +137,12 @@ export default async function PublicViewerPage({ params }: PageProps) {
                           />
                         )}
                         <a
-                          href={a.combination.male_composite_url || a.combination.male_gif_url}
-                          download
+                          href={`/api/public/combinations/${a.combination.id}/download?gender=${gender}&code=${encodeURIComponent(code)}`}
                           className="viewer-download-btn"
                         >
                           ↓ Download
                         </a>
                       </div>
-                      )}
-                      {(a.combination.female_composite_url || a.combination.female_gif_url) && (
-                      <div className="viewer-preview-item">
-                        <span className="viewer-gender-label">Female</span>
-                        {a.combination.female_composite_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={a.combination.female_composite_url} alt={`${a.combination.name} female preview`} className="viewer-video" />
-                        ) : (
-                          <video
-                            src={a.combination.female_gif_url}
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className="viewer-video"
-                          />
-                        )}
-                        <a
-                          href={a.combination.female_composite_url || a.combination.female_gif_url}
-                          download
-                          className="viewer-download-btn"
-                        >
-                          ↓ Download
-                        </a>
-                      </div>
-                      )}
                     </div>
                   ) : (
                     <div className="viewer-preview-pending">
@@ -153,7 +151,8 @@ export default async function PublicViewerPage({ params }: PageProps) {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
