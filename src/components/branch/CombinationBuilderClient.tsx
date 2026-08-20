@@ -304,24 +304,26 @@ export default function CombinationBuilderClient() {
             Only pieces for the selected department and gender will appear.
           </p>
 
-          {/* Gender selection — locks the look to one gender */}
+          {/* Gender selection — locks the look to one gender.
+              Selected styling is gated on genderLocked, not just activeGender: the latter
+              defaults to "male", so keying off it alone painted Male as chosen before any
+              gender had been picked, while pieces stayed unloaded because the fetch waits
+              on genderLocked. The button has to tell the truth about that state. */}
           <div className="gender-toggle" role="tablist" aria-label="Choose figure">
-            <button
-              role="tab"
-              aria-selected={activeGender === "male"}
-              className={activeGender === "male" ? "on" : ""}
-              onClick={() => { setActiveGender("male"); setGenderLocked(true); setUniforms([]); }}
-            >
-              ♂ Male
-            </button>
-            <button
-              role="tab"
-              aria-selected={activeGender === "female"}
-              className={activeGender === "female" ? "on" : ""}
-              onClick={() => { setActiveGender("female"); setGenderLocked(true); setUniforms([]); }}
-            >
-              ♀ Female
-            </button>
+            {(["male", "female"] as Gender[]).map((gender) => {
+              const chosen = genderLocked && activeGender === gender;
+              return (
+                <button
+                  key={gender}
+                  role="tab"
+                  aria-selected={chosen}
+                  className={chosen ? "on" : ""}
+                  onClick={() => { setActiveGender(gender); setGenderLocked(true); setUniforms([]); }}
+                >
+                  {gender === "male" ? "♂ Male" : "♀ Female"}
+                </button>
+              );
+            })}
           </div>
           <p className="gender-caption">
             {genderLocked
