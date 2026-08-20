@@ -80,29 +80,25 @@ export async function DELETE(_request: Request, { params }: Params) {
   try {
     const admin = createAdminClient();
 
-    // Check counts before attempting — RESTRICT FK would cause a DB error anyway,
-    // but we want to return a user-friendly message
-    const [uniformsRes, combosRes] = await Promise.all([
-      (admin as any)
-        .from("uniforms")
-        .select("*", { count: "exact", head: true })
-        .eq("department_id", departmentId),
-      (admin as any)
-        .from("combinations")
-        .select("*", { count: "exact", head: true })
-        .eq("department_id", departmentId),
-    ]);
+    // Pieces and looks are both shareable, so deletion detaches the department instead of
+    // blocking. Anything scoped only to this department is left with none — it stops
+    // appearing in builders and is flagged "No department" so it is not lost.
+    for (const table of ["uniforms", "combinations"] as const) {
+      const { data: scoped } = await (admin as any)
+        .from(table)
+        .select("id, department_ids")
+        .eq("branch_id", auth.branchId)
+        .contains("department_ids", [departmentId]) as {
+          data: Array<{ id: string; department_ids: string[] }> | null;
+        };
 
-    const uniformCount = uniformsRes.count ?? 0;
-    const comboCount = combosRes.count ?? 0;
-
-    if (uniformCount > 0 || comboCount > 0) {
-      const parts = [];
-      if (uniformCount > 0) parts.push(`${uniformCount} uniform${uniformCount !== 1 ? "s" : ""}`);
-      if (comboCount > 0) parts.push(`${comboCount} combination${comboCount !== 1 ? "s" : ""}`);
-      return NextResponse.json(
-        { error: `Cannot delete: ${parts.join(" and ")} use this department` },
-        { status: 409 }
+      await Promise.all(
+        (scoped ?? []).map((row) =>
+          (admin as any)
+            .from(table)
+            .update({ department_ids: row.department_ids.filter((id) => id !== departmentId) })
+            .eq("id", row.id)
+        )
       );
     }
 

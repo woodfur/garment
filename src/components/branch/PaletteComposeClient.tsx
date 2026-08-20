@@ -4,16 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, ArrowUp, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { DepartmentChips } from "./PieceScopeFields";
 import type { Gender } from "@/types/database";
 
 type Department = { id: string; name: string; description: string | null };
-type PaletteColor = { id: string; hex: string; label: string };
+type PaletteColor = { id: string; hex: string };
 type CreatedLook = { id: string };
 
 const DEFAULT_COLORS: PaletteColor[] = [
-  { id: "color-1", hex: "#E8C2D1", label: "Pink" },
-  { id: "color-2", hex: "#E6D7C3", label: "Cream" },
-  { id: "color-3", hex: "#704832", label: "Brown" },
+  { id: "color-1", hex: "#E8C2D1" },
+  { id: "color-2", hex: "#E6D7C3" },
+  { id: "color-3", hex: "#704832" },
 ];
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -31,6 +32,9 @@ export default function PaletteComposeClient() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDeptId, setSelectedDeptId] = useState("");
+  // Extra departments that reuse this render instead of paying for their own.
+  const [shareWith, setShareWith] = useState<string[]>([]);
+  const [allDepartments, setAllDepartments] = useState(false);
   const [selectedGender, setSelectedGender] = useState<Gender>("female");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -56,7 +60,7 @@ export default function PaletteComposeClient() {
     [departments, selectedDeptId]
   );
 
-  function updateColor(id: string, patch: Partial<Pick<PaletteColor, "hex" | "label">>) {
+  function updateColor(id: string, patch: Partial<Pick<PaletteColor, "hex">>) {
     setColors((prev) => prev.map((color) => color.id === id ? { ...color, ...patch } : color));
   }
 
@@ -64,7 +68,7 @@ export default function PaletteComposeClient() {
     if (colors.length >= 5) return;
     setColors((prev) => [
       ...prev,
-      { id: `color-${Date.now()}`, hex: "#FFFFFF", label: "" },
+      { id: `color-${Date.now()}`, hex: "#FFFFFF" },
     ]);
   }
 
@@ -89,7 +93,6 @@ export default function PaletteComposeClient() {
     setError(null);
 
     if (!selectedDeptId) { setError("Select a department"); return; }
-    if (!name.trim()) { setError("Look name is required"); return; }
     if (colors.length < 2) { setError("Choose at least two colors"); return; }
     if (colors.some((color) => !HEX_RE.test(color.hex))) { setError("Every color needs a valid hex value"); return; }
 
@@ -101,11 +104,12 @@ export default function PaletteComposeClient() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || null,
-          department_id: selectedDeptId,
+          // The first id names the prompt; the rest simply share this one render.
+          department_ids: [selectedDeptId, ...shareWith.filter((id) => id !== selectedDeptId)],
+          all_departments: allDepartments,
           gender: selectedGender,
           palette: colors.map((color) => ({
             hex: color.hex,
-            label: color.label.trim() || null,
           })),
         }),
       });
@@ -216,12 +220,6 @@ export default function PaletteComposeClient() {
                       style={{ width: 60, height: 52, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "transparent", cursor: "pointer", padding: 2 }}
                     />
                     <div style={{ minWidth: 0 }}>
-                      <input
-                        value={color.label}
-                        onChange={(event) => updateColor(color.id, { label: event.target.value })}
-                        placeholder="Color name"
-                        style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)", marginBottom: "0.45rem" }}
-                      />
                       <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", borderRadius: "var(--radius-full)", padding: "0.2rem 0.55rem", background: color.hex, color: textOn(color.hex), fontSize: "0.72rem", fontWeight: 700 }}>
                         {color.hex}
                       </div>
@@ -255,7 +253,7 @@ export default function PaletteComposeClient() {
 
             <section>
               <div className="rule-label" style={{ marginBottom: "0.8rem" }}>
-                <span>Look name</span><span className="rule" />
+                <span>Look name <span style={{ color: "var(--color-text-faint)", fontWeight: 500 }}>(optional)</span></span><span className="rule" />
               </div>
               <div className="builder-form">
                 <input
@@ -273,6 +271,19 @@ export default function PaletteComposeClient() {
                 />
               </div>
             </section>
+
+            {selectedDeptId && (
+              <section style={{ marginTop: "1.5rem" }}>
+                <DepartmentChips
+                  departments={departments.filter((dept) => dept.id !== selectedDeptId)}
+                  departmentIds={shareWith}
+                  allDepartments={allDepartments}
+                  onChange={(next) => { setShareWith(next.departmentIds); setAllDepartments(next.allDepartments); }}
+                  label="Also share this look with"
+                  hint="Optional — these departments reuse this render instead of generating their own."
+                />
+              </section>
+            )}
 
             {error && <div className="builder-error" style={{ marginTop: "1rem" }}>{error}</div>}
 

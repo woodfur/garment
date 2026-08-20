@@ -1,3 +1,7 @@
+// Scoping rules live in scope.ts so the API routes, the UI, and this spec module cannot
+// drift apart. Explicit .ts extension — node cannot map .js onto .ts.
+import { matchesDepartment, pieceMatchesGender } from "./scope.ts";
+
 export const GENDERS = ["male", "female"];
 
 export const CREATE_LOOK_MODES = [
@@ -16,8 +20,8 @@ export function normalizeGender(value) {
 export function filterPiecesForLook(pieces, { departmentId, gender, category }) {
   return pieces.filter((piece) => {
     if (piece.is_archived) return false;
-    if (departmentId && piece.department_id !== departmentId) return false;
-    if (gender && piece.gender !== gender) return false;
+    if (!matchesDepartment(piece, departmentId ?? null)) return false;
+    if (!pieceMatchesGender(piece, gender ?? null)) return false;
     if (category && piece.category !== category) return false;
     return true;
   });
@@ -25,7 +29,9 @@ export function filterPiecesForLook(pieces, { departmentId, gender, category }) 
 
 export function filterAssignableCombinations(combinations, { departmentId, gender }) {
   return combinations.filter((combination) => {
-    if (departmentId && combination.department_id !== departmentId) return false;
+    // A look shared with this department is assignable to it — that is the whole point of
+    // shared looks: one render, reused instead of rebuilt per department.
+    if (!matchesDepartment(combination, departmentId ?? null)) return false;
     if (!gender) return false;
     return combination.gender === gender || combination.gender == null;
   });

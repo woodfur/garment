@@ -25,7 +25,9 @@ type LookRow = {
   female_composite_url: string | null;
   male_gif_url: string | null;
   female_gif_url: string | null;
-  departments: { name: string } | null;
+  // Resolved from department_ids rather than a `departments(name)` embed — migration 006
+  // dropped the foreign key PostgREST needed to resolve that embed.
+  department_names: string[];
 };
 
 export default async function BranchDashboardPage() {
@@ -76,11 +78,24 @@ export default async function BranchDashboardPage() {
       const adminClient = createAdminClient();
       const res = await (adminClient as any)
         .from("combinations")
-        .select("id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, departments(name)")
+        .select("id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, department_ids, all_departments")
         .eq("branch_id", branchId)
         .order("created_at", { ascending: false })
         .limit(6);
-      return (res.data ?? []) as LookRow[];
+
+      const deptRes = await adminClient
+        .from("departments")
+        .select("id, name")
+        .eq("branch_id", branchId);
+      const allNames = (deptRes.data ?? []) as Array<{ id: string; name: string }>;
+      const byId = new Map(allNames.map((d) => [d.id, d.name]));
+
+      return ((res.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+        ...row,
+        department_names: row.all_departments
+          ? allNames.map((d) => d.name)
+          : ((row.department_ids ?? []) as string[]).map((id) => byId.get(id)).filter(Boolean),
+      })) as LookRow[];
     },
     [`dashboard-looks-${branchId}`],
     { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
@@ -162,7 +177,7 @@ export default async function BranchDashboardPage() {
                 )}
                 <div className="cap">
                   <div className="t">{look.name}</div>
-                  {look.departments?.name && <div className="d">{look.departments.name}</div>}
+                  {look.department_names.length > 0 && <div className="d">{look.department_names.join(" · ")}</div>}
                 </div>
               </Link>
             );

@@ -2,10 +2,31 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 import { revalidateTag } from "next/cache";
-import type { Gender } from "@/types/database";
+import { isGender, isUuid, validatePieceScope } from "@/lib/scope";
 
-function isGender(value: unknown): value is Gender {
-  return value === "male" || value === "female";
+const SCOPE_COLUMNS = "department_ids, all_departments, genders";
+
+/**
+ * Confirm every department id belongs to the caller's branch.
+ *
+ * Returns the ids that did not match so the caller can reject the request — a piece must
+ * never be scoped to another branch's department.
+ */
+async function departmentsOutsideBranch(
+  admin: ReturnType<typeof createAdminClient>,
+  departmentIds: string[],
+  branchId: string
+): Promise<string[]> {
+  if (departmentIds.length === 0) return [];
+
+  const { data } = await admin
+    .from("departments")
+    .select("id")
+    .eq("branch_id", branchId)
+    .in("id", departmentIds);
+
+  const found = new Set((data ?? []).map((row: { id: string }) => row.id));
+  return departmentIds.filter((id) => !found.has(id));
 }
 
 export async function GET(request: Request) {
@@ -22,12 +43,20 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     let query = (admin as any)
       .from("uniforms")
-      .select("id, name, category, department_id, gender, image_url, raw_image_url, storage_path, description, is_archived, bg_removed, color, color_label, created_at, departments(name)")
+      .select(`id, name, category, ${SCOPE_COLUMNS}, image_url, raw_image_url, storage_path, description, is_archived, bg_removed, color, color_label, created_at`)
       .eq("branch_id", auth.branchId)
       .order("created_at", { ascending: false });
 
-    if (departmentId) query = query.eq("department_id", departmentId);
-    if (isGender(gender)) query = query.eq("gender", gender);
+    if (departmentId) {
+      // A piece matches when it lists the department OR is marked for all departments.
+      // departmentId is interpolated into an .or() filter string, so it is UUID-validated
+      // first — a past bug in this codebase came from interpolating unvalidated input here.
+      if (!isUuid(departmentId)) {
+        return NextResponse.json({ error: "Invalid department id" }, { status: 400 });
+      }
+      query = query.or(`all_departments.eq.true,department_ids.cs.{${departmentId}}`);
+    }
+    if (isGender(gender)) query = query.overlaps("genders", [gender]);
     if (!includeArchived) query = query.or("is_archived.eq.false,is_archived.is.null");
 
     const { data, error } = await query;
@@ -46,12 +75,17 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, category, department_id, gender, description, storage_path, image_url, raw_image_url, bg_removed, color, color_label } = body;
+    const { name, category, description, storage_path, image_url, raw_image_url, bg_removed, color, color_label } = body;
 
     if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (!category?.trim()) return NextResponse.json({ error: "Category is required" }, { status: 400 });
-    if (!department_id) return NextResponse.json({ error: "Department is required" }, { status: 400 });
-    if (!isGender(gender)) return NextResponse.json({ error: "Gender is required" }, { status: 400 });
+
+    let scope;
+    try {
+      scope = validatePieceScope(body);
+    } catch (scopeErr) {
+      return NextResponse.json({ error: (scopeErr as Error).message }, { status: 400 });
+    }
 
     // A piece is either a photo or a colour swatch — require at least one.
     const hexColor = typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color) ? color : null;
@@ -59,23 +93,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Provide either an image or a colour" }, { status: 400 });
     }
 
-    // Verify department belongs to this branch
     const admin = createAdminClient();
-    const { data: dept } = await (admin as any)
-      .from("departments")
-      .select("id")
-      .eq("id", department_id)
-      .eq("branch_id", auth.branchId)
-      .single();
-    if (!dept) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
+    const foreign = await departmentsOutsideBranch(admin, scope.department_ids, auth.branchId);
+    if (foreign.length > 0) {
+      return NextResponse.json({ error: "One or more departments are invalid" }, { status: 400 });
+    }
 
     const { data, error } = await (admin as any)
       .from("uniforms")
       .insert({
         name: name.trim(),
         category,
-        department_id,
-        gender,
+        department_ids: scope.department_ids,
+        all_departments: scope.all_departments,
+        genders: scope.genders,
         description: description?.trim() || null,
         storage_path: storage_path || null,
         image_url: image_url || null,

@@ -13,7 +13,6 @@ interface Department {
 interface Combination {
   id: string;
   name: string;
-  department_id: string;
   gender: "male" | "female" | null;
   preview_status: "none" | "processing" | "ready" | "failed";
   male_composite_url: string | null;
@@ -99,8 +98,10 @@ function AssignForm({
     fetch(`/api/branch/combinations?department_id=${selectedDeptId}`)
       .then((r) => r.json())
       .then((data: Combination[]) => {
+        // The server already scoped by department (shared looks included); only the
+        // gender needs narrowing here.
         const filtered = Array.isArray(data)
-          ? data.filter((c) => c.department_id === selectedDeptId && (c.gender === selectedGender || c.gender === null))
+          ? data.filter((c) => c.gender === selectedGender || c.gender === null)
           : [];
         setCombinations(filtered);
       })

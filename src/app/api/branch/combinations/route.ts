@@ -2,10 +2,27 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 import { revalidateTag } from "next/cache";
-import type { Gender } from "@/types/database";
+import { isGender, isUuid, validateDepartmentScope } from "@/lib/scope";
 
-function isGender(value: unknown): value is Gender {
-  return value === "male" || value === "female";
+/**
+ * Department names are resolved separately, not via a `departments(name)` embed: migration
+ * 006 dropped the combinations.department_id foreign key that PostgREST used to resolve
+ * that embed, and a look can now belong to several departments anyway.
+ */
+async function attachDepartmentNames(
+  admin: ReturnType<typeof createAdminClient>,
+  branchId: string,
+  rows: Array<{ department_ids?: string[] | null; all_departments?: boolean }>
+) {
+  const { data } = await admin.from("departments").select("id, name").eq("branch_id", branchId);
+  const names = new Map((data ?? []).map((d: { id: string; name: string }) => [d.id, d.name]));
+
+  return rows.map((row) => ({
+    ...row,
+    department_names: row.all_departments
+      ? (data ?? []).map((d: { name: string }) => d.name)
+      : (row.department_ids ?? []).map((id) => names.get(id)).filter(Boolean),
+  }));
 }
 
 export async function GET(request: Request) {
@@ -21,16 +38,23 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     let query = (admin as any)
       .from("combinations")
-      .select("id, name, description, department_id, gender, canvas_data, preview_url, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, created_by, created_at, departments(name)")
+      .select("id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, created_by, created_at")
       .eq("branch_id", auth.branchId)
       .order("created_at", { ascending: false });
 
-    if (departmentId) query = query.eq("department_id", departmentId);
+    if (departmentId) {
+      // Shared looks match any department they list, plus all-departments looks.
+      // UUID-validated before interpolation — see the same guard in the uniforms route.
+      if (!isUuid(departmentId)) {
+        return NextResponse.json({ error: "Invalid department id" }, { status: 400 });
+      }
+      query = query.or(`all_departments.eq.true,department_ids.cs.{${departmentId}}`);
+    }
     if (isGender(gender)) query = query.eq("gender", gender);
 
     const { data, error } = await query;
     if (error) throw error;
-    return NextResponse.json(data ?? []);
+    return NextResponse.json(await attachDepartmentNames(admin, auth.branchId, data ?? []));
   } catch (err) {
     console.error("[GET /api/branch/combinations]", err);
     return NextResponse.json({ error: "Failed to fetch combinations" }, { status: 500 });
@@ -44,21 +68,29 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, description, department_id, gender, canvas_data, preview_url, items } = body;
+    const { name, description, gender, canvas_data, preview_url, items } = body;
 
     if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
-    if (!department_id) return NextResponse.json({ error: "Department is required" }, { status: 400 });
     if (!isGender(gender)) return NextResponse.json({ error: "Gender is required" }, { status: 400 });
 
-    // Verify department belongs to this branch
+    let scope;
+    try {
+      scope = validateDepartmentScope(body);
+    } catch (scopeErr) {
+      return NextResponse.json({ error: (scopeErr as Error).message }, { status: 400 });
+    }
+
     const admin = createAdminClient();
-    const { data: dept } = await (admin as any)
-      .from("departments")
-      .select("id")
-      .eq("id", department_id)
-      .eq("branch_id", auth.branchId)
-      .single();
-    if (!dept) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
+    if (scope.department_ids.length > 0) {
+      const { data: valid } = await admin
+        .from("departments")
+        .select("id")
+        .eq("branch_id", auth.branchId)
+        .in("id", scope.department_ids);
+      if ((valid ?? []).length !== scope.department_ids.length) {
+        return NextResponse.json({ error: "One or more departments are invalid" }, { status: 400 });
+      }
+    }
 
     // Insert combination
     const { data: combination, error: comboErr } = await (admin as any)
@@ -66,7 +98,8 @@ export async function POST(request: Request) {
       .insert({
         name: name.trim(),
         description: description?.trim() || null,
-        department_id,
+        department_ids: scope.department_ids,
+        all_departments: scope.all_departments,
         gender,
         canvas_data: canvas_data || null,
         preview_url: preview_url || null,

@@ -65,7 +65,14 @@ export interface Database {
         Row: {
           id: string;
           branch_id: string;
-          department_id: string;
+          // Shared pieces: a uniform may serve several departments and both genders.
+          // `all_departments` also covers departments created later.
+          department_ids: string[];
+          all_departments: boolean;
+          genders: Gender[];
+          /** @deprecated superseded by department_ids/all_departments; no longer read or written */
+          department_id: string | null;
+          /** @deprecated superseded by genders; no longer read or written */
           gender: Gender | null;
           name: string;
           category: UniformCategory;
@@ -88,7 +95,11 @@ export interface Database {
         Row: {
           id: string;
           branch_id: string;
-          department_id: string;
+          // Shared looks: one render reused across departments instead of rebuilt per one.
+          department_ids: string[];
+          all_departments: boolean;
+          /** @deprecated superseded by department_ids/all_departments; no longer read or written */
+          department_id: string | null;
           gender: Gender | null;
           name: string;
           description: string | null;

@@ -1,24 +1,68 @@
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
-import { startCompositeChain, startColorBaseGeneration, type ZoneItem, type ColorZoneItem } from "@/lib/replicate";
+import {
+  checkAndMarkReady,
+  markPreviewFailed,
+  renderAndPersistLook,
+} from "@/lib/preview-render";
+import type { LookColorItem, LookPhotoItem } from "@/lib/look-prompt";
+import { baseFigureUrlFor } from "@/lib/mannequin-config";
 import { ZONE_LAYER_ORDER } from "@/types/zones";
-import { MANNEQUIN_MALE_URL, MANNEQUIN_FEMALE_URL, MANNEQUIN_FEMALE_TWO_PIECE_URL } from "@/lib/mannequin-config";
 import type { Gender } from "@/types/database";
+
+// A full-body gpt-image-2 render at high quality runs well past the default budget.
+export const maxDuration = 300;
+
+/** Rough wall-clock estimate shown in the UI while the render runs. */
+const ESTIMATED_SECONDS = 90;
 
 type CombinationZoneItem = {
   gender: Gender;
   zone: string;
   uniform_id: string;
-  uniform: { id: string; name: string; image_url: string | null; bg_removed: boolean; category: string; color: string | null; color_label: string | null } | null;
+  uniform: {
+    id: string;
+    name: string;
+    image_url: string | null;
+    bg_removed: boolean;
+    category: string;
+    color: string | null;
+    color_label: string | null;
+  } | null;
 };
 
-function baseCharacterUrlFor(gender: Gender, items: CombinationZoneItem[]): string {
-  if (gender === "male") return MANNEQUIN_MALE_URL;
+type PreviewQuery = {
+  select(columns: string): PreviewQuery;
+  eq(column: string, value: string): PreviewQuery;
+  update(values: Record<string, unknown>): PreviewQuery;
+  single(): Promise<{ data: unknown; error: { message: string } | null }>;
+};
 
-  const zones = new Set(items.map((item) => item.zone));
-  const isTwoPiece = zones.has("top") && zones.has("bottom") && !zones.has("full_body");
-  return isTwoPiece ? MANNEQUIN_FEMALE_TWO_PIECE_URL : MANNEQUIN_FEMALE_URL;
+type PreviewDb = { from(table: string): PreviewQuery };
+
+/** Photo pieces drive layering; colour pieces are described in the prompt instead. */
+function orderedPhotoItems(items: CombinationZoneItem[]): LookPhotoItem[] {
+  return ZONE_LAYER_ORDER.flatMap((zone) => {
+    const item = items.find((candidate) => candidate.zone === zone && candidate.uniform?.image_url);
+    if (!item) return [];
+    return [{
+      zone: item.zone,
+      uniformName: item.uniform!.name,
+      imageUrl: item.uniform!.image_url!,
+    }];
+  });
+}
+
+function colorItemsFor(items: CombinationZoneItem[]): LookColorItem[] {
+  return items
+    .filter((item) => item.uniform?.color && !item.uniform?.image_url)
+    .map((item) => ({
+      zone: item.zone,
+      category: item.uniform!.category,
+      hex: item.uniform!.color!,
+    }));
 }
 
 // POST /api/branch/combinations/[combinationId]/generate-preview
@@ -33,29 +77,26 @@ export async function POST(
 
   const { combinationId } = await params;
   const body = await req.json().catch(() => ({})) as { gender?: string; force?: boolean };
-  const genderParam = (body.gender ?? "both") as "male" | "female" | "both";
-  // GAP-6 FIX: Runtime validate genderParam \u2014 TypeScript 'as' cast does no runtime check.
-  // An invalid value would propagate to replicate_jobs.gender and the webhook URL params.
+
+  // Runtime validation — a TS cast does no checking, and an invalid value would reach the renderer.
   if (body.gender !== undefined && !["male", "female", "both"].includes(body.gender)) {
     return NextResponse.json({ error: "gender must be 'male', 'female', or 'both'" }, { status: 400 });
   }
+  const genderParam = (body.gender ?? "both") as "male" | "female" | "both";
   const force = body.force === true;
 
   const admin = createAdminClient();
-  // Cast for new columns not yet in Supabase generated types
-  const db = admin as any;
+  const db = admin as unknown as PreviewDb;
 
-  // Fetch combination
-  const { data: combo, error: comboErr } = await db
+  const { data: combo } = await db
     .from("combinations")
-    .select("*, department:departments(name)")
+    .select("id, branch_id, preview_status")
     .eq("id", combinationId)
-    .single();
+    .single() as { data: { id: string; branch_id: string; preview_status: string } | null };
 
-  if (comboErr || !combo) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (combo.branch_id !== auth.branchId) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  // Guard against double-fire
+  if (!combo || combo.branch_id !== auth.branchId) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   if (combo.preview_status === "processing") {
     return NextResponse.json({ error: "Already processing. Wait for current generation to complete." }, { status: 429 });
   }
@@ -63,143 +104,106 @@ export async function POST(
     return NextResponse.json({ error: "Preview already generated. Pass force=true to regenerate." }, { status: 409 });
   }
 
-  // Fetch zone items with uniform data (cast admin for unregistered table)
-  const { data: zoneItems, error: zoneErr } = await (admin as any)
+  const { data: zoneItems, error: zoneErr } = await db
     .from("combination_zone_items")
     .select("*, uniform:uniforms(id, name, image_url, bg_removed, category, color, color_label)")
-    .eq("combination_id", combinationId);
+    .eq("combination_id", combinationId) as unknown as {
+      data: CombinationZoneItem[] | null;
+      error: { message: string } | null;
+    };
 
   if (zoneErr) return NextResponse.json({ error: zoneErr.message }, { status: 500 });
+  const typedZoneItems = zoneItems ?? [];
 
-  const typedZoneItems = (zoneItems ?? []) as CombinationZoneItem[];
-
-  // GAP-1 FIX: When 'both' is requested, only process genders that have zone items.
-  // Genders with no assignments are silently skipped — not treated as an error.
-  const assignedGenders = new Set(typedZoneItems.map((i) => i.gender));
+  // Only render genders that actually have assignments; an unassigned gender is skipped, not an error.
+  const assignedGenders = new Set(typedZoneItems.map((item) => item.gender));
   const genders: Gender[] = genderParam === "both"
-    ? (["male", "female"] as Gender[]).filter((g) => assignedGenders.has(g))
+    ? (["male", "female"] as Gender[]).filter((gender) => assignedGenders.has(gender))
     : [genderParam as Gender];
 
   if (genders.length === 0) {
-    return NextResponse.json({ error: "No zone items assigned for any gender. Assign uniforms to zones before generating a preview." }, { status: 400 });
+    return NextResponse.json(
+      { error: "No zone items assigned for any gender. Assign uniforms to zones before generating a preview." },
+      { status: 400 }
+    );
   }
 
-  // Validate: at least one non-accessory (core) zone per each included gender
   const warnings: string[] = [];
   for (const gender of genders) {
-    const genderItems = typedZoneItems.filter((i) => i.gender === gender);
-    const coreItems = genderItems.filter((i) => !i.zone.startsWith("accessory_"));
+    const genderItems = typedZoneItems.filter((item) => item.gender === gender);
+    const coreItems = genderItems.filter((item) => !item.zone.startsWith("accessory_"));
     if (coreItems.length === 0) {
       return NextResponse.json(
         { error: `No core zone items for ${gender} outfit. Assign at least one item (dress, top, bottom, footwear, head, or outer).` },
         { status: 400 }
       );
     }
-    // Warn if any uniform lacks bg removal
-    const missingBg = genderItems.filter((i) => i.uniform?.image_url && !i.uniform.bg_removed);
+
+    const missingBg = genderItems.filter((item) => item.uniform?.image_url && !item.uniform.bg_removed);
     if (missingBg.length > 0) {
-      warnings.push(`${gender}: ${missingBg.map((i) => i.uniform?.name).join(", ")} have not had background removed. Preview quality may be affected.`);
+      warnings.push(
+        `${gender}: ${missingBg.map((item) => item.uniform?.name).join(", ")} have not had background removed. Preview quality may be affected.`
+      );
     }
   }
 
-  // A mannequin base is only needed for genders rendered purely from photos.
-  // Colour / mixed looks generate their own base via Flux, so they don't need one.
-  const needsMannequin = genders.some((gender) => {
-    const items = typedZoneItems.filter((i) => i.gender === gender);
-    const hasColor = items.some((i) => i.uniform?.color && !i.uniform?.image_url);
-    return !hasColor;
+  // Clear stale composites on a forced regenerate so checkAndMarkReady() cannot flip the
+  // status straight back to 'ready' using the previous run's URLs.
+  await db.from("combinations").update(
+    force
+      ? { preview_status: "processing", male_composite_url: null, female_composite_url: null }
+      : { preview_status: "processing" }
+  ).eq("id", combinationId);
+
+  // One gpt-image-2 call per gender, in the background so the client keeps polling
+  // preview-status exactly as before rather than holding a multi-minute request open.
+  //
+  // The promise starts executing here regardless of platform; waitUntil only stops Vercel
+  // freezing the instance before it settles, and is a documented no-op off-platform (so
+  // `npm run dev` behaves the same). The catch is required either way — an unhandled
+  // rejection would otherwise take down the dev server.
+  const render = renderAll(combinationId, genders, typedZoneItems).catch((error) => {
+    console.error(`[generate-preview] Background render crashed for ${combinationId}:`, error);
   });
-  if (needsMannequin && (!MANNEQUIN_MALE_URL || !MANNEQUIN_FEMALE_URL || !MANNEQUIN_FEMALE_TWO_PIECE_URL)) {
-    return NextResponse.json({ error: "Mannequin characters not yet configured. Contact administrator." }, { status: 503 });
-  }
-
-  // Set status to processing (and clear old GIF URLs if force-regenerating)
-  if (force) {
-    // GAP-9 FIX: Clear stale GIF/composite URLs so checkAndMarkReady() doesn't
-    // immediately flip status back to 'ready' using the old values
-    await db.from("combinations").update({
-      preview_status: "processing",
-      male_gif_url: null,
-      female_gif_url: null,
-      male_composite_url: null,
-      female_composite_url: null,
-    }).eq("id", combinationId);
-  } else {
-    await db.from("combinations").update({ preview_status: "processing" }).eq("id", combinationId);
-  }
-
-  // Fire composite chains for each gender in parallel
-  const chainPromises = genders.map(async (gender) => {
-    const genderItems = typedZoneItems.filter((i) => i.gender === gender);
-
-    // Photo pieces — ordered by layer order
-    const photoOrdered: ZoneItem[] = ZONE_LAYER_ORDER
-      .filter((zone) => genderItems.some((i) => i.zone === zone && i.uniform?.image_url))
-      .map((zone) => {
-        const item = genderItems.find((i) => i.zone === zone && i.uniform?.image_url)!;
-        return {
-          zone: item.zone as ZoneItem["zone"],
-          uniform_id: item.uniform_id,
-          uniform_image_url: item.uniform!.image_url!,
-          uniform_name: item.uniform!.name,
-        };
-      });
-
-    // Colour pieces — rendered into the figure via a Flux prompt
-    const colorItems: ColorZoneItem[] = genderItems
-      .filter((i) => i.uniform?.color && !i.uniform?.image_url)
-      .map((i) => ({
-        zone: i.zone as ColorZoneItem["zone"],
-        category: i.uniform!.category,
-        color: i.uniform!.color!,
-        color_label: i.uniform!.color_label,
-      }));
-
-    if (colorItems.length > 0) {
-      // Colour (or mixed) look — generate a Flux base, then chain photo pieces on top.
-      const estimatedSeconds = photoOrdered.length * 20 + 60;
-      return startColorBaseGeneration(combinationId, gender, colorItems, photoOrdered).then((r) => ({
-        gender, predictionId: r.predictionId, estimatedSeconds,
-      }));
-    }
-
-    // All-photo look — composite onto the static mannequin.
-    const baseUrl = baseCharacterUrlFor(gender, genderItems);
-    const estimatedSeconds = photoOrdered.length * 20 + 45;
-    return startCompositeChain(combinationId, gender, photoOrdered, baseUrl).then((r) => ({
-      gender, predictionId: r.predictionId, estimatedSeconds,
-    }));
-  });
-
-  const results = await Promise.allSettled(chainPromises);
-
-  // GAP-3 FIX: If ANY chain failed to start, mark as failed.
-  // Previously only failed when ALL chains rejected, which left combinations
-  // permanently stuck in "processing" when only one gender's chain was rejected.
-  const anyFailed = results.some((r) => r.status === "rejected");
-  if (anyFailed) {
-    const rejectedReasons = (results.filter((r) => r.status === "rejected") as PromiseRejectedResult[])
-      .map((r) => r.reason?.message ?? "Unknown error")
-      .join("; ");
-    await db.from("combinations").update({ preview_status: "failed" }).eq("id", combinationId);
-    console.error(`[generate-preview] Chain failure for ${combinationId}: ${rejectedReasons}`);
-
-    // Surface specific Replicate errors so users understand the real cause
-    if (rejectedReasons.includes("402") || rejectedReasons.toLowerCase().includes("insufficient credit")) {
-      return NextResponse.json({ error: "Replicate account has insufficient credit. Add billing at replicate.com/account/billing then try again." }, { status: 402 });
-    }
-    if (rejectedReasons.includes("429") || rejectedReasons.toLowerCase().includes("throttled")) {
-      return NextResponse.json({ error: "Replicate rate limit reached. Please wait a minute and try again." }, { status: 429 });
-    }
-    return NextResponse.json({ error: "One or more AI generation chains failed to start. Please try again." }, { status: 500 });
-  }
-
-  const maxEstimate = (results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<{ gender: Gender; predictionId: string; estimatedSeconds: number }>[])
-    .reduce((max, r) => Math.max(max, r.value.estimatedSeconds), 0);
+  waitUntil(render);
 
   return NextResponse.json({
     status: "processing",
-    estimated_seconds: maxEstimate,
+    estimated_seconds: ESTIMATED_SECONDS,
     warnings: warnings.length > 0 ? warnings : undefined,
-  });
+  }, { status: 202 });
+}
+
+async function renderAll(
+  combinationId: string,
+  genders: Gender[],
+  zoneItems: CombinationZoneItem[]
+): Promise<void> {
+  const results = await Promise.allSettled(
+    genders.map((gender) => {
+      const genderItems = zoneItems.filter((item) => item.gender === gender);
+      const zones = new Set(genderItems.map((item) => item.zone));
+      const isTwoPiece = zones.has("top") && zones.has("bottom") && !zones.has("full_body");
+
+      return renderAndPersistLook(combinationId, {
+        gender,
+        colorItems: colorItemsFor(genderItems),
+        photoItems: orderedPhotoItems(genderItems),
+        baseFigureUrl: baseFigureUrlFor(gender, isTwoPiece),
+      });
+    })
+  );
+
+  const failures = results.filter((result) => result.status === "rejected") as PromiseRejectedResult[];
+  if (failures.length > 0) {
+    console.error(
+      `[generate-preview] Render failed for ${combinationId}:`,
+      failures.map((failure) => failure.reason?.message ?? "Unknown error").join("; ")
+    );
+    // Any failed gender marks the whole combination failed — a half-rendered look is not usable.
+    await markPreviewFailed(combinationId);
+    return;
+  }
+
+  await checkAndMarkReady(combinationId);
 }

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ZONE_POSITIONS, ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
+import { DepartmentChips } from "./PieceScopeFields";
+import { ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES, zoneLabel } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 import type { Uniform, Department, CombinationZoneItemWithUniform } from "@/types/database";
 
@@ -51,6 +52,12 @@ export default function CombinationBuilderClient() {
   const savedComboIdRef = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // Which departments may use the finished look. Defaults to the one it was built for;
+  // adding more here reuses this render rather than paying for another.
+  const [shareScope, setShareScope] = useState<{ departmentIds: string[]; allDepartments: boolean }>({
+    departmentIds: [],
+    allDepartments: false,
+  });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +71,17 @@ export default function CombinationBuilderClient() {
       .then((d) => setDepartments(Array.isArray(d) ? d : d.departments ?? []))
       .catch(console.error);
   }, []);
+
+  // Seed sharing with the department the look is being built for. Additional departments
+  // are opted into on the save step; this only sets the starting point.
+  useEffect(() => {
+    if (!selectedDept) return;
+    setShareScope((prev) =>
+      prev.departmentIds.length === 0 && !prev.allDepartments
+        ? { departmentIds: [selectedDept.id], allDepartments: false }
+        : prev
+    );
+  }, [selectedDept]);
 
   // Load uniforms when department and gender are selected
   useEffect(() => {
@@ -129,7 +147,13 @@ export default function CombinationBuilderClient() {
         const res = await fetch("/api/branch/combinations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), description: description.trim() || null, department_id: selectedDept.id, gender: activeGender }),
+          body: JSON.stringify({
+            name: name.trim(),
+            description: description.trim() || null,
+            department_ids: shareScope.departmentIds,
+            all_departments: shareScope.allDepartments,
+            gender: activeGender,
+          }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? "Failed to create combination");
         const combo = await res.json();
@@ -280,24 +304,26 @@ export default function CombinationBuilderClient() {
             Only pieces for the selected department and gender will appear.
           </p>
 
-          {/* Gender selection — locks the look to one gender */}
+          {/* Gender selection — locks the look to one gender.
+              Selected styling is gated on genderLocked, not just activeGender: the latter
+              defaults to "male", so keying off it alone painted Male as chosen before any
+              gender had been picked, while pieces stayed unloaded because the fetch waits
+              on genderLocked. The button has to tell the truth about that state. */}
           <div className="gender-toggle" role="tablist" aria-label="Choose figure">
-            <button
-              role="tab"
-              aria-selected={activeGender === "male"}
-              className={activeGender === "male" ? "on" : ""}
-              onClick={() => { setActiveGender("male"); setGenderLocked(true); setUniforms([]); }}
-            >
-              ♂ Male
-            </button>
-            <button
-              role="tab"
-              aria-selected={activeGender === "female"}
-              className={activeGender === "female" ? "on" : ""}
-              onClick={() => { setActiveGender("female"); setGenderLocked(true); setUniforms([]); }}
-            >
-              ♀ Female
-            </button>
+            {(["male", "female"] as Gender[]).map((gender) => {
+              const chosen = genderLocked && activeGender === gender;
+              return (
+                <button
+                  key={gender}
+                  role="tab"
+                  aria-selected={chosen}
+                  className={chosen ? "on" : ""}
+                  onClick={() => { setActiveGender(gender); setGenderLocked(true); setUniforms([]); }}
+                >
+                  {gender === "male" ? "♂ Male" : "♀ Female"}
+                </button>
+              );
+            })}
           </div>
           <p className="gender-caption">
             {genderLocked
@@ -318,7 +344,7 @@ export default function CombinationBuilderClient() {
                   className={`zone-tab ${activeZone === zone ? "on" : ""} ${item ? "filled" : ""}`}
                   onClick={() => setActiveZone(zone)}
                 >
-                  <span className="zone-tab-label">{ZONE_POSITIONS[zone].label}</span>
+                  <span className="zone-tab-label">{zoneLabel(zone, activeGender)}</span>
                   {item && <span className="zone-tab-dot" aria-hidden>●</span>}
                 </button>
               );
@@ -356,7 +382,7 @@ export default function CombinationBuilderClient() {
                       )}
                     </div>
                     <div className="fit-stage-meta">
-                      <span className="eyebrow eyebrow-accent">{ZONE_POSITIONS[activeZone].label}</span>
+                      <span className="eyebrow eyebrow-accent">{zoneLabel(activeZone, activeGender)}</span>
                       <span className="fit-stage-name">{assigned.uniform.name}</span>
                       {assigned.uniform.image_url && !assigned.uniform.bg_removed && (
                         <span className="fit-stage-warn">⚠️ Background not removed</span>
@@ -373,7 +399,7 @@ export default function CombinationBuilderClient() {
               }
               return (
                 <div className="fit-stage-empty">
-                  <span className="fit-stage-empty-zone">{ZONE_POSITIONS[activeZone].label}</span>
+                  <span className="fit-stage-empty-zone">{zoneLabel(activeZone, activeGender)}</span>
                   <span>Pick a piece below to dress this zone</span>
                 </div>
               );
@@ -390,7 +416,7 @@ export default function CombinationBuilderClient() {
               <div className="fit-picker-empty">
                 <p style={{ marginBottom: "0.75rem" }}>
                   {activeZone
-                    ? `No ${activeGender} ${ZONE_POSITIONS[activeZone].label.toLowerCase()} pieces in ${selectedDept?.name}.`
+                    ? `No ${activeGender} ${zoneLabel(activeZone, activeGender).toLowerCase()} pieces in ${selectedDept?.name}.`
                     : `No ${activeGender} pieces in ${selectedDept?.name ?? "this department"} yet.`}
                 </p>
                 <a
@@ -459,7 +485,7 @@ export default function CombinationBuilderClient() {
               <ul className="summary-list">
                 {(Object.entries(outfit[activeGender]) as [BodyZone, CombinationZoneItemWithUniform][]).map(([zone, item]) => (
                   <li key={zone} className="summary-item">
-                    <span className="summary-zone">{ZONE_POSITIONS[zone].label}</span>
+                    <span className="summary-zone">{zoneLabel(zone, activeGender)}</span>
                     <span className="summary-uniform">{item.uniform?.name ?? "[Deleted]"}</span>
                     {item.uniform && item.uniform.image_url && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
                   </li>
@@ -506,6 +532,17 @@ export default function CombinationBuilderClient() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+
+            <div style={{ marginTop: "1rem" }}>
+              <DepartmentChips
+                departments={departments}
+                departmentIds={shareScope.departmentIds}
+                allDepartments={shareScope.allDepartments}
+                onChange={setShareScope}
+                label="Departments that can use this look"
+                hint="Share a look instead of rebuilding it — every department here reuses this one render."
+              />
+            </div>
           </div>
 
           <div className="builder-nav builder-nav-save">
