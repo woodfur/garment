@@ -44,7 +44,10 @@ type ScheduleOption = { id: string; service_date: string; title: string };
 
 const CATEGORIES: { value: UniformCategory; label: string }[] = [
   { value: "top",       label: "Top" },
-  { value: "full_body", label: "Dress" },
+  // One garment slot, two meanings: a dress on the female figure, a suit on the male one.
+  // Unlike the builder's zoneLabel(), this cannot resolve by gender — a piece may be
+  // scoped to both — so the label names both.
+  { value: "full_body", label: "Dress / Suit" },
   { value: "bottom",    label: "Bottom" },
   { value: "footwear",  label: "Footwear" },
   { value: "accessory", label: "Accessory" },
