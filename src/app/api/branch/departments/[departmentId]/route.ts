@@ -80,31 +80,38 @@ export async function DELETE(_request: Request, { params }: Params) {
   try {
     const admin = createAdminClient();
 
-    // Check counts before attempting — RESTRICT FK would cause a DB error anyway,
-    // but we want to return a user-friendly message
-    const [uniformsRes, combosRes] = await Promise.all([
-      (admin as any)
-        .from("uniforms")
-        .select("*", { count: "exact", head: true })
-        .eq("department_id", departmentId),
-      (admin as any)
-        .from("combinations")
-        .select("*", { count: "exact", head: true })
-        .eq("department_id", departmentId),
-    ]);
+    // Combinations are still single-department, so they still block deletion.
+    const { count: comboCount } = await (admin as any)
+      .from("combinations")
+      .select("*", { count: "exact", head: true })
+      .eq("department_id", departmentId);
 
-    const uniformCount = uniformsRes.count ?? 0;
-    const comboCount = combosRes.count ?? 0;
-
-    if (uniformCount > 0 || comboCount > 0) {
-      const parts = [];
-      if (uniformCount > 0) parts.push(`${uniformCount} uniform${uniformCount !== 1 ? "s" : ""}`);
-      if (comboCount > 0) parts.push(`${comboCount} combination${comboCount !== 1 ? "s" : ""}`);
+    if ((comboCount ?? 0) > 0) {
       return NextResponse.json(
-        { error: `Cannot delete: ${parts.join(" and ")} use this department` },
+        { error: `Cannot delete: ${comboCount} combination${comboCount !== 1 ? "s" : ""} use this department` },
         { status: 409 }
       );
     }
+
+    // Pieces can be shared, so deletion detaches the department instead of blocking.
+    // A piece scoped only to this department is left with none — it stops appearing in
+    // builders and is flagged "No department" on the uniforms page so it is not lost.
+    const { data: scopedPieces } = await (admin as any)
+      .from("uniforms")
+      .select("id, department_ids")
+      .eq("branch_id", auth.branchId)
+      .contains("department_ids", [departmentId]) as {
+        data: Array<{ id: string; department_ids: string[] }> | null;
+      };
+
+    await Promise.all(
+      (scopedPieces ?? []).map((piece) =>
+        (admin as any)
+          .from("uniforms")
+          .update({ department_ids: piece.department_ids.filter((id) => id !== departmentId) })
+          .eq("id", piece.id)
+      )
+    );
 
     const { error } = await (admin as any)
       .from("departments")

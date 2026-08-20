@@ -112,6 +112,23 @@ The domain's core abstraction. A body is divided into `BodyZone`s (head, top, ou
 
 `src/types/zones.typecheck.ts` is a compile-only file that `satisfies`-checks these records against the DB enums; it exists so a new `BodyZone` can't be added without updating every map.
 
+## Shared pieces (`src/lib/scope.ts`)
+
+A uniform piece belongs to **many** departments and **many** genders. The original schema made pieces department-exclusive (`uniforms.department_id`, single FK), which forced duplicating a shared white shirt once per department. Migration `005_shared_pieces.sql` replaced that with:
+
+- `department_ids uuid[]` — explicit departments
+- `all_departments boolean` — also covers departments created **later**
+- `genders text[]` — both values means unisex
+
+**The matching rule, and the only place it's defined:** `matchesDepartment()` / `pieceMatchesGender()` in `scope.ts`. The API routes, `UniformsPageClient`, and the `flow-rules.mjs` spec module all defer to it so they can't drift. `validatePieceScope()` is the single write-path validator (non-empty selection, valid UUIDs, dedupe, normalised gender order); routes must *additionally* verify the department ids belong to the caller's branch, which needs a DB round trip and is deliberately left out of the pure module.
+
+Gotchas worth not rediscovering:
+- **`department_id` and `gender` on `uniforms` are dead columns.** Kept (commented, nullable, FK dropped) rather than dropped destructively. Nothing reads or writes them. Dropping the `ON DELETE RESTRICT` FK was *required*, not cosmetic — it would otherwise keep blocking department deletion for legacy rows regardless of app code.
+- **Dropping that FK breaks PostgREST embeds, and it caused an outage.** PostgREST derives `uniforms(count)` embed syntax from foreign keys. After 005 that embed in `/api/branch/departments` stopped resolving, the route 500'd, and the client's `Array.isArray` guard silently rendered *zero departments* app-wide. Counts are now computed from `department_ids` in a separate query. **Before dropping any FK, grep for embeds that cross it.**
+- **Deleting a department detaches it from pieces** rather than blocking, and may leave a piece with zero departments. Such a piece matches nothing; `isOrphaned()` drives a "No department" badge so it stays findable. Combinations are still single-department and *do* still block deletion.
+- **The department filter uses a string-interpolated `.or()`** (`all_departments.eq.true,department_ids.cs.{id}`) because the two conditions are a disjunction. The id is UUID-validated first — the CHANGELOG records a past filter-injection bug from exactly this pattern. Keep that validation.
+- Chained `.or()` calls **append** (`searchParams.append`), so the department and archived filters correctly AND together.
+
 ## Database
 
 Single Supabase Postgres. Generated types in `src/types/database.ts` (`Database` interface) — **but it lags the real schema** (`replicate_jobs`, `uniform_reminder_deliveries` are missing).
@@ -143,7 +160,7 @@ Server Components wrap their Supabase reads in `unstable_cache` with per-branch 
 
 ## Pure-logic modules and tests
 
-Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
+Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`, `scope.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
 
 `schedule-package.ts` hand-writes a PDF (`%PDF-1.4`, object table, JPEG XObjects) with no PDF library — sharp prepares the images. It's dense but self-contained; don't add a PDF dependency without a reason.
 

@@ -2,6 +2,34 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 
+type ScopedRow = { department_ids: string[] | null; all_departments: boolean };
+type ScopedRowsResult = { data: ScopedRow[] | null; error: unknown };
+
+/**
+ * Count shared rows per department.
+ *
+ * An all-departments row counts toward every department; its explicit list is skipped so
+ * it is not counted twice for the departments it also names.
+ */
+function countByDepartment(rows: ScopedRow[] | null) {
+  let sharedByAll = 0;
+  const explicit = new Map<string, number>();
+
+  for (const row of rows ?? []) {
+    if (row.all_departments) {
+      sharedByAll += 1;
+      continue;
+    }
+    for (const id of row.department_ids ?? []) {
+      explicit.set(id, (explicit.get(id) ?? 0) + 1);
+    }
+  }
+
+  return {
+    forDepartment: (departmentId: string) => (explicit.get(departmentId) ?? 0) + sharedByAll,
+  };
+}
+
 export async function GET() {
   const result = await requireBranchLeader();
   if (result instanceof NextResponse) return result;
@@ -10,36 +38,49 @@ export async function GET() {
   try {
     const admin = createAdminClient();
 
-    // Fetch departments with counts via aggregation
-    const { data, error } = await (admin as any)
-      .from("departments")
-      .select(`
-        id, name, description, branch_id, created_at,
-        uniforms(count),
-        combinations(count),
-        department_members(count)
-      `)
-      .eq("branch_id", auth.branchId)
-      .order("created_at", { ascending: true }) as {
+    // Pieces are no longer embeddable here: they are linked by the department_ids array,
+    // and migration 005 dropped the uniforms.department_id foreign key that PostgREST used
+    // to resolve a `uniforms(count)` embed. Attempting the embed fails the whole query,
+    // which blanks the department list app-wide. Counted separately instead.
+    const [deptRes, piecesRes] = await Promise.all([
+      (admin as any)
+        .from("departments")
+        .select(`
+          id, name, description, branch_id, created_at,
+          combinations(count),
+          department_members(count)
+        `)
+        .eq("branch_id", auth.branchId)
+        .order("created_at", { ascending: true }),
+      admin
+        .from("uniforms")
+        .select("department_ids, all_departments")
+        .eq("branch_id", auth.branchId),
+    ]) as [
+      {
         data: Array<{
           id: string; name: string; description: string | null;
           branch_id: string; created_at: string;
-          uniforms: [{ count: number }];
           combinations: [{ count: number }];
           department_members: [{ count: number }];
         }> | null;
         error: unknown;
-      };
+      },
+      ScopedRowsResult,
+    ];
 
-    if (error) throw error;
+    if (deptRes.error) throw deptRes.error;
+    if (piecesRes.error) throw piecesRes.error;
 
-    const departments = (data ?? []).map((d) => ({
+    const pieceCounts = countByDepartment(piecesRes.data);
+
+    const departments = (deptRes.data ?? []).map((d) => ({
       id: d.id,
       name: d.name,
       description: d.description,
       branch_id: d.branch_id,
       created_at: d.created_at,
-      uniform_count: d.uniforms?.[0]?.count ?? 0,
+      uniform_count: pieceCounts.forDepartment(d.id),
       combination_count: d.combinations?.[0]?.count ?? 0,
       member_count: d.department_members?.[0]?.count ?? 0,
     }));

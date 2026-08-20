@@ -2,13 +2,9 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
 import { revalidateTag } from "next/cache";
-import type { Gender } from "@/types/database";
+import { validatePieceScope } from "@/lib/scope";
 
 type Params = { params: Promise<{ uniformId: string }> };
-
-function isGender(value: unknown): value is Gender {
-  return value === "male" || value === "female";
-}
 
 async function verifyUniform(uniformId: string, branchId: string) {
   const admin = createAdminClient();
@@ -44,15 +40,42 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.name !== undefined) updates.name = body.name.trim();
     if (body.category !== undefined) updates.category = body.category;
     if (body.description !== undefined) updates.description = body.description?.trim() || null;
-    if (body.department_id !== undefined) updates.department_id = body.department_id;
-    if (body.gender !== undefined) {
-      if (!isGender(body.gender)) return NextResponse.json({ error: "Gender must be male or female" }, { status: 400 });
-      updates.gender = body.gender;
-    }
     if (body.image_url !== undefined) updates.image_url = body.image_url;
     if (body.bg_removed !== undefined) updates.bg_removed = body.bg_removed;
 
     const admin = createAdminClient();
+
+    // Scope fields move together — a partial update could leave a piece with departments
+    // but no genders, so all three are validated as one unit whenever any is present.
+    const touchesScope =
+      body.department_ids !== undefined ||
+      body.all_departments !== undefined ||
+      body.genders !== undefined;
+
+    if (touchesScope) {
+      let scope;
+      try {
+        scope = validatePieceScope(body);
+      } catch (scopeErr) {
+        return NextResponse.json({ error: (scopeErr as Error).message }, { status: 400 });
+      }
+
+      if (scope.department_ids.length > 0) {
+        const { data: valid } = await admin
+          .from("departments")
+          .select("id")
+          .eq("branch_id", auth.branchId)
+          .in("id", scope.department_ids);
+
+        if ((valid ?? []).length !== scope.department_ids.length) {
+          return NextResponse.json({ error: "One or more departments are invalid" }, { status: 400 });
+        }
+      }
+
+      updates.department_ids = scope.department_ids;
+      updates.all_departments = scope.all_departments;
+      updates.genders = scope.genders;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (admin as any)
       .from("uniforms")

@@ -1,3 +1,7 @@
+// Scoping rules live in scope.ts so the API routes, the UI, and this spec module cannot
+// drift apart. Explicit .ts extension — node cannot map .js onto .ts.
+import { matchesDepartment, pieceMatchesGender } from "./scope.ts";
+
 export const GENDERS = ["male", "female"];
 
 export const CREATE_LOOK_MODES = [
@@ -16,8 +20,8 @@ export function normalizeGender(value) {
 export function filterPiecesForLook(pieces, { departmentId, gender, category }) {
   return pieces.filter((piece) => {
     if (piece.is_archived) return false;
-    if (departmentId && piece.department_id !== departmentId) return false;
-    if (gender && piece.gender !== gender) return false;
+    if (!matchesDepartment(piece, departmentId ?? null)) return false;
+    if (!pieceMatchesGender(piece, gender ?? null)) return false;
     if (category && piece.category !== category) return false;
     return true;
   });
