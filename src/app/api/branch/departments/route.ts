@@ -38,16 +38,16 @@ export async function GET() {
   try {
     const admin = createAdminClient();
 
-    // Pieces are no longer embeddable here: they are linked by the department_ids array,
-    // and migration 005 dropped the uniforms.department_id foreign key that PostgREST used
-    // to resolve a `uniforms(count)` embed. Attempting the embed fails the whole query,
-    // which blanks the department list app-wide. Counted separately instead.
-    const [deptRes, piecesRes] = await Promise.all([
+    // Neither pieces nor looks are embeddable here any more: both are linked by a
+    // department_ids array, and migrations 005/006 dropped the department_id foreign keys
+    // PostgREST used to resolve `uniforms(count)` / `combinations(count)`. Attempting
+    // either embed makes the whole query fail, which blanks the department list app-wide.
+    // Only department_members still has its foreign key, so only it stays embedded.
+    const [deptRes, piecesRes, looksRes] = await Promise.all([
       (admin as any)
         .from("departments")
         .select(`
           id, name, description, branch_id, created_at,
-          combinations(count),
           department_members(count)
         `)
         .eq("branch_id", auth.branchId)
@@ -56,23 +56,29 @@ export async function GET() {
         .from("uniforms")
         .select("department_ids, all_departments")
         .eq("branch_id", auth.branchId),
+      admin
+        .from("combinations")
+        .select("department_ids, all_departments")
+        .eq("branch_id", auth.branchId),
     ]) as [
       {
         data: Array<{
           id: string; name: string; description: string | null;
           branch_id: string; created_at: string;
-          combinations: [{ count: number }];
           department_members: [{ count: number }];
         }> | null;
         error: unknown;
       },
       ScopedRowsResult,
+      ScopedRowsResult,
     ];
 
     if (deptRes.error) throw deptRes.error;
     if (piecesRes.error) throw piecesRes.error;
+    if (looksRes.error) throw looksRes.error;
 
     const pieceCounts = countByDepartment(piecesRes.data);
+    const lookCounts = countByDepartment(looksRes.data);
 
     const departments = (deptRes.data ?? []).map((d) => ({
       id: d.id,
@@ -81,7 +87,7 @@ export async function GET() {
       branch_id: d.branch_id,
       created_at: d.created_at,
       uniform_count: pieceCounts.forDepartment(d.id),
-      combination_count: d.combinations?.[0]?.count ?? 0,
+      combination_count: lookCounts.forDepartment(d.id),
       member_count: d.department_members?.[0]?.count ?? 0,
     }));
 

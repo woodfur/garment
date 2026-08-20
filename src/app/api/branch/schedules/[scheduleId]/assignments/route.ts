@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireBranchLeader } from "@/lib/api-auth";
-import type { Gender } from "@/types/database";
-
-function isGender(value: unknown): value is Gender {
-  return value === "male" || value === "female";
-}
+import { isGender, matchesDepartment } from "@/lib/scope";
 
 export async function POST(
   req: Request,
@@ -43,15 +39,20 @@ export async function POST(
 
   const { data: combo } = await db
     .from("combinations")
-    .select("id, branch_id, department_id, gender")
+    .select("id, branch_id, department_ids, all_departments, gender")
     .eq("id", body.combination_id)
-    .single() as { data: { id: string; branch_id: string; department_id: string; gender: "male" | "female" | null } | null };
+    .single() as { data: { id: string; branch_id: string; department_ids: string[] | null; all_departments: boolean; gender: "male" | "female" | null } | null };
 
   if (!combo || combo.branch_id !== auth.branchId) {
     return NextResponse.json({ error: "Look not found" }, { status: 404 });
   }
-  if (combo.department_id !== body.department_id) {
-    return NextResponse.json({ error: "Look does not belong to that department" }, { status: 400 });
+  // A look shared with this department is assignable to it. This is what lets one render
+  // serve Ushers, Choir and Praise Team instead of being rebuilt three times.
+  if (!matchesDepartment(
+    { department_ids: combo.department_ids ?? [], all_departments: combo.all_departments },
+    body.department_id
+  )) {
+    return NextResponse.json({ error: "Look is not shared with that department" }, { status: 400 });
   }
   if (combo.gender && isGender(body.gender) && body.gender !== combo.gender) {
     return NextResponse.json({ error: "Look gender does not match the selected gender" }, { status: 400 });

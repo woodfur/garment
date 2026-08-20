@@ -95,12 +95,20 @@ describe("flow rules", () => {
     );
   });
 
+  const look = (name, overrides) => ({
+    name,
+    department_ids: [],
+    all_departments: false,
+    gender: null,
+    ...overrides,
+  });
+
   it("keeps legacy looks assignable after selecting a gender", () => {
     const combinations = [
-      { name: "Legacy choir look", department_id: "choir", gender: null },
-      { name: "Male choir look", department_id: "choir", gender: "male" },
-      { name: "Female choir look", department_id: "choir", gender: "female" },
-      { name: "Male usher look", department_id: "ushers", gender: "male" },
+      look("Legacy choir look", { department_ids: ["choir"], gender: null }),
+      look("Male choir look", { department_ids: ["choir"], gender: "male" }),
+      look("Female choir look", { department_ids: ["choir"], gender: "female" }),
+      look("Male usher look", { department_ids: ["ushers"], gender: "male" }),
     ];
 
     assert.deepEqual(
@@ -109,6 +117,37 @@ describe("flow rules", () => {
         gender: "male",
       }).map((combination) => combination.name),
       ["Legacy choir look", "Male choir look"],
+    );
+  });
+
+  it("a look shared with several departments is assignable to each of them", () => {
+    // The reason shared looks exist: one render reused rather than rebuilt per department.
+    const combinations = [
+      look("Black suit", { department_ids: ["ushers", "choir", "praise"], gender: "male" }),
+      look("Usher-only jacket", { department_ids: ["ushers"], gender: "male" }),
+    ];
+
+    for (const departmentId of ["ushers", "choir", "praise"]) {
+      assert.deepEqual(
+        filterAssignableCombinations(combinations, { departmentId, gender: "male" })
+          .map((c) => c.name),
+        departmentId === "ushers" ? ["Black suit", "Usher-only jacket"] : ["Black suit"],
+        `wrong assignable set for ${departmentId}`,
+      );
+    }
+  });
+
+  it("an all-departments look is assignable to a department it does not list", () => {
+    const combinations = [look("House style", { all_departments: true, gender: "female" })];
+
+    assert.equal(
+      filterAssignableCombinations(combinations, { departmentId: "brand-new", gender: "female" }).length,
+      1,
+    );
+    // Gender still applies — sharing across departments does not share across genders.
+    assert.equal(
+      filterAssignableCombinations(combinations, { departmentId: "choir", gender: "male" }).length,
+      0,
     );
   });
 

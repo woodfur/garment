@@ -112,20 +112,24 @@ The domain's core abstraction. A body is divided into `BodyZone`s (head, top, ou
 
 `src/types/zones.typecheck.ts` is a compile-only file that `satisfies`-checks these records against the DB enums; it exists so a new `BodyZone` can't be added without updating every map.
 
-## Shared pieces (`src/lib/scope.ts`)
+## Shared pieces and looks (`src/lib/scope.ts`)
 
-A uniform piece belongs to **many** departments and **many** genders. The original schema made pieces department-exclusive (`uniforms.department_id`, single FK), which forced duplicating a shared white shirt once per department. Migration `005_shared_pieces.sql` replaced that with:
+Both uniform pieces and looks belong to **many** departments. The original schema made both department-exclusive (single `department_id` FK), which forced duplicating a shared white shirt per department — and, worse, re-rendering an identical look per department at real cost per image. Migrations `005_shared_pieces.sql` (uniforms) and `006_shared_looks.sql` (combinations) replaced that with:
 
 - `department_ids uuid[]` — explicit departments
 - `all_departments boolean` — also covers departments created **later**
-- `genders text[]` — both values means unisex
+- `genders text[]` — **uniforms only**; both values means unisex
 
-**The matching rule, and the only place it's defined:** `matchesDepartment()` / `pieceMatchesGender()` in `scope.ts`. The API routes, `UniformsPageClient`, and the `flow-rules.mjs` spec module all defer to it so they can't drift. `validatePieceScope()` is the single write-path validator (non-empty selection, valid UUIDs, dedupe, normalised gender order); routes must *additionally* verify the department ids belong to the caller's branch, which needs a DB round trip and is deliberately left out of the pure module.
+Looks stay single-gender: a look is one outfit on one figure, so multi-gender would mean a second render rather than a saved one.
+
+**The matching rule, and the only place it's defined:** `matchesDepartment()` in `scope.ts`, shared by pieces and looks. The API routes, `UniformsPageClient`, the builder, and the `flow-rules.mjs` spec module all defer to it so they can't drift. `validateDepartmentScope()` / `validatePieceScope()` are the write-path validators (non-empty selection, valid UUIDs, dedupe, normalised gender order); routes must *additionally* verify the department ids belong to the caller's branch, which needs a DB round trip and is deliberately left out of the pure module.
+
+**The assignment guard is the thing that makes shared looks work.** `schedule_assignments` is keyed `UNIQUE (schedule_id, department_id, gender)`, so one look can already sit against several departments in a service. The only blocker was an equality check in `schedules/[scheduleId]/assignments`; it now calls `matchesDepartment()`. Since a shared look no longer implies a single department, both assign dialogs ask which department it is being scheduled for whenever more than one applies.
 
 Gotchas worth not rediscovering:
-- **`department_id` and `gender` on `uniforms` are dead columns.** Kept (commented, nullable, FK dropped) rather than dropped destructively. Nothing reads or writes them. Dropping the `ON DELETE RESTRICT` FK was *required*, not cosmetic — it would otherwise keep blocking department deletion for legacy rows regardless of app code.
-- **Dropping that FK breaks PostgREST embeds, and it caused an outage.** PostgREST derives `uniforms(count)` embed syntax from foreign keys. After 005 that embed in `/api/branch/departments` stopped resolving, the route 500'd, and the client's `Array.isArray` guard silently rendered *zero departments* app-wide. Counts are now computed from `department_ids` in a separate query. **Before dropping any FK, grep for embeds that cross it.**
-- **Deleting a department detaches it from pieces** rather than blocking, and may leave a piece with zero departments. Such a piece matches nothing; `isOrphaned()` drives a "No department" badge so it stays findable. Combinations are still single-department and *do* still block deletion.
+- **`department_id` (both tables) and `uniforms.gender` are dead columns.** Kept (commented, nullable, FK dropped) rather than dropped destructively. Nothing reads or writes them. Dropping the `ON DELETE RESTRICT` FKs was *required*, not cosmetic — they would otherwise keep blocking department deletion for legacy rows regardless of app code.
+- **Dropping those FKs breaks PostgREST embeds, and this has already caused one outage.** PostgREST derives `departments(name)` / `uniforms(count)` embed syntax from foreign keys. After 005, `uniforms(count)` in `/api/branch/departments` stopped resolving, the route 500'd, and the client's `Array.isArray` guard silently rendered *zero departments* app-wide. Counts and names are now computed from `department_ids` in separate queries. **Before dropping any FK, grep for embeds that cross it.**
+- **Deleting a department detaches it from pieces and looks** rather than blocking, and may leave either with zero departments. Such a row matches nothing; `isOrphaned()` drives a "No department" badge so it stays findable.
 - **The department filter uses a string-interpolated `.or()`** (`all_departments.eq.true,department_ids.cs.{id}`) because the two conditions are a disjunction. The id is UUID-validated first — the CHANGELOG records a past filter-injection bug from exactly this pattern. Keep that validation.
 - Chained `.or()` calls **append** (`searchParams.append`), so the department and archived filters correctly AND together.
 

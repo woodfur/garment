@@ -80,38 +80,27 @@ export async function DELETE(_request: Request, { params }: Params) {
   try {
     const admin = createAdminClient();
 
-    // Combinations are still single-department, so they still block deletion.
-    const { count: comboCount } = await (admin as any)
-      .from("combinations")
-      .select("*", { count: "exact", head: true })
-      .eq("department_id", departmentId);
+    // Pieces and looks are both shareable, so deletion detaches the department instead of
+    // blocking. Anything scoped only to this department is left with none — it stops
+    // appearing in builders and is flagged "No department" so it is not lost.
+    for (const table of ["uniforms", "combinations"] as const) {
+      const { data: scoped } = await (admin as any)
+        .from(table)
+        .select("id, department_ids")
+        .eq("branch_id", auth.branchId)
+        .contains("department_ids", [departmentId]) as {
+          data: Array<{ id: string; department_ids: string[] }> | null;
+        };
 
-    if ((comboCount ?? 0) > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete: ${comboCount} combination${comboCount !== 1 ? "s" : ""} use this department` },
-        { status: 409 }
+      await Promise.all(
+        (scoped ?? []).map((row) =>
+          (admin as any)
+            .from(table)
+            .update({ department_ids: row.department_ids.filter((id) => id !== departmentId) })
+            .eq("id", row.id)
+        )
       );
     }
-
-    // Pieces can be shared, so deletion detaches the department instead of blocking.
-    // A piece scoped only to this department is left with none — it stops appearing in
-    // builders and is flagged "No department" on the uniforms page so it is not lost.
-    const { data: scopedPieces } = await (admin as any)
-      .from("uniforms")
-      .select("id, department_ids")
-      .eq("branch_id", auth.branchId)
-      .contains("department_ids", [departmentId]) as {
-        data: Array<{ id: string; department_ids: string[] }> | null;
-      };
-
-    await Promise.all(
-      (scopedPieces ?? []).map((piece) =>
-        (admin as any)
-          .from("uniforms")
-          .update({ department_ids: piece.department_ids.filter((id) => id !== departmentId) })
-          .eq("id", piece.id)
-      )
-    );
 
     const { error } = await (admin as any)
       .from("departments")

@@ -4,6 +4,7 @@ import { requireBranchLeader } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { persistPreviewImage, renderPaletteLookImage } from "@/lib/preview-render";
 import { baseFigureUrlFor } from "@/lib/mannequin-config";
+import { validateDepartmentScope } from "@/lib/scope";
 import {
   buildPaletteLookName,
   createPaletteMoodBoard,
@@ -46,11 +47,21 @@ export async function POST(request: Request) {
     const description = typeof body.description === "string" && body.description.trim()
       ? body.description.trim()
       : null;
-    const departmentId = typeof body.department_id === "string" ? body.department_id : "";
+    // A palette look still renders for one department's naming/prompt, but may be shared
+    // with others so the render is reused rather than repeated.
+    const scope = validateDepartmentScope(body);
+    const departmentId = scope.department_ids[0] ?? "";
     const gender = isGender(body.gender) ? body.gender : null;
     const palette = validatePalette(body.palette);
 
-    if (!departmentId) return NextResponse.json({ error: "Department is required" }, { status: 400 });
+    // Unlike other looks, a palette look needs one named department even when shared with
+    // all of them: the department name goes into the generation prompt and the look name.
+    if (!departmentId) {
+      return NextResponse.json(
+        { error: "Choose at least one department — the palette prompt is written for it" },
+        { status: 400 }
+      );
+    }
     if (!gender) return NextResponse.json({ error: "Gender is required" }, { status: 400 });
 
     const { data: department } = await db
@@ -68,7 +79,8 @@ export async function POST(request: Request) {
       .insert({
         name: lookName,
         description,
-        department_id: departmentId,
+        department_ids: scope.department_ids,
+        all_departments: scope.all_departments,
         gender,
         branch_id: auth.branchId,
         created_by: auth.userId,
@@ -78,7 +90,7 @@ export async function POST(request: Request) {
           palette,
         },
       })
-      .select("id, name, description, department_id, gender, canvas_data, preview_url, preview_status, created_at")
+      .select("id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, preview_status, created_at")
       .single() as { data: { id: string } | null; error: Error | null };
 
     if (comboErr || !combination) throw comboErr ?? new Error("Failed to create palette look");
@@ -111,7 +123,7 @@ export async function POST(request: Request) {
         [gender === "male" ? "male_composite_url" : "female_composite_url"]: personImageUrl,
       })
       .eq("id", combinationId)
-      .select("id, name, description, department_id, gender, canvas_data, preview_url, preview_status, created_at")
+      .select("id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, preview_status, created_at")
       .single() as { data: unknown | null; error: Error | null };
 
     if (updateErr || !updated) throw updateErr ?? new Error("Failed to save palette preview");

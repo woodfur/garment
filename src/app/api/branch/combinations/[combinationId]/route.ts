@@ -40,9 +40,8 @@ export async function GET(_request: Request, { params }: Params) {
     const { data, error } = await (admin as any)
       .from("combinations")
       .select(`
-        id, name, description, department_id, gender, canvas_data, preview_url, created_at,
+        id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, created_at,
         preview_status, male_gif_url, female_gif_url, male_composite_url, female_composite_url,
-        departments(name),
         combination_items(
           id, uniform_id, layer_order, x, y, scale_x, scale_y, rotation,
           uniforms(id, name, category, image_url, bg_removed)

@@ -22,14 +22,15 @@ type ZoneMap = Partial<Record<BodyZone, ZoneItem>>;
 type PreviewStatus = "none" | "processing" | "ready" | "failed";
 type ComboDetail = {
   id: string; name: string; description: string | null;
-  department_id: string;
+  // Shared across departments so one render is reused rather than rebuilt.
+  department_ids: string[];
+  all_departments: boolean;
   gender: Gender | null;
   preview_url: string | null;
   preview_status: PreviewStatus;
   male_gif_url: string | null; female_gif_url: string | null;
   male_composite_url: string | null; female_composite_url: string | null;
   canvas_data: { mode?: string; palette?: Array<{ hex: string; label: string | null }> } | null;
-  departments: { name: string } | null;
 };
 type ScheduleOption = { id: string; service_date: string; title: string };
 
@@ -49,6 +50,8 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const [scheduleOptions, setScheduleOptions] = useState<ScheduleOption[]>([]);
   const [selectedScheduleId, setSelectedScheduleId] = useState("");
   const [assignGender, setAssignGender] = useState<Gender | "">("");
+  const [assignDeptId, setAssignDeptId] = useState("");
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   // GAP-7 FIX: generationKey forces the poll useEffect to re-run when the user clicks
@@ -56,16 +59,24 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const [generationKey, setGenerationKey] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  /** Departments this look can be scheduled against. */
+  const assignableDepartments = combo?.all_departments
+    ? departments
+    : departments.filter((d) => combo?.department_ids?.includes(d.id));
+  const departmentLabel = assignableDepartments.map((d) => d.name).join(" · ");
+
   const fetchData = useCallback(async () => {
     try {
-      const [comboRes, zonesRes] = await Promise.all([
+      const [comboRes, zonesRes, deptRes] = await Promise.all([
         fetch(`/api/branch/combinations/${combinationId}`),
         fetch(`/api/branch/combinations/${combinationId}/zones`),
+        fetch("/api/branch/departments"),
       ]);
       if (!comboRes.ok) { setCombo(null); return; }
-      const [comboData, zonesData] = await Promise.all([comboRes.json(), zonesRes.json()]);
+      const [comboData, zonesData, deptData] = await Promise.all([comboRes.json(), zonesRes.json(), deptRes.json()]);
       setCombo(comboData);
       setZones(zonesData ?? { male: {}, female: {} });
+      setDepartments(Array.isArray(deptData) ? deptData : []);
     } catch {
       setCombo(null);
     } finally {
@@ -130,6 +141,8 @@ export default function CombinationDetailClient({ combinationId }: { combination
     setAssignError(null);
     setSelectedScheduleId("");
     setAssignGender(combo?.gender ?? "");
+    // A shared look serves several departments, so the target must be chosen.
+    setAssignDeptId(assignableDepartments.length === 1 ? assignableDepartments[0].id : "");
     try {
       const res = await fetch("/api/branch/schedules");
       const data = await res.json();
@@ -151,6 +164,10 @@ export default function CombinationDetailClient({ combinationId }: { combination
       setAssignError("Choose a gender before assigning this look");
       return;
     }
+    if (!assignDeptId) {
+      setAssignError("Choose which department this look is for");
+      return;
+    }
     setAssigning(true);
     setAssignError(null);
     try {
@@ -158,7 +175,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          department_id: combo.department_id,
+          department_id: assignDeptId,
           combination_id: combo.id,
           gender,
         }),
@@ -206,7 +223,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
       {/* Masthead */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", paddingBottom: "0.875rem", marginBottom: "1.75rem", borderBottom: "1.5px solid var(--color-text-primary)" }}>
         <div>
-          <div className="eyebrow eyebrow-accent">{combo.departments?.name ?? "A look"}</div>
+          <div className="eyebrow eyebrow-accent">{departmentLabel || "A look"}</div>
           <h1 className="display-serif" style={{ fontSize: "2.4rem", marginTop: "0.3rem" }}>{combo.name}</h1>
           {combo.description && <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", marginTop: "0.4rem", maxWidth: "52ch" }}>{combo.description}</p>}
         </div>
@@ -387,7 +404,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
         <div style={{ position: "fixed", inset: 0, background: "rgba(33,28,25,0.5)", backdropFilter: "blur(3px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
           <div className="card" style={{ width: "100%", maxWidth: 460, padding: "1.75rem", position: "relative" }}>
             <button onClick={() => setShowAssign(false)} style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}><X size={18} /></button>
-            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>{combo.departments?.name ?? "Look"}</div>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>{departmentLabel || "Look"}</div>
             <h2 className="display-serif" style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>Assign <em className="serif-em">{combo.name}</em></h2>
             <div style={{ display: "grid", gap: "0.9rem" }}>
               <div>
@@ -398,6 +415,17 @@ export default function CombinationDetailClient({ combinationId }: { combination
                   ))}
                 </select>
               </div>
+              {assignableDepartments.length > 1 && (
+                <div>
+                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Department</label>
+                  <select value={assignDeptId} onChange={(e) => setAssignDeptId(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                    <option value="">Select department...</option>
+                    {assignableDepartments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {!combo.gender && (
                 <div>
                   <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender</label>
@@ -409,7 +437,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
                 </div>
               )}
               {assignError && <p style={{ color: "var(--color-error)", fontSize: "0.82rem", margin: 0 }}>{assignError}</p>}
-              <button onClick={handleAssign} disabled={assigning || !selectedScheduleId || !(combo.gender ?? assignGender)} className="btn-primary" style={{ padding: "0.75rem" }}>
+              <button onClick={handleAssign} disabled={assigning || !selectedScheduleId || !assignDeptId || !(combo.gender ?? assignGender)} className="btn-primary" style={{ padding: "0.75rem" }}>
                 {assigning ? <><Loader2 size={15} className="animate-spin" /> Assigning...</> : <><CalendarPlus size={15} /> Assign to service</>}
               </button>
             </div>

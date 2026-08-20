@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { DepartmentChips } from "./PieceScopeFields";
 import { ZONE_POSITIONS, ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 import type { Uniform, Department, CombinationZoneItemWithUniform } from "@/types/database";
@@ -51,6 +52,12 @@ export default function CombinationBuilderClient() {
   const savedComboIdRef = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // Which departments may use the finished look. Defaults to the one it was built for;
+  // adding more here reuses this render rather than paying for another.
+  const [shareScope, setShareScope] = useState<{ departmentIds: string[]; allDepartments: boolean }>({
+    departmentIds: [],
+    allDepartments: false,
+  });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +71,17 @@ export default function CombinationBuilderClient() {
       .then((d) => setDepartments(Array.isArray(d) ? d : d.departments ?? []))
       .catch(console.error);
   }, []);
+
+  // Seed sharing with the department the look is being built for. Additional departments
+  // are opted into on the save step; this only sets the starting point.
+  useEffect(() => {
+    if (!selectedDept) return;
+    setShareScope((prev) =>
+      prev.departmentIds.length === 0 && !prev.allDepartments
+        ? { departmentIds: [selectedDept.id], allDepartments: false }
+        : prev
+    );
+  }, [selectedDept]);
 
   // Load uniforms when department and gender are selected
   useEffect(() => {
@@ -129,7 +147,13 @@ export default function CombinationBuilderClient() {
         const res = await fetch("/api/branch/combinations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), description: description.trim() || null, department_id: selectedDept.id, gender: activeGender }),
+          body: JSON.stringify({
+            name: name.trim(),
+            description: description.trim() || null,
+            department_ids: shareScope.departmentIds,
+            all_departments: shareScope.allDepartments,
+            gender: activeGender,
+          }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? "Failed to create combination");
         const combo = await res.json();
@@ -506,6 +530,17 @@ export default function CombinationBuilderClient() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+
+            <div style={{ marginTop: "1rem" }}>
+              <DepartmentChips
+                departments={departments}
+                departmentIds={shareScope.departmentIds}
+                allDepartments={shareScope.allDepartments}
+                onChange={setShareScope}
+                label="Departments that can use this look"
+                hint="Share a look instead of rebuilding it — every department here reuses this one render."
+              />
+            </div>
           </div>
 
           <div className="builder-nav builder-nav-save">

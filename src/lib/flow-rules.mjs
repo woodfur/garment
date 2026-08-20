@@ -29,7 +29,9 @@ export function filterPiecesForLook(pieces, { departmentId, gender, category }) 
 
 export function filterAssignableCombinations(combinations, { departmentId, gender }) {
   return combinations.filter((combination) => {
-    if (departmentId && combination.department_id !== departmentId) return false;
+    // A look shared with this department is assignable to it — that is the whole point of
+    // shared looks: one render, reused instead of rebuilt per department.
+    if (!matchesDepartment(combination, departmentId ?? null)) return false;
     if (!gender) return false;
     return combination.gender === gender || combination.gender == null;
   });

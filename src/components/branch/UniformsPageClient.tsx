@@ -23,8 +23,9 @@ type Uniform = {
 type PreviewStatus = "none" | "processing" | "ready" | "failed";
 type Combination = {
   id: string; name: string; description: string | null;
-  department_id: string; gender: Gender | null; canvas_data: Record<string, unknown> | null; preview_url: string | null; created_at: string;
-  departments: { name: string } | null;
+  // A look may be shared across departments so one render is reused, not rebuilt.
+  department_ids: string[]; all_departments: boolean; department_names: string[];
+  gender: Gender | null; canvas_data: Record<string, unknown> | null; preview_url: string | null; created_at: string;
   preview_status: PreviewStatus;
   male_composite_url: string | null;
   female_composite_url: string | null;
@@ -181,7 +182,7 @@ function LookPlate({ combo, idx, onDelete, onPreviewUpdate, onAssign }: {
       <div className="cap">
         <StatusBadge status={combo.preview_status ?? "none"} />
         <div className="t">{combo.name}</div>
-        {combo.departments?.name && <div className="d">{combo.departments.name}</div>}
+        {combo.department_names.length > 0 && <div className="d">{combo.department_names.join(" · ")}</div>}
       </div>
     </Link>
   );
@@ -220,6 +221,7 @@ export default function UniformsPageClient() {
   const [scheduleOptions, setScheduleOptions] = useState<ScheduleOption[]>([]);
   const [selectedScheduleId, setSelectedScheduleId] = useState("");
   const [assignGender, setAssignGender] = useState<Gender | "">("");
+  const [assignDeptId, setAssignDeptId] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
@@ -391,11 +393,22 @@ export default function UniformsPageClient() {
     }
   }
 
+  /** Departments a look can be scheduled against — all of them when it is shared with all. */
+  function assignableDepartments(combo: Combination): Department[] {
+    return combo.all_departments
+      ? departments
+      : departments.filter((d) => combo.department_ids.includes(d.id));
+  }
+
   async function openAssignLook(combo: Combination) {
     setAssigningLook(combo);
     setAssignError(null);
     setSelectedScheduleId("");
     setAssignGender(combo.gender ?? "");
+    // A shared look serves several departments, so the target has to be chosen. With
+    // exactly one it is unambiguous and the picker stays hidden.
+    const options = assignableDepartments(combo);
+    setAssignDeptId(options.length === 1 ? options[0].id : "");
     try {
       const res = await fetch("/api/branch/schedules");
       const data = await res.json();
@@ -417,6 +430,10 @@ export default function UniformsPageClient() {
       setAssignError("Choose a gender before assigning this look");
       return;
     }
+    if (!assignDeptId) {
+      setAssignError("Choose which department this look is for");
+      return;
+    }
     setAssigning(true);
     setAssignError(null);
     try {
@@ -424,7 +441,7 @@ export default function UniformsPageClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          department_id: assigningLook.department_id,
+          department_id: assignDeptId,
           combination_id: assigningLook.id,
           gender,
         }),
@@ -444,7 +461,8 @@ export default function UniformsPageClient() {
     setCombinations((p) => p.map((c) => c.id === id ? { ...c, ...s } : c));
   }, []);
 
-  const looks = combinations.filter((c) => filterDept === "all" || c.department_id === filterDept);
+  // Shared looks appear under every department they serve.
+  const looks = combinations.filter((c) => filterDept === "all" || matchesDepartment(c, filterDept));
   // Shared pieces appear under every department they serve.
   const pieces = uniforms.filter((u) => filterDept === "all" || matchesDepartment(u, filterDept));
 
@@ -786,7 +804,7 @@ export default function UniformsPageClient() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(33,28,25,0.5)", backdropFilter: "blur(3px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
           <div className="card" style={{ width: "100%", maxWidth: 460, padding: "1.75rem", position: "relative" }}>
             <button onClick={() => setAssigningLook(null)} style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}><X size={18} /></button>
-            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>{assigningLook.departments?.name ?? "Look"}</div>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>{assigningLook.department_names.join(" · ") || "Look"}</div>
             <h2 className="display-serif" style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>Assign <em className="serif-em">{assigningLook.name}</em></h2>
             <div style={{ display: "grid", gap: "0.9rem" }}>
               <div>
@@ -797,6 +815,17 @@ export default function UniformsPageClient() {
                   ))}
                 </select>
               </div>
+              {assignableDepartments(assigningLook).length > 1 && (
+                <div>
+                  <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Department</label>
+                  <select value={assignDeptId} onChange={(e) => setAssignDeptId(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.65rem 0.875rem", fontSize: "0.875rem", outline: "none", background: "var(--color-bg-elevated)" }}>
+                    <option value="">Select department...</option>
+                    {assignableDepartments(assigningLook).map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {!assigningLook.gender && (
                 <div>
                   <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender</label>
@@ -808,7 +837,7 @@ export default function UniformsPageClient() {
                 </div>
               )}
               {assignError && <p style={{ color: "var(--color-error)", fontSize: "0.82rem", margin: 0 }}>{assignError}</p>}
-              <button onClick={handleAssignLook} disabled={assigning || !selectedScheduleId || !(assigningLook.gender ?? assignGender)} className="btn-primary" style={{ padding: "0.75rem" }}>
+              <button onClick={handleAssignLook} disabled={assigning || !selectedScheduleId || !assignDeptId || !(assigningLook.gender ?? assignGender)} className="btn-primary" style={{ padding: "0.75rem" }}>
                 {assigning ? <><Loader2 size={15} className="animate-spin" /> Assigning...</> : <><CalendarPlus size={15} /> Assign to service</>}
               </button>
             </div>
