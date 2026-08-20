@@ -1,12 +1,7 @@
 import sharp from "sharp";
 import { createAdminClient } from "@/lib/supabase/server";
-
-export type PaletteColor = {
-  hex: string;
-  label: string | null;
-};
-
-const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+export { buildPaletteLookName, buildPalettePrompt, validatePalette } from "@/lib/palette-prompt";
+import type { PaletteColor } from "@/lib/palette-prompt";
 
 function escapeXml(value: string): string {
   return value
@@ -22,54 +17,6 @@ function textOn(hex: string): string {
   const g = parseInt(c.slice(2, 4), 16);
   const b = parseInt(c.slice(4, 6), 16);
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#211C19" : "#FBF9F4";
-}
-
-export function validatePalette(raw: unknown): PaletteColor[] {
-  if (!Array.isArray(raw)) throw new Error("palette must be an array");
-
-  const palette = raw.map((item) => {
-    if (!item || typeof item !== "object") throw new Error("Each palette color must be an object");
-    const candidate = item as { hex?: unknown; label?: unknown };
-    if (typeof candidate.hex !== "string" || !HEX_RE.test(candidate.hex)) {
-      throw new Error("Each palette color needs a valid hex value");
-    }
-    const label = typeof candidate.label === "string" && candidate.label.trim()
-      ? candidate.label.trim().slice(0, 40)
-      : null;
-    return { hex: candidate.hex.toUpperCase(), label };
-  });
-
-  if (palette.length < 2) throw new Error("Choose at least two colors");
-  if (palette.length > 5) throw new Error("Choose no more than five colors");
-
-  return palette;
-}
-
-export function buildPalettePrompt({
-  departmentName,
-  gender,
-  palette,
-}: {
-  departmentName: string;
-  gender: "male" | "female";
-  palette: PaletteColor[];
-}): string {
-  const colors = palette.map((color) => color.label ?? color.hex).join(", ");
-  const model = gender === "male" ? "male" : "female";
-  const garmentGuidance = gender === "male"
-    ? "let the outfit naturally distribute the colors across a modest collared shirt, jacket, tailored trousers, shoes, belt, or accessories"
-    : "let the outfit naturally distribute the colors across a modest blouse, knee-to-mid-calf A-line skirt, knee-to-mid-calf dress, shoes, belt, or accessories";
-  return [
-    `Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of one modestly dressed adult Black African ${model} church uniform model`,
-    `wearing a coordinated church service uniform outfit for the ${departmentName} department`,
-    `using this color palette: ${colors}`,
-    garmentGuidance,
-    "front-facing pose with hands gently clasped or relaxed at the front, head to toe visible",
-    "seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet",
-    "natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and shoes, polished but respectful church styling",
-    "covered chest, clearly separate blouse plus knee-to-mid-calf skirt when a two-piece female outfit is used, closed-toe dress shoes, no low neckline, no off-shoulder top, no strapless top, no shorts, no mini skirt, no tight bodycon fit, no bare shoulders",
-    "no blur, no shallow depth of field, no cropped feet, no text, no color cards, no logos, no watermark",
-  ].join(", ");
 }
 
 function paletteSvg({
@@ -113,22 +60,20 @@ function paletteSvg({
 }
 
 export async function createPaletteMoodBoard({
-  personImageUrl,
+  personImage,
   palette,
   title,
   departmentName,
 }: {
-  personImageUrl: string;
+  /** Rendered person image bytes — gpt-image-2 returns base64, so there is no URL to fetch. */
+  personImage: Buffer;
   palette: PaletteColor[];
   title: string;
   departmentName: string;
 }): Promise<Buffer> {
-  const personRes = await fetch(personImageUrl);
-  if (!personRes.ok) throw new Error("Failed to download generated person image");
-
-  const personBuffer = Buffer.from(await personRes.arrayBuffer());
-  const person = await sharp(personBuffer)
-    .resize({ width: 690, height: 1280, fit: "cover", position: "top" })
+  const person = await sharp(personImage)
+    .resize({ width: 690, height: 1280, fit: "cover", position: "top", withoutEnlargement: true })
+    .sharpen({ sigma: 0.85, m1: 1, m2: 2 })
     .toBuffer();
 
   const swatches = await sharp(Buffer.from(paletteSvg({ palette, title, departmentName })))
@@ -148,7 +93,7 @@ export async function createPaletteMoodBoard({
       { input: person, left: 48, top: 60 },
       { input: swatches, left: 738, top: 80 },
     ])
-    .webp({ quality: 90, effort: 4 })
+    .png({ compressionLevel: 6 })
     .toBuffer();
 }
 
@@ -162,10 +107,10 @@ export async function uploadPaletteMoodBoard({
   image: Buffer;
 }): Promise<string> {
   const admin = createAdminClient();
-  const path = `palette/${branchId}/${combinationId}-${Date.now()}.webp`;
+  const path = `palette/${branchId}/${combinationId}-${Date.now()}.png`;
   const { error } = await admin.storage
     .from("combination-previews")
-    .upload(path, image, { contentType: "image/webp", upsert: true });
+    .upload(path, image, { contentType: "image/png", upsert: true });
 
   if (error) throw error;
 

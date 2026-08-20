@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/server";
-import { generateCharacterImage } from "@/lib/replicate";
+import { generateBaseFigureImage } from "@/lib/preview-render";
 import type { Gender } from "@/types/database";
+
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   // Restrict to super_admin only
@@ -22,23 +24,18 @@ export async function POST(req: Request) {
     const admin = createAdminClient();
 
     for (const gender of genders) {
-      let imageUrl: string;
+      let blob: Buffer;
       try {
-        imageUrl = await generateCharacterImage(gender);
+        blob = await generateBaseFigureImage(gender);
       } catch (genErr) {
         console.error(`[generate-mannequins] Generation failed for ${gender}:`, genErr);
+        const detail = genErr instanceof Error ? genErr.message : "Unknown error";
         return NextResponse.json(
-          { error: `Failed to generate ${gender} character. The AI model may have timed out — try again or check Replicate logs.` },
+          { error: `Failed to generate ${gender} character: ${detail}` },
           { status: 502 }
         );
       }
 
-      // Fetch image and upload to mannequins bucket
-      const res = await fetch(imageUrl);
-      if (!res.ok) {
-        return NextResponse.json({ error: `Failed to fetch generated image for ${gender}` }, { status: 502 });
-      }
-      const blob = await res.arrayBuffer();
       const path = `${gender}-character.png`;
       const { error } = await admin.storage
         .from("mannequins")
