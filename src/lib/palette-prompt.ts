@@ -52,6 +52,16 @@ export function validatePalette(raw: unknown): PaletteColor[] {
   return palette;
 }
 
+/** Nearest human colour name for a hex value, e.g. "#E6D7C3" -> "cream". */
+export function nearestColorName(hex: string): string {
+  const value = hex.replace("#", "");
+  return describeColor(
+    parseInt(value.slice(0, 2), 16),
+    parseInt(value.slice(2, 4), 16),
+    parseInt(value.slice(4, 6), 16)
+  );
+}
+
 export function colorPromptPhrase(hex: string): string {
   const normalized = hex.toUpperCase();
   const value = normalized.replace("#", "");

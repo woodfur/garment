@@ -2,8 +2,26 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/server";
 
+type ViewerAssignment = {
+  id: string;
+  gender: "male" | "female" | null;
+  department: { id: string; name: string } | null;
+  combination: {
+    id: string;
+    name: string;
+    preview_status: string;
+    male_composite_url: string | null;
+    female_composite_url: string | null;
+    male_gif_url: string | null;
+    female_gif_url: string | null;
+  } | null;
+};
+
 interface PageProps {
   params: Promise<{ code: string }>;
+  /** ?dept=<id> narrows the page to one department, so a leader can post a link
+      straight into that department's group chat. */
+  searchParams: Promise<{ dept?: string }>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -19,8 +37,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function PublicViewerPage({ params }: PageProps) {
+export default async function PublicViewerPage({ params, searchParams }: PageProps) {
   const { code } = await params;
+  const { dept: selectedDept } = await searchParams;
   const admin = createAdminClient();
 
   const { data: branch } = await (admin as any)
@@ -49,6 +68,32 @@ export default async function PublicViewerPage({ params }: PageProps) {
     .gte("service_date", today)
     .order("service_date", { ascending: true });
 
+  // Departments that actually appear in the upcoming schedules, for the filter chips.
+  const departments: Array<{ id: string; name: string }> = [];
+  for (const schedule of schedules ?? []) {
+    for (const assignment of schedule.assignments ?? []) {
+      const dept = assignment.department;
+      if (dept && !departments.some((d) => d.id === dept.id)) departments.push({ id: dept.id, name: dept.name });
+    }
+  }
+  departments.sort((a, b) => a.name.localeCompare(b.name));
+
+  const activeDept = departments.some((d) => d.id === selectedDept) ? selectedDept : undefined;
+
+  /** Group a service's assignments by department so each gets one heading and one pack. */
+  const groupByDepartment = (assignments: ViewerAssignment[]) => {
+    const groups: Array<{ id: string; name: string; assignments: ViewerAssignment[] }> = [];
+    for (const assignment of assignments ?? []) {
+      const dept = assignment.department;
+      if (!dept) continue;
+      if (activeDept && dept.id !== activeDept) continue;
+      let group = groups.find((g) => g.id === dept.id);
+      if (!group) { group = { id: dept.id, name: dept.name, assignments: [] }; groups.push(group); }
+      group.assignments.push(assignment);
+    }
+    return groups.sort((a, b) => a.name.localeCompare(b.name));
+  };
+
   return (
     <div className="viewer-root">
       <header className="viewer-header">
@@ -59,6 +104,21 @@ export default async function PublicViewerPage({ params }: PageProps) {
       </header>
 
       <main className="viewer-main">
+        {departments.length > 1 && (
+          <nav className="viewer-dept-filter" aria-label="Filter by department">
+            <a href={`/view/${code}`} className={`viewer-dept-chip${activeDept ? "" : " on"}`}>All departments</a>
+            {departments.map((d) => (
+              <a
+                key={d.id}
+                href={`/view/${code}?dept=${encodeURIComponent(d.id)}`}
+                className={`viewer-dept-chip${activeDept === d.id ? " on" : ""}`}
+              >
+                {d.name}
+              </a>
+            ))}
+          </nav>
+        )}
+
         {(!schedules || schedules.length === 0) && (
           <div className="viewer-empty">
             <span className="viewer-empty-icon">📅</span>
@@ -92,12 +152,27 @@ export default async function PublicViewerPage({ params }: PageProps) {
               </a>
             </div>
 
-            {(!schedule.assignments || schedule.assignments.length === 0) && (
-              <p className="viewer-no-outfits">No outfits assigned yet.</p>
+            {groupByDepartment(schedule.assignments).length === 0 && (
+              <p className="viewer-no-outfits">
+                {activeDept ? "No uniform assigned for this department yet." : "No outfits assigned yet."}
+              </p>
             )}
 
-            <div className="viewer-assignments">
-              {schedule.assignments?.map((a: any) => {
+            {groupByDepartment(schedule.assignments).map((group) => (
+              <section key={group.id} className="viewer-dept-group">
+                <div className="viewer-dept-group-header">
+                  <h3 className="viewer-dept-group-name">{group.name}</h3>
+                  <a
+                    href={`/api/public/schedules/${schedule.id}/departments/${group.id}/card?code=${encodeURIComponent(code)}`}
+                    className="viewer-download-btn"
+                    style={{ textDecoration: "none" }}
+                  >
+                    ↓ Download {group.name} pack
+                  </a>
+                </div>
+
+                <div className="viewer-assignments">
+              {group.assignments.map((a) => {
                 const gender = a.gender === "male" || a.gender === "female" ? a.gender : null;
                 const imageUrl = gender === "male"
                   ? a.combination?.male_composite_url
@@ -112,7 +187,6 @@ export default async function PublicViewerPage({ params }: PageProps) {
                 const assetUrl = imageUrl || videoUrl;
                 return (
                 <div key={a.id} className="viewer-assignment">
-                  <div className="viewer-dept-label">{a.department?.name}</div>
                   {gender && (
                     <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", textTransform: "capitalize", marginBottom: "0.5rem" }}>
                       {gender}
@@ -128,7 +202,9 @@ export default async function PublicViewerPage({ params }: PageProps) {
                           <img src={imageUrl} alt={`${a.combination.name} ${gender} preview`} className="viewer-video" />
                         ) : (
                           <video
-                            src={videoUrl}
+                            // Only reached when assetUrl was truthy and imageUrl was not,
+                            // so videoUrl is set — the coalesce just satisfies the type.
+                            src={videoUrl ?? undefined}
                             autoPlay
                             loop
                             muted
@@ -153,7 +229,9 @@ export default async function PublicViewerPage({ params }: PageProps) {
                 </div>
                 );
               })}
-            </div>
+                </div>
+              </section>
+            ))}
           </div>
         ))}
       </main>

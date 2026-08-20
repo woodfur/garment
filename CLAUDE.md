@@ -160,6 +160,26 @@ Server Components wrap their Supabase reads in `unstable_cache` with per-branch 
 
 `next.config.ts` also sets `experimental.staleTimes` (30s dynamic / 180s static client-side RSC cache), so a mutation may not appear instantly on client-side navigation even after a correct `revalidateTag`.
 
+## Public sharing (`src/lib/share-card.ts`)
+
+The workflow being replaced is a leader forwarding one image into a department WhatsApp
+group — both figures side by side with the garments named underneath. That shape drives
+the design: the per-department pack is a **single PNG**, not a PDF, because nobody
+forwards a PDF into a group chat.
+
+- `GET /api/public/schedules/[scheduleId]/departments/[departmentId]/card?code=` renders it.
+  Auth is the branch `view_code`, same as the other public routes.
+- Garment names come from `combination_zone_items` sorted by `ZONE_LAYER_ORDER`. Palette
+  looks have no garment rows, so they list their approved colours instead — named via
+  `nearestColorName()` with a swatch, because a hex code means nothing to a reader.
+- The image band collapses (900px → 96px) when no figure has rendered, so an unfinished
+  card is not mostly blank.
+- `/view/[code]` groups assignments by department and takes `?dept=<id>`. That keeps the
+  page a Server Component **and** gives leaders a per-department link to post directly.
+
+The whole-service PDF (`schedule-package.ts`) still exists for anyone wanting every
+department at once.
+
 ## Scheduled reminders
 
 `vercel.json` registers two crons (Mon + Thu 10:00 UTC) hitting `GET /api/cron/uniform-reminders`. The route authenticates with `Authorization: Bearer ${CRON_SECRET}` — not the branch guards — resolves today's target service date via `getReminderTargetDate()`, and POSTs a payload to a **Zapier** webhook. Idempotency comes from the `uniform_reminder_deliveries` table (unique on `branch_id,schedule_id,reminder_kind`), so re-running the cron is safe.
