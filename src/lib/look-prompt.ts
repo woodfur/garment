@@ -61,9 +61,12 @@ function garmentClause(gender: Gender, category: string, descriptor: string): st
     return `${descriptor} modest church uniform accessory`;
   }
 
-  if (category === "top") return `${descriptor} short-sleeve collared church uniform shirt`;
+  // Deliberately sleeve-agnostic: pinning "short-sleeve" here fought every suit look,
+  // since a jacket in the outer zone layers over this shirt. Let the reference photo or
+  // the approved colour decide the sleeves.
+  if (category === "top") return `${descriptor} collared church uniform shirt`;
   if (category === "bottom") return `${descriptor} tailored church uniform trousers`;
-  if (category === "full_body") return `${descriptor} coordinated modest church uniform outfit`;
+  if (category === "full_body") return `${descriptor} coordinated modest church uniform suit or matching two-piece outfit`;
   if (category === "outer") return `${descriptor} tailored church uniform jacket or blazer`;
   if (category === "footwear") return `${descriptor} glossy black closed-toe dress shoes`;
   if (category === "head") return `${descriptor} modest church hat`;

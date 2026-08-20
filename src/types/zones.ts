@@ -1,4 +1,4 @@
-import type { BodyZone, UniformCategory } from "./database";
+import type { BodyZone, Gender, UniformCategory } from "./database";
 
 export type { Gender, BodyZone, PreviewStatus } from "./database";
 
@@ -18,6 +18,18 @@ export const ZONE_POSITIONS: Record<BodyZone, { x: number; y: number; label: str
   accessory_chest_pin:   { x: 40, y: 30,  label: "Chest Pin" },
   accessory_bag:         { x: 75, y: 55,  label: "Bag" },
 };
+
+/**
+ * Display label for a zone on a given figure.
+ *
+ * The full_body zone means different garments per gender: a dress for women, a suit or
+ * matching two-piece for men. Only the wording differs — the zone, the category, and the
+ * women's prompt are all unchanged.
+ */
+export function zoneLabel(zone: BodyZone, gender: Gender | null): string {
+  if (zone === "full_body" && gender === "male") return "Suit";
+  return ZONE_POSITIONS[zone].label;
+}
 
 /** Uniform category that maps to each zone */
 export const ZONE_CATEGORIES: Record<BodyZone, UniformCategory> = {

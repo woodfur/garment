@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { DepartmentChips } from "./PieceScopeFields";
-import { ZONE_POSITIONS, ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
+import { ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES, zoneLabel } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 import type { Uniform, Department, CombinationZoneItemWithUniform } from "@/types/database";
 
@@ -344,7 +344,7 @@ export default function CombinationBuilderClient() {
                   className={`zone-tab ${activeZone === zone ? "on" : ""} ${item ? "filled" : ""}`}
                   onClick={() => setActiveZone(zone)}
                 >
-                  <span className="zone-tab-label">{ZONE_POSITIONS[zone].label}</span>
+                  <span className="zone-tab-label">{zoneLabel(zone, activeGender)}</span>
                   {item && <span className="zone-tab-dot" aria-hidden>●</span>}
                 </button>
               );
@@ -382,7 +382,7 @@ export default function CombinationBuilderClient() {
                       )}
                     </div>
                     <div className="fit-stage-meta">
-                      <span className="eyebrow eyebrow-accent">{ZONE_POSITIONS[activeZone].label}</span>
+                      <span className="eyebrow eyebrow-accent">{zoneLabel(activeZone, activeGender)}</span>
                       <span className="fit-stage-name">{assigned.uniform.name}</span>
                       {assigned.uniform.image_url && !assigned.uniform.bg_removed && (
                         <span className="fit-stage-warn">⚠️ Background not removed</span>
@@ -399,7 +399,7 @@ export default function CombinationBuilderClient() {
               }
               return (
                 <div className="fit-stage-empty">
-                  <span className="fit-stage-empty-zone">{ZONE_POSITIONS[activeZone].label}</span>
+                  <span className="fit-stage-empty-zone">{zoneLabel(activeZone, activeGender)}</span>
                   <span>Pick a piece below to dress this zone</span>
                 </div>
               );
@@ -416,7 +416,7 @@ export default function CombinationBuilderClient() {
               <div className="fit-picker-empty">
                 <p style={{ marginBottom: "0.75rem" }}>
                   {activeZone
-                    ? `No ${activeGender} ${ZONE_POSITIONS[activeZone].label.toLowerCase()} pieces in ${selectedDept?.name}.`
+                    ? `No ${activeGender} ${zoneLabel(activeZone, activeGender).toLowerCase()} pieces in ${selectedDept?.name}.`
                     : `No ${activeGender} pieces in ${selectedDept?.name ?? "this department"} yet.`}
                 </p>
                 <a
@@ -485,7 +485,7 @@ export default function CombinationBuilderClient() {
               <ul className="summary-list">
                 {(Object.entries(outfit[activeGender]) as [BodyZone, CombinationZoneItemWithUniform][]).map(([zone, item]) => (
                   <li key={zone} className="summary-item">
-                    <span className="summary-zone">{ZONE_POSITIONS[zone].label}</span>
+                    <span className="summary-zone">{zoneLabel(zone, activeGender)}</span>
                     <span className="summary-uniform">{item.uniform?.name ?? "[Deleted]"}</span>
                     {item.uniform && item.uniform.image_url && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
                   </li>

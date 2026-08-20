@@ -112,6 +112,53 @@ test("every prompt keeps the modesty constraints", () => {
   assert.match(prompt, /Black African woman/);
 });
 
+test("a male top is not pinned to short sleeves, so it can sit under a suit jacket", () => {
+  const { prompt } = planLook({
+    gender: "male",
+    colorItems: [],
+    photoItems: [photo("top", "White shirt"), photo("outer", "Black suit jacket")],
+    hasFigureReference: false,
+  });
+
+  assert.match(prompt, /collared church uniform shirt/);
+  assert.doesNotMatch(prompt, /short-sleeve/);
+  // The jacket is a separate garment layered over the shirt, not a replacement for it.
+  assert.match(prompt, /tailored church uniform jacket or blazer/);
+});
+
+test("a male full-body piece renders as a suit, a female one as a dress", () => {
+  const male = planLook({
+    gender: "male",
+    colorItems: [color("full_body", "#1C1C1C")],
+    photoItems: [],
+    hasFigureReference: false,
+  }).prompt;
+  assert.match(male, /suit or matching two-piece outfit/);
+
+  // The women's dress wording must not drift when the men's is edited.
+  const female = planLook({
+    gender: "female",
+    colorItems: [color("full_body", "#1C1C1C")],
+    photoItems: [],
+    hasFigureReference: false,
+  }).prompt;
+  assert.match(female, /modest knee-to-mid-calf A-line church uniform dress with a covered chest/);
+  assert.doesNotMatch(female, /suit/);
+});
+
+test("female garment clauses are unchanged by the men's suit wording", () => {
+  const { prompt } = planLook({
+    gender: "female",
+    colorItems: [color("top", "#CCF755"), color("bottom", "#00143D")],
+    photoItems: [photo("footwear", "Black flats")],
+    hasFigureReference: false,
+  });
+
+  assert.match(prompt, /modest high-neck blouse or church uniform top with covered shoulders/);
+  assert.match(prompt, /knee-to-mid-calf A-line church uniform skirt/);
+  assert.match(prompt, /glossy closed-toe low-heel court shoes/);
+});
+
 test("planLook rejects an empty look", () => {
   assert.throws(
     () => planLook({ gender: "male", colorItems: [], photoItems: [], hasFigureReference: true }),

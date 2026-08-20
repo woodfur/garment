@@ -86,6 +86,8 @@ Reference order is always: base figure (if configured) → colour chart (if colo
 
 `garmentClause()` in `look-prompt.ts` and `buildPalettePrompt()` both encode non-negotiable requirements: modest church dress (covered shoulders/chest, knee-to-mid-calf skirts, closed-toe shoes) and Black African models. These strings are the product. Tests assert both what must appear (hex + RGB, modesty clauses) and what must **not** (user-supplied colour labels, the word "near"). Change a prompt and the tests will tell you which invariant you broke.
 
+A suit is built as three pieces — shirt (`top`), jacket (`outer`), trousers (`bottom`) — and `ZONE_LAYER_ORDER` runs `top → outer` so the jacket layers over the shirt. The male `top` clause is deliberately **sleeve-agnostic**: pinning "short-sleeve" there fought every suit look. The `full_body` zone means a dress for women and a suit for men, which is why `zoneLabel(zone, gender)` exists — the label differs by figure while the zone, category, and women's prompt do not.
+
 ### Async contract
 
 `POST .../generate-preview` validates, sets `preview_status = 'processing'`, hands the render to `waitUntil()`, and returns **202** immediately. The client keeps polling `preview-status` exactly as it always did. Palette looks (`POST /api/branch/palette-looks`) stay **synchronous** inside the request. Both routes set `maxDuration = 300` because a full-body render takes well over a minute.

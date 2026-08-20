@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Trash2, Loader2, RefreshCw, Sparkles, CalendarPlus, X, Download } from "lucide-react";
-import { ZONE_POSITIONS, STANDARD_ZONES, ACCESSORY_ZONES } from "@/types/zones";
+import { STANDARD_ZONES, ACCESSORY_ZONES, zoneLabel } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 
 /** Readable text colour (ink or paper) for a label on a colour swatch. */
@@ -387,7 +387,7 @@ export default function CombinationDetailClient({ combinationId }: { combination
                       )}
                     </div>
                     <div style={{ padding: "0.7rem 0.8rem" }}>
-                      <div style={{ fontSize: "0.55rem", letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-text-faint)", fontWeight: 700 }}>{ZONE_POSITIONS[zone].label}</div>
+                      <div style={{ fontSize: "0.55rem", letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-text-faint)", fontWeight: 700 }}>{zoneLabel(zone, activeGender)}</div>
                       <div style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: "0.95rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
                         {item!.uniform?.name ?? "[Uniform deleted]"}
                       </div>
