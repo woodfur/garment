@@ -12,7 +12,11 @@ export type ScheduleViewAssignment = {
   department_id: string;
   gender: "male" | "female" | null;
   department: { id: string; name: string } | null;
-  combination: { id: string; name: string; preview_status: string } | null;
+  combination: {
+    id: string; name: string; preview_status: string;
+    male_composite_url?: string | null; female_composite_url?: string | null;
+    male_gif_url?: string | null; female_gif_url?: string | null;
+  } | null;
 };
 
 export type ScheduleViewGroup = {
@@ -71,8 +75,19 @@ export type CoverageCell = {
   /** Look names assigned to this department for this service, deduplicated. */
   lookNames: string[];
   genders: Array<"male" | "female">;
+  /** A rendered figure for this cell, so the grid shows outfits rather than flat colour. */
+  previewUrl: string | null;
   state: "full" | "partial" | "empty";
 };
+
+/** The rendered still for an assignment, preferring the composite over the legacy GIF. */
+export function assignmentFigure(assignment: ScheduleViewAssignment): string | null {
+  const combo = assignment.combination;
+  if (!combo || !assignment.gender) return null;
+  return assignment.gender === "male"
+    ? combo.male_composite_url ?? combo.male_gif_url ?? null
+    : combo.female_composite_url ?? combo.female_gif_url ?? null;
+}
 
 export type CoverageRow = {
   scheduleId: string;
@@ -103,6 +118,7 @@ export function coverageRows(
         departmentName: department.name,
         lookNames,
         genders,
+        previewUrl: forDept.map(assignmentFigure).find((url) => !!url) ?? null,
         state: (genders.length >= 2 ? "full" : genders.length === 1 ? "partial" : "empty") as CoverageCell["state"],
       };
     });

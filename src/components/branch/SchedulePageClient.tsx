@@ -10,6 +10,7 @@ import {
   relativeDayLabel,
   serviceDayLabel,
   serviceDayShort,
+  assignmentFigure,
 } from "@/lib/schedule-view";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -266,6 +267,14 @@ function ServicePanel({
         const preview = getAssignmentPreview(a);
         return (
           <div key={a.id} className="spc-assignment-row">
+            <div className="spc-assignment-thumb">
+              {preview ? (
+                preview.isVideo
+                  ? <video src={preview.url} autoPlay loop muted playsInline />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  : <img src={preview.url} alt={`${a.combination?.name ?? "Look"} ${preview.gender}`} />
+              ) : null}
+            </div>
             <div className="spc-assignment-dept">{a.department?.name ?? "—"}</div>
             <div className="spc-assignment-combo">
               <div className="spc-assignment-combo-name">{a.combination?.name ?? "—"}</div>
@@ -356,6 +365,9 @@ export default function SchedulePageClient() {
   const [newTitle, setNewTitle] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [creating, setCreating] = useState(false);
+  // The special-service form is a rare action — collapsed behind a button so it does not
+  // take the top of the page from the schedule itself.
+  const [showCreate, setShowCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   // Track which schedule has the assign form open
@@ -518,6 +530,7 @@ export default function SchedulePageClient() {
       setNewDate("");
       setNewTitle("");
       setNewNotes("");
+      setShowCreate(false);
     } catch {
       setCreateError("Network error. Please try again.");
     } finally {
@@ -1173,6 +1186,42 @@ export default function SchedulePageClient() {
         .spc-sheet-foot { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
         .spc-panel { border-top: 1px solid var(--color-border-subtle); padding-top: 10px; }
         .spc-assignment-gender { font-size: 0.72rem; color: var(--color-text-muted); }
+
+        .spc-add-service {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: none; border: 1px dashed var(--color-border);
+          border-radius: var(--radius-full); padding: 10px 18px; cursor: pointer;
+          font: inherit; font-size: 0.84rem; font-weight: 600; color: var(--color-text-muted);
+          margin-bottom: 26px;
+        }
+        .spc-add-service:hover { border-color: var(--color-primary-dark); color: var(--color-primary-dark); }
+        .spc-create-head {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          gap: 12px; margin-bottom: 14px;
+        }
+        /* Thumbnails so a service reads as outfits, not just a coloured pill. */
+        .spc-strip-thumbs { display: flex; align-items: center; gap: 6px; }
+        .spc-strip-thumbs img, .spc-thumb-blank {
+          width: 30px; height: 38px; border-radius: var(--radius-sm); object-fit: cover;
+          background: var(--color-bg-board); border: 1px solid var(--color-border-subtle); display: block;
+        }
+        .spc-assignment-thumb {
+          width: 34px; height: 44px; border-radius: var(--radius-sm); overflow: hidden;
+          background: var(--color-bg-board); flex: 0 0 auto;
+        }
+        .spc-assignment-thumb img, .spc-assignment-thumb video {
+          width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        /* A filled grid cell shows its render behind a scrim so the label stays readable. */
+        .spc-cov-has-img {
+          background-size: cover; background-position: top center; color: #fff;
+          position: relative; overflow: hidden;
+        }
+        .spc-cov-has-img::before {
+          content: ""; position: absolute; inset: 0;
+          background: linear-gradient(transparent 22%, rgba(0,0,0,0.78));
+        }
+        .spc-cov-has-img > * { position: relative; z-index: 1; }
         .spc-page-error {
           background: var(--color-error-bg);
           border: 1px solid var(--color-error);
@@ -1200,12 +1249,22 @@ export default function SchedulePageClient() {
         </div>
       </div>
 
-      {/* Create a special / one-off service */}
+      {/* Create a special / one-off service — collapsed by default */}
+      {!showCreate ? (
+        <button className="spc-add-service" onClick={() => setShowCreate(true)}>
+          ＋ Add a special service
+        </button>
+      ) : (
       <div className="spc-create-card">
-        <h2 className="spc-create-card-title">Add a special service</h2>
-        <p className="spc-page-subtitle" style={{ marginTop: -6, marginBottom: 12 }}>
-          For anything outside the regular Wednesday &amp; Sunday services.
-        </p>
+        <div className="spc-create-head">
+          <div>
+            <h2 className="spc-create-card-title">Add a special service</h2>
+            <p className="spc-page-subtitle" style={{ margin: "2px 0 0" }}>
+              For anything outside the regular Wednesday &amp; Sunday services.
+            </p>
+          </div>
+          <button className="spc-btn spc-btn-ghost spc-btn-sm" onClick={() => setShowCreate(false)}>Close</button>
+        </div>
         <form onSubmit={handleCreateSchedule}>
           <div className="spc-form-grid">
             <div>
@@ -1262,6 +1321,7 @@ export default function SchedulePageClient() {
           </div>
         </form>
       </div>
+      )}
 
       {/* Error banner */}
       {error && (
@@ -1387,9 +1447,22 @@ export default function SchedulePageClient() {
                     <span>{serviceDayLabel(group.service_date)}</span>
                   </div>
                   <div className="spc-strip-state">
-                    {dressed > 0
-                      ? <span className="spc-pill spc-pill-ok">{dressed} dressed</span>
-                      : <span className="spc-pill spc-pill-gap">Nothing assigned</span>}
+                    {dressed > 0 ? (
+                      <div className="spc-strip-thumbs">
+                        {group.assignments.slice(0, 4).map((a) => {
+                          const url = assignmentFigure(a);
+                          return url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={a.id} src={url} alt={`${a.department?.name ?? "Look"} ${a.gender ?? ""}`} />
+                          ) : (
+                            <span key={a.id} className="spc-thumb-blank" />
+                          );
+                        })}
+                        <span className="spc-pill spc-pill-ok">{dressed} dressed</span>
+                      </div>
+                    ) : (
+                      <span className="spc-pill spc-pill-gap">Nothing assigned</span>
+                    )}
                   </div>
                   <div className="spc-strip-actions">
                     <button className="spc-btn spc-btn-ghost spc-btn-sm"
@@ -1439,7 +1512,8 @@ export default function SchedulePageClient() {
                 {row.cells.map((cell) => (
                   <button
                     key={cell.departmentId}
-                    className={`spc-cov-cell spc-cov-${cell.state}`}
+                    className={`spc-cov-cell spc-cov-${cell.state}${cell.previewUrl ? " spc-cov-has-img" : ""}`}
+                    style={cell.previewUrl ? { backgroundImage: `url(${cell.previewUrl})` } : undefined}
                     onClick={() => openService(row.scheduleId, cell.state === "empty" ? cell.departmentId : "")}
                     aria-label={`${cell.departmentName}, ${serviceDayShort(row.serviceDate)}, ${
                       cell.state === "empty" ? "nothing assigned" : cell.lookNames.join(", ")}`}
