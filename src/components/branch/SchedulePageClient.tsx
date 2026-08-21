@@ -1132,48 +1132,58 @@ export default function SchedulePageClient() {
 
         /* Coverage grid */
         .spc-cov-summary {
-          font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 12px;
+          font-size: 0.86rem; color: var(--color-text-muted); margin-bottom: 18px;
         }
         .spc-cov-summary b { color: var(--color-text-primary); }
-        .spc-cov { display: grid; gap: 5px; }
+
+        /* Coverage grid. Cells are portrait so the rendered figure actually reads —
+           a wide, short cell crops the render to a head and nothing else. */
+        .spc-cov { display: grid; gap: 9px; align-items: center; }
         .spc-cov-head {
-          font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase;
-          font-weight: 700; color: var(--color-text-muted); padding: 0 2px 2px;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase;
+          font-weight: 700; color: var(--color-text-muted); padding: 0 2px 4px;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: end;
         }
         .spc-cov-rowlab {
-          border: 0; background: none; text-align: left; padding: 6px 6px 6px 0;
-          cursor: pointer; font: inherit; color: inherit;
+          grid-column: 1 / -1;
+          border: 0; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit;
+          display: flex; align-items: baseline; gap: 10px;
+          padding: 16px 2px 2px;
+          border-top: 1px solid var(--color-border-subtle);
         }
-        .spc-cov-rowlab b { display: block; font-size: 0.76rem; font-weight: 700; }
-        .spc-cov-rowlab span { font-size: 0.64rem; color: var(--color-text-muted); }
+        .spc-cov > .spc-cov-rowlab:first-of-type { border-top: 0; padding-top: 4px; }
+        .spc-cov-rowlab b { font-size: 0.92rem; font-weight: 700; }
+        .spc-cov-rowlab span { font-size: 0.72rem; color: var(--color-text-muted); }
         .spc-cov-cell {
-          border: 0; cursor: pointer; font: inherit; border-radius: var(--radius-md);
-          min-height: 58px; padding: 7px 6px; display: flex; flex-direction: column;
-          justify-content: space-between; align-items: flex-start; text-align: left;
+          border: 0; cursor: pointer; font: inherit;
+          aspect-ratio: 3 / 4;
+          border-radius: 14px; padding: 10px;
+          display: flex; flex-direction: column; justify-content: space-between;
+          align-items: flex-start; text-align: left; overflow: hidden;
         }
         .spc-cov-full { background: var(--color-primary-dark); color: #fff; }
         .spc-cov-partial { background: var(--color-warning-bg); color: var(--color-warning); }
         .spc-cov-empty {
           background: var(--color-bg-elevated); color: var(--color-text-faint);
-          border: 1px dashed var(--color-border); align-items: center; justify-content: center;
+          border: 1.5px dashed var(--color-border);
+          align-items: flex-start; justify-content: flex-start;
+          font-size: 0.68rem; font-weight: 500;
         }
         .spc-cov-look {
-          font-size: 0.6rem; font-weight: 600; line-height: 1.25;
-          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+          font-size: 0.66rem; font-weight: 600; line-height: 1.3;
+          display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
         }
-        .spc-cov-plus { font-size: 1rem; }
-        .spc-cov-dots { display: flex; gap: 3px; }
-        .spc-cov-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.28; }
+        .spc-cov-dots { display: flex; gap: 4px; }
+        .spc-cov-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.3; }
         .spc-cov-dots i.on { opacity: 1; }
         .spc-cov-key {
-          display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.68rem;
-          color: var(--color-text-muted); margin: 12px 0 0;
+          display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.7rem;
+          color: var(--color-text-muted); margin: 18px 0 0;
         }
-        .spc-cov-key i.k { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+        .spc-cov-key i.k { width: 11px; height: 11px; border-radius: 4px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
         .k-full { background: var(--color-primary-dark); }
         .k-part { background: var(--color-warning); }
-        .k-none { background: var(--color-bg-elevated); border: 1px dashed var(--color-border); }
+        .k-none { background: var(--color-bg-elevated); border: 1.5px dashed var(--color-border); }
 
         /* Phone detail sheet */
         .spc-sheet {
@@ -1222,7 +1232,7 @@ export default function SchedulePageClient() {
         }
         .spc-cov-has-img::before {
           content: ""; position: absolute; inset: 0;
-          background: linear-gradient(transparent 22%, rgba(0,0,0,0.78));
+          background: linear-gradient(rgba(0,0,0,0.45) 0%, transparent 34%, transparent 52%, rgba(0,0,0,0.8));
         }
         .spc-cov-has-img > * { position: relative; z-index: 1; }
         .spc-page-error {
@@ -1500,8 +1510,7 @@ export default function SchedulePageClient() {
             {summary.emptyServices > 0 && <span> · {summary.emptyServices} services empty</span>}
           </div>
 
-          <div className="spc-cov" style={{ gridTemplateColumns: `minmax(74px,1fr) repeat(${departments.length || 1}, 1fr)` }}>
-            <div />
+          <div className="spc-cov" style={{ gridTemplateColumns: `repeat(${departments.length || 1}, 1fr)` }}>
             {departments.map((d) => (
               <div key={d.id} className="spc-cov-head" title={d.name}>{d.name}</div>
             ))}
@@ -1510,7 +1519,7 @@ export default function SchedulePageClient() {
               <Fragment key={row.scheduleId}>
                 <button className="spc-cov-rowlab" onClick={() => openService(row.scheduleId)}>
                   <b>{serviceDayShort(row.serviceDate)}</b>
-                  <span>{row.title.replace(" Service", "")}</span>
+                  <span>{row.filled > 0 ? `${row.filled} dressed` : "Nothing assigned"}</span>
                 </button>
                 {row.cells.map((cell) => (
                   <button
@@ -1522,7 +1531,7 @@ export default function SchedulePageClient() {
                       cell.state === "empty" ? "nothing assigned" : cell.lookNames.join(", ")}`}
                   >
                     {cell.state === "empty"
-                      ? <span className="spc-cov-plus">＋</span>
+                      ? <span>Not set</span>
                       : <>
                           <span className="spc-cov-look">{cell.lookNames[0] ?? "Assigned"}</span>
                           <span className="spc-cov-dots">
