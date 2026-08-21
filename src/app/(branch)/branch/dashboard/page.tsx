@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { pickHeroLook, type HeroSchedule } from "@/lib/dashboard-hero";
 import { getAuthContext } from "@/lib/auth";
 import { unstable_cache } from "next/cache";
 import { formatDate, truncate } from "@/lib/utils";
@@ -72,6 +73,28 @@ export default async function BranchDashboardPage() {
     { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
   )();
 
+  // The look shown on the hero plate — the soonest service that actually has renders.
+  const heroLook = await unstable_cache(
+    async () => {
+      const adminClient = createAdminClient();
+      const res = await (adminClient as any)
+        .from("schedules")
+        .select(`id, title, service_date,
+          assignments:schedule_assignments(
+            gender,
+            department:departments(name),
+            combination:combinations(name, preview_status, male_composite_url, female_composite_url)
+          )`)
+        .eq("branch_id", branchId)
+        .gte("service_date", today)
+        .order("service_date", { ascending: true })
+        .limit(8);
+      return pickHeroLook((res.data ?? []) as HeroSchedule[]);
+    },
+    [`dashboard-hero-${branchId}`],
+    { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
+  )();
+
   // A few existing looks for quick access / assignment
   const recentLooks = await unstable_cache(
     async () => {
@@ -124,11 +147,24 @@ export default async function BranchDashboardPage() {
 
       {/* hero spread */}
       <section className="dash-hero">
-        <div className="plate">
-          <span className="kick">This Sunday</span>
-          <div className="silh" />
-          <span className="no">{String(combinationsCount).padStart(2, "0")}</span>
-        </div>
+        {heroLook ? (
+          <Link href="/branch/schedule" className="plate plate-live">
+            <span className="kick">{heroLook.label}</span>
+            <span className="plate-caption">{heroLook.departmentNames.join(" · ")}</span>
+            {/* The render is clipped into the same arch the placeholder silhouette uses. */}
+            <span className="plate-figure-frame">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="plate-figure" src={heroLook.imageUrl} alt={`${heroLook.departmentName} outfit for ${heroLook.label}`} />
+            </span>
+            <span className="no">{String(heroLook.departmentNames.length).padStart(2, "0")}</span>
+          </Link>
+        ) : (
+          <div className="plate">
+            <span className="kick">This Sunday</span>
+            <div className="silh" />
+            <span className="no">{String(combinationsCount).padStart(2, "0")}</span>
+          </div>
+        )}
         <div className="copy">
           <div className="eyebrow">Welcome back, {firstName}</div>
           <h1>Dress the<br /><em>congregation</em>.</h1>

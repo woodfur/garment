@@ -186,7 +186,9 @@ department at once.
 
 ## Pure-logic modules and tests
 
-Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`, `scope.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
+Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`, `scope.ts`, `share-card.ts`, `dashboard-hero.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
+
+`dashboard-hero.ts` picks the look on the dashboard hero plate. Note the rule: it takes the soonest service that actually **has rendered looks**, not simply the soonest service — services are created ahead in bulk, so the very next one is usually still empty while a later one is fully dressed. The label names whichever service was chosen so it stays honest about the day.
 
 `schedule-package.ts` hand-writes a PDF (`%PDF-1.4`, object table, JPEG XObjects) with no PDF library — sharp prepares the images. It's dense but self-contained; don't add a PDF dependency without a reason.
 
