@@ -162,6 +162,23 @@ The domain's core abstraction. A body is divided into `BodyZone`s (head, top, ou
 
 `src/types/zones.typecheck.ts` is a compile-only file that `satisfies`-checks these records against the DB enums; it exists so a new `BodyZone` can't be added without updating every map.
 
+## Service rules (`src/lib/service-rules.ts`)
+
+Which departments wear uniforms at which services. Midweek is smaller: the **Choir sits out
+Wednesday services**, so it is neither offered in the assign form nor counted as an unfilled
+slot in the coverage grid.
+
+- Keyed on **department name**, because there is no column for it. That is the fragile part
+  — renaming the department in the app breaks the match — which is why the rule lives in one
+  file rather than being spread through the UI. Making it a per-department setting later
+  means changing this file and nothing else.
+- Keyed on the **day being Wednesday**, not "not Sunday", so a one-off Saturday service still
+  includes everyone.
+- An exempt department still appears when it **already has an outfit assigned**. The rule
+  governs what can be scheduled and must never make existing data vanish.
+- Enforced in the UI only, not in the assignments API — a hard block would remove the escape
+  hatch for a genuine one-off.
+
 ## Shared pieces and looks (`src/lib/scope.ts`)
 
 Both uniform pieces and looks belong to **many** departments. The original schema made both department-exclusive (single `department_id` FK), which forced duplicating a shared white shirt per department — and, worse, re-rendering an identical look per department at real cost per image. Migrations `005_shared_pieces.sql` (uniforms) and `006_shared_looks.sql` (combinations) replaced that with:

@@ -1,3 +1,5 @@
+import { departmentsForService } from "./service-rules.ts";
+
 /**
  * Derivations for the schedule page.
  *
@@ -99,7 +101,7 @@ export type CoverageRow = {
 };
 
 /**
- * A row per service, a cell per department.
+ * A row per service, a cell per department that serves that day.
  *
  * "full" means both figures are dressed, "partial" means one — worth distinguishing,
  * because a department with only a men's outfit still leaves the women with nothing.
@@ -109,7 +111,15 @@ export function coverageRows(
   departments: ReadonlyArray<ViewDepartment>
 ): CoverageRow[] {
   return groups.map((group) => {
-    const cells = departments.map((department) => {
+    // Midweek services skip some departments, so a Wednesday should not carry a Choir
+    // column that can never be filled. Anything already assigned still shows.
+    const forThisService = departmentsForService(
+      departments as Array<{ id: string; name: string }>,
+      group.service_date,
+      group.assignments.map((a) => a.department_id)
+    );
+
+    const cells = forThisService.map((department) => {
       const forDept = group.assignments.filter((a) => a.department_id === department.id);
       const genders = [...new Set(forDept.map((a) => a.gender).filter((g): g is "male" | "female" => !!g))];
       const lookNames = [...new Set(forDept.map((a) => a.combination?.name).filter((n): n is string => !!n))];

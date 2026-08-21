@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import PublicScheduleShareButton from "@/components/branch/PublicScheduleShareButton";
+import { departmentsForService } from "@/lib/service-rules";
 import {
   assignmentsByDepartment,
   coverageRows,
@@ -65,12 +66,15 @@ interface GroupedSchedule {
 
 function AssignForm({
   scheduleId,
+  serviceDate,
   departments,
   initialDeptId = "",
   onAssigned,
   onCancel,
 }: {
   scheduleId: string;
+  /** Drives which departments are offered — midweek services skip some. */
+  serviceDate: string;
   departments: Department[];
   /** Pre-selected when opened from a coverage-grid cell. */
   initialDeptId?: string;
@@ -161,7 +165,7 @@ function AssignForm({
             required
           >
             <option value="">Select department…</option>
-            {departments.map((d) => (
+            {departmentsForService(departments, serviceDate).map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>
@@ -298,6 +302,7 @@ function ServicePanel({
       })}
       <AssignForm
         scheduleId={group.id}
+        serviceDate={group.service_date}
         departments={departments}
         initialDeptId={initialDeptId}
         onAssigned={onAssigned}

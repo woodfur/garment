@@ -105,7 +105,27 @@ test("the summary counts dressed slots and wholly empty services", () => {
     group("g3", "2026-08-30"),
   ], DEPTS);
 
-  assert.deepEqual(coverageSummary(rows), { filled: 1, total: 9, emptyServices: 2 });
+  // 3 + 2 + 3: the Wednesday offers no Choir slot, so it cannot count as unfilled.
+  assert.deepEqual(coverageSummary(rows), { filled: 1, total: 8, emptyServices: 2 });
+});
+
+test("a Wednesday row drops the Choir, a Sunday keeps it", () => {
+  const [wed, sun] = coverageRows(
+    [group("g1", "2026-08-26"), group("g2", "2026-08-30")],
+    DEPTS
+  );
+
+  assert.deepEqual(wed.cells.map((c) => c.departmentName), ["Ushers", "Praise Team"]);
+  assert.deepEqual(sun.cells.map((c) => c.departmentName), ["Choir", "Ushers", "Praise Team"]);
+});
+
+test("a Choir outfit already booked on a Wednesday is not hidden", () => {
+  const [wed] = coverageRows(
+    [group("g1", "2026-08-26", [a("d-choir", "Choir", "female")])],
+    DEPTS
+  );
+
+  assert.ok(wed.cells.some((c) => c.departmentName === "Choir"), "existing data must not disappear");
 });
 
 test("the featured card groups a service's assignments by department, A-Z", () => {
