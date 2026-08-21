@@ -66,6 +66,26 @@ test("a cell is full only when both figures are dressed", () => {
   assert.equal(rows[0].filled, 2);
 });
 
+test("a cell carries a figure for each gender, not just the first found", () => {
+  const withImages = (deptId, gender, url) => ({
+    ...a(deptId, "Choir", gender),
+    combination: { id: "c1", name: "Look", preview_status: "ready",
+      male_composite_url: gender === "male" ? url : null,
+      female_composite_url: gender === "female" ? url : null },
+  });
+
+  const rows = coverageRows([
+    group("g1", "2026-08-23", [
+      withImages("d-choir", "female", "https://x/f.png"),
+      withImages("d-choir", "male", "https://x/m.png"),
+    ]),
+  ], DEPTS);
+
+  // Showing only one would hide half the department's uniform.
+  assert.equal(rows[0].cells[0].figures.female, "https://x/f.png");
+  assert.equal(rows[0].cells[0].figures.male, "https://x/m.png");
+});
+
 test("a cell lists each look once even when both genders share it", () => {
   const rows = coverageRows([
     group("g1", "2026-08-23", [

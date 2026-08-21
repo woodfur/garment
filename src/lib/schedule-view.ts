@@ -75,8 +75,9 @@ export type CoverageCell = {
   /** Look names assigned to this department for this service, deduplicated. */
   lookNames: string[];
   genders: Array<"male" | "female">;
-  /** A rendered figure for this cell, so the grid shows outfits rather than flat colour. */
-  previewUrl: string | null;
+  /** A rendered figure per gender. Both are shown — one render alone hides the other half
+   *  of a department's uniform, which is exactly what people need to check. */
+  figures: { female: string | null; male: string | null };
   state: "full" | "partial" | "empty";
 };
 
@@ -118,7 +119,10 @@ export function coverageRows(
         departmentName: department.name,
         lookNames,
         genders,
-        previewUrl: forDept.map(assignmentFigure).find((url) => !!url) ?? null,
+        figures: {
+          female: forDept.filter((a) => a.gender === "female").map(assignmentFigure).find(Boolean) ?? null,
+          male: forDept.filter((a) => a.gender === "male").map(assignmentFigure).find(Boolean) ?? null,
+        },
         state: (genders.length >= 2 ? "full" : genders.length === 1 ? "partial" : "empty") as CoverageCell["state"],
       };
     });

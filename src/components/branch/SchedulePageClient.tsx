@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import PublicScheduleShareButton from "@/components/branch/PublicScheduleShareButton";
 import {
   assignmentsByDepartment,
@@ -370,10 +370,6 @@ export default function SchedulePageClient() {
   const [showCreate, setShowCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Track which schedule has the assign form open
-  const [assigningScheduleId, setAssigningScheduleId] = useState<string | null>(
-    null
-  );
 
   // Track which schedules are being deleted
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
@@ -627,7 +623,9 @@ export default function SchedulePageClient() {
         return { ...s, assignments: [...others, assignment] };
       })
     );
-    setAssigningScheduleId(null);
+    // Close the panel once the outfit lands, so the list reflects it immediately.
+    setOpenServiceId(null);
+    setPendingDeptId("");
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -1131,59 +1129,62 @@ export default function SchedulePageClient() {
         .spc-pill-gap { background: var(--color-warning-bg); color: var(--color-warning); }
 
         /* Coverage grid */
-        .spc-cov-summary {
-          font-size: 0.86rem; color: var(--color-text-muted); margin-bottom: 18px;
+        /* Phone layout: departments run DOWN the page, not across.
+           A phone has free vertical space and scarce horizontal space, so putting the
+           three departments on the narrow axis left ~112px to carry two genders, a look
+           name and a status. Turned round, each department gets the full width and both
+           figures are visible — which is the thing people actually need to check. */
+        .spc-svc {
+          border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+          background: var(--color-bg-card); margin-bottom: 14px; overflow: hidden;
         }
+        .spc-svc-head {
+          width: 100%; border: 0; background: var(--color-bg-elevated); cursor: pointer;
+          font: inherit; color: inherit; text-align: left;
+          display: flex; align-items: center; justify-content: space-between; gap: 12px;
+          padding: 13px 15px;
+        }
+        .spc-svc-head b { display: block; font-size: 0.95rem; font-weight: 700; }
+        .spc-svc-head em { font-style: normal; font-size: 0.75rem; color: var(--color-text-muted); }
+        .spc-svc-dept {
+          display: flex; align-items: center; gap: 12px; justify-content: space-between;
+          padding: 12px 15px; border-top: 1px solid var(--color-border-subtle);
+        }
+        .spc-svc-name { min-width: 0; flex: 1; }
+        .spc-svc-name b { display: block; font-size: 0.88rem; font-weight: 600; }
+        .spc-svc-name span {
+          display: block; font-size: 0.74rem; color: var(--color-text-muted);
+          margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .spc-svc-figs {
+          display: flex; gap: 8px; border: 0; background: none; padding: 0;
+          cursor: pointer; flex: 0 0 auto;
+        }
+        .spc-svc-fig { display: block; width: 54px; }
+        .spc-svc-fig img {
+          width: 54px; height: 70px; object-fit: cover; display: block;
+          border-radius: var(--radius-md); background: var(--color-bg-board);
+          border: 1px solid var(--color-border-subtle);
+        }
+        .spc-svc-fig i {
+          width: 54px; height: 70px; display: grid; place-items: center; font-style: normal;
+          border-radius: var(--radius-md); border: 1.5px dashed var(--color-border);
+          color: var(--color-text-faint); font-size: 1rem;
+        }
+        .spc-svc-fig em {
+          display: block; font-style: normal; text-align: center; margin-top: 4px;
+          font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase;
+          font-weight: 700; color: var(--color-text-faint);
+        }
+        .spc-svc-fig.missing em { color: var(--color-warning); }
+        .spc-svc-add {
+          flex: 0 0 auto; border: 1.5px dashed var(--color-border); background: none;
+          border-radius: var(--radius-full); padding: 9px 16px; cursor: pointer;
+          font: inherit; font-size: 0.8rem; font-weight: 600; color: var(--color-primary-dark);
+        }
+        .spc-svc-add:active { background: var(--color-primary-light); }
+        .spc-cov-summary { font-size: 0.86rem; color: var(--color-text-muted); margin-bottom: 18px; }
         .spc-cov-summary b { color: var(--color-text-primary); }
-
-        /* Coverage grid. Cells are portrait so the rendered figure actually reads —
-           a wide, short cell crops the render to a head and nothing else. */
-        .spc-cov { display: grid; gap: 9px; align-items: center; }
-        .spc-cov-head {
-          font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase;
-          font-weight: 700; color: var(--color-text-muted); padding: 0 2px 4px;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: end;
-        }
-        .spc-cov-rowlab {
-          grid-column: 1 / -1;
-          border: 0; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit;
-          display: flex; align-items: baseline; gap: 10px;
-          padding: 16px 2px 2px;
-          border-top: 1px solid var(--color-border-subtle);
-        }
-        .spc-cov > .spc-cov-rowlab:first-of-type { border-top: 0; padding-top: 4px; }
-        .spc-cov-rowlab b { font-size: 0.92rem; font-weight: 700; }
-        .spc-cov-rowlab span { font-size: 0.72rem; color: var(--color-text-muted); }
-        .spc-cov-cell {
-          border: 0; cursor: pointer; font: inherit;
-          aspect-ratio: 3 / 4;
-          border-radius: 14px; padding: 10px;
-          display: flex; flex-direction: column; justify-content: space-between;
-          align-items: flex-start; text-align: left; overflow: hidden;
-        }
-        .spc-cov-full { background: var(--color-primary-dark); color: #fff; }
-        .spc-cov-partial { background: var(--color-warning-bg); color: var(--color-warning); }
-        .spc-cov-empty {
-          background: var(--color-bg-elevated); color: var(--color-text-faint);
-          border: 1.5px dashed var(--color-border);
-          align-items: flex-start; justify-content: flex-start;
-          font-size: 0.68rem; font-weight: 500;
-        }
-        .spc-cov-look {
-          font-size: 0.66rem; font-weight: 600; line-height: 1.3;
-          display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-        }
-        .spc-cov-dots { display: flex; gap: 4px; }
-        .spc-cov-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.3; }
-        .spc-cov-dots i.on { opacity: 1; }
-        .spc-cov-key {
-          display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.7rem;
-          color: var(--color-text-muted); margin: 18px 0 0;
-        }
-        .spc-cov-key i.k { width: 11px; height: 11px; border-radius: 4px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
-        .k-full { background: var(--color-primary-dark); }
-        .k-part { background: var(--color-warning); }
-        .k-none { background: var(--color-bg-elevated); border: 1.5px dashed var(--color-border); }
 
         /* Phone detail sheet */
         .spc-sheet {
@@ -1510,46 +1511,56 @@ export default function SchedulePageClient() {
             {summary.emptyServices > 0 && <span> · {summary.emptyServices} services empty</span>}
           </div>
 
-          <div className="spc-cov" style={{ gridTemplateColumns: `repeat(${departments.length || 1}, 1fr)` }}>
-            {departments.map((d) => (
-              <div key={d.id} className="spc-cov-head" title={d.name}>{d.name}</div>
-            ))}
-
-            {rows.map((row) => (
-              <Fragment key={row.scheduleId}>
-                <button className="spc-cov-rowlab" onClick={() => openService(row.scheduleId)}>
+          {rows.map((row) => (
+            <section key={row.scheduleId} className="spc-svc">
+              <button className="spc-svc-head" onClick={() => openService(row.scheduleId)}>
+                <span>
                   <b>{serviceDayShort(row.serviceDate)}</b>
-                  <span>{row.filled > 0 ? `${row.filled} dressed` : "Nothing assigned"}</span>
-                </button>
-                {row.cells.map((cell) => (
-                  <button
-                    key={cell.departmentId}
-                    className={`spc-cov-cell spc-cov-${cell.state}${cell.previewUrl ? " spc-cov-has-img" : ""}`}
-                    style={cell.previewUrl ? { backgroundImage: `url(${cell.previewUrl})` } : undefined}
-                    onClick={() => openService(row.scheduleId, cell.state === "empty" ? cell.departmentId : "")}
-                    aria-label={`${cell.departmentName}, ${serviceDayShort(row.serviceDate)}, ${
-                      cell.state === "empty" ? "nothing assigned" : cell.lookNames.join(", ")}`}
-                  >
-                    {cell.state === "empty"
-                      ? <span>Not set</span>
-                      : <>
-                          <span className="spc-cov-look">{cell.lookNames[0] ?? "Assigned"}</span>
-                          <span className="spc-cov-dots">
-                            <i className={cell.genders.includes("female") ? "on" : ""} />
-                            <i className={cell.genders.includes("male") ? "on" : ""} />
-                          </span>
-                        </>}
-                  </button>
-                ))}
-              </Fragment>
-            ))}
-          </div>
+                  <em>{row.title}</em>
+                </span>
+                <span className={`spc-pill ${row.filled > 0 ? "spc-pill-ok" : "spc-pill-gap"}`}>
+                  {row.filled > 0 ? `${row.filled} of ${row.cells.length}` : "Empty"}
+                </span>
+              </button>
 
-          <p className="spc-cov-key">
-            <span><i className="k k-full" /> Ladies &amp; Men</span>
-            <span><i className="k k-part" /> One missing</span>
-            <span><i className="k k-none" /> Nothing</span>
-          </p>
+              {row.cells.map((cell) => (
+                <div key={cell.departmentId} className="spc-svc-dept">
+                  <div className="spc-svc-name">
+                    <b>{cell.departmentName}</b>
+                    {cell.lookNames.length > 0 && <span>{cell.lookNames.join(" · ")}</span>}
+                  </div>
+
+                  {cell.state === "empty" ? (
+                    <button
+                      className="spc-svc-add"
+                      onClick={() => openService(row.scheduleId, cell.departmentId)}
+                    >
+                      ＋ Assign
+                    </button>
+                  ) : (
+                    <button
+                      className="spc-svc-figs"
+                      onClick={() => openService(row.scheduleId)}
+                      aria-label={`${cell.departmentName}, ${serviceDayShort(row.serviceDate)}`}
+                    >
+                      {(["female", "male"] as const).map((gender) => {
+                        const url = cell.figures[gender];
+                        return (
+                          <span key={gender} className={`spc-svc-fig${url ? "" : " missing"}`}>
+                            {url
+                              // eslint-disable-next-line @next/next/no-img-element
+                              ? <img src={url} alt={`${cell.departmentName} ${gender}`} />
+                              : <i>＋</i>}
+                            <em>{gender === "female" ? "Ladies" : "Men"}</em>
+                          </span>
+                        );
+                      })}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </section>
+          ))}
 
           {openGroup && (
             <div className="spc-sheet">
