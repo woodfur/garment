@@ -70,7 +70,14 @@ export async function PATCH(request: Request, { params }: Params) {
   try {
     const body = await request.json();
     const updates: Record<string, unknown> = {};
-    if (body.name !== undefined) updates.name = body.name.trim();
+    if (body.name !== undefined) {
+      // A blank name would leave the look unidentifiable in every list and on the
+      // public share card, so it is rejected rather than silently stored.
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+      if (name.length > 120) return NextResponse.json({ error: "Name must be 120 characters or fewer" }, { status: 400 });
+      updates.name = name;
+    }
     if (body.description !== undefined) updates.description = body.description?.trim() || null;
     if (body.gender !== undefined) {
       if (body.gender !== "male" && body.gender !== "female") {

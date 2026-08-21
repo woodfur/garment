@@ -4,13 +4,13 @@ import { requireBranchLeader } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { persistPreviewImage, renderPaletteLookImage } from "@/lib/preview-render";
 import { baseFigureUrlFor } from "@/lib/mannequin-config";
-import { validateDepartmentScope } from "@/lib/scope";
 import {
   buildPaletteLookName,
   createPaletteMoodBoard,
   uploadPaletteMoodBoard,
   validatePalette,
 } from "@/lib/palette-compose";
+import { sanitizePaletteNotes } from "@/lib/palette-prompt";
 import type { Gender } from "@/types/database";
 
 // gpt-image-2 at high quality takes well over a minute for a full-body render.
@@ -28,10 +28,6 @@ type PaletteLooksDb = {
   from(table: string): PaletteLooksQuery;
 };
 
-function isGender(value: unknown): value is Gender {
-  return value === "male" || value === "female";
-}
-
 export async function POST(request: Request) {
   const result = await requireBranchLeader();
   if (result instanceof NextResponse) return result;
@@ -47,32 +43,15 @@ export async function POST(request: Request) {
     const description = typeof body.description === "string" && body.description.trim()
       ? body.description.trim()
       : null;
-    // A palette look still renders for one department's naming/prompt, but may be shared
-    // with others so the render is reused rather than repeated.
-    const scope = validateDepartmentScope(body);
-    const departmentId = scope.department_ids[0] ?? "";
-    const gender = isGender(body.gender) ? body.gender : null;
+    // Palette looks are not department-scoped: they describe colours, so they apply to
+    // every department automatically, including ones added later. Nothing is asked for
+    // in the form and nothing is read off the request.
+    const scope = { department_ids: [] as string[], all_departments: true };
+    const notes = sanitizePaletteNotes(body.notes);
     const palette = validatePalette(body.palette);
 
-    // Unlike other looks, a palette look needs one named department even when shared with
-    // all of them: the department name goes into the generation prompt and the look name.
-    if (!departmentId) {
-      return NextResponse.json(
-        { error: "Choose at least one department — the palette prompt is written for it" },
-        { status: 400 }
-      );
-    }
-    if (!gender) return NextResponse.json({ error: "Gender is required" }, { status: 400 });
 
-    const { data: department } = await db
-      .from("departments")
-      .select("id, name")
-      .eq("id", departmentId)
-      .eq("branch_id", auth.branchId)
-      .single() as { data: { id: string; name: string } | null };
-
-    if (!department) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
-    const lookName = buildPaletteLookName(name, department.name);
+    const lookName = buildPaletteLookName(name, palette);
 
     const { data: combination, error: comboErr } = await db
       .from("combinations")
@@ -81,13 +60,17 @@ export async function POST(request: Request) {
         description,
         department_ids: scope.department_ids,
         all_departments: scope.all_departments,
-        gender,
+        // Deliberately null: a palette is a colour scheme for a whole department, so the
+        // look carries a figure for each gender and slots into either schedule assignment.
+        gender: null,
         branch_id: auth.branchId,
         created_by: auth.userId,
         preview_status: "processing",
         canvas_data: {
           mode: "palette",
           palette,
+          // Kept so the look records the direction it was generated from.
+          ...(notes ? { notes } : {}),
         },
       })
       .select("id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, preview_status, created_at")
@@ -96,18 +79,33 @@ export async function POST(request: Request) {
     if (comboErr || !combination) throw comboErr ?? new Error("Failed to create palette look");
     combinationId = combination.id;
 
-    const personImage = await renderPaletteLookImage({
-      departmentName: department.name,
-      gender,
-      palette,
-      baseFigureUrl: baseFigureUrlFor(gender, false),
-    });
-    const personImageUrl = await persistPreviewImage(personImage, combination.id, gender);
+    // Both figures from the same palette, in parallel. Departments have men and women, so
+    // a colour scheme needs both; rendering one would leave the other slot unfillable.
+    const genders: Gender[] = ["female", "male"];
+    const rendered = await Promise.all(
+      genders.map(async (figure) => ({
+        gender: figure,
+        image: await renderPaletteLookImage({
+          gender: figure,
+          palette,
+          notes,
+          baseFigureUrl: baseFigureUrlFor(figure, false),
+        }),
+      }))
+    );
+
+    const persisted = await Promise.all(
+      rendered.map(async (entry) => ({
+        gender: entry.gender,
+        url: await persistPreviewImage(entry.image, combination.id, entry.gender),
+      }))
+    );
+
     const board = await createPaletteMoodBoard({
-      personImage,
+      personImages: rendered.map((entry) => entry.image),
       palette,
       title: lookName,
-      departmentName: department.name,
+      subtitle: "All departments",
     });
     const previewUrl = await uploadPaletteMoodBoard({
       branchId: auth.branchId,
@@ -120,7 +118,8 @@ export async function POST(request: Request) {
       .update({
         preview_url: previewUrl,
         preview_status: "ready",
-        [gender === "male" ? "male_composite_url" : "female_composite_url"]: personImageUrl,
+        male_composite_url: persisted.find((entry) => entry.gender === "male")?.url ?? null,
+        female_composite_url: persisted.find((entry) => entry.gender === "female")?.url ?? null,
       })
       .eq("id", combinationId)
       .select("id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, preview_status, created_at")

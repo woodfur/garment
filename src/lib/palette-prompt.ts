@@ -113,20 +113,45 @@ function colorDistance(
     + ((767 - redMean) * blueDiff * blueDiff) / 256;
 }
 
-export function buildPaletteLookName(name: string, departmentName: string): string {
+/** Hard cap on free-text direction — long enough to be useful, short enough not to derail. */
+export const MAX_PALETTE_NOTES = 400;
+
+/**
+ * Clean free-text styling direction before it reaches the prompt.
+ *
+ * Newlines and runs of whitespace are collapsed because the prompt is one comma-joined
+ * sentence; a stray line break just fragments it. Returns null when nothing usable is
+ * left, so callers can omit the clause entirely rather than emitting an empty one.
+ */
+export function sanitizePaletteNotes(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, MAX_PALETTE_NOTES);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+export function buildPaletteLookName(name: string, palette: PaletteColor[]): string {
   const trimmed = name.trim();
-  return trimmed || `${departmentName.trim()} palette`;
+  if (trimmed) return trimmed;
+
+  const first = palette[0]?.hex;
+  if (!first) return "Colour palette";
+  const colour = nearestColorName(first);
+  return `${colour.charAt(0).toUpperCase()}${colour.slice(1)} palette`;
 }
 
 export function buildPalettePrompt({
-  departmentName,
+  departmentName = null,
   gender,
   palette,
+  notes = null,
   hasFigureReference = false,
 }: {
-  departmentName: string;
+  /** Optional — palette looks apply to every department, so there is usually no single one. */
+  departmentName?: string | null;
   gender: "male" | "female";
   palette: PaletteColor[];
+  /** Optional free-text styling direction, e.g. a fabric texture or an extra accessory. */
+  notes?: string | null;
   /** True when a base mannequin photo precedes the colour chart in the reference list. */
   hasFigureReference?: boolean;
 }): string {
@@ -142,13 +167,22 @@ export function buildPalettePrompt({
 
   return [
     subject,
-    `wearing a coordinated church service uniform outfit for the ${departmentName} department`,
+    departmentName
+      ? `wearing a coordinated church service uniform outfit for the ${departmentName} department`
+      : "wearing a coordinated church service uniform outfit",
     ...colorChartInstructions(hasFigureReference),
     `CRITICAL COLOR LOCK: use only these approved clothing fabric colors and match the hex and RGB values as closely as possible: ${colors}`,
     "The outfit may use one, some, or all approved colors, but every visible clothing fabric color must come from the approved palette",
     "A single-color outfit is allowed when the clothing color is one of the approved colors",
     "Do not substitute related, darker, warmer, cooler, muted, pastel, redder, or purpler colors; no unapproved garment colors",
     garmentGuidance,
+    // Placed before the modesty and negative clauses so those still read last and win.
+    // Explicitly subordinated to the colour lock, since direction like "add a red scarf"
+    // would otherwise fight the whole point of a palette look.
+    ...(notes
+      ? [`additional styling direction: ${notes}`,
+         "apply that direction only within the approved colors and the modest church styling rules"]
+      : []),
     "front-facing pose with hands gently clasped or relaxed at the front, head to toe visible",
     "seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet",
     "natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and shoes, polished but respectful church styling",

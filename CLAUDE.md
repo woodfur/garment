@@ -82,6 +82,30 @@ Reference order is always: base figure (if configured) → colour chart (if colo
 - Editing **regenerates pixels rather than warping the input**. Photographed garments are re-interpreted, not composited — the honest trade made when IDM-VTON was dropped.
 - ~$0.165 per high-quality 1024×1536 image, so a two-gender look costs ~$0.33.
 
+### Palette look options
+
+Two optional inputs, both handled in `palette-prompt.ts`:
+
+- **Free-text direction** (`notes`, capped at `MAX_PALETTE_NOTES`) is injected as an
+  "additional styling direction" clause, placed **before** the modesty and negative
+  clauses so those still read last, and explicitly subordinated to the colour lock —
+  otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
+  `canvas_data.notes` so a look records what it was generated from.
+- **Both figures are rendered, and the look is stored with `gender: null`.** A palette is
+  a colour scheme for a whole department, and departments have men and women. Null gender
+  is the legacy-look path that every consumer already treats as "either" — the assignment
+  route takes the slot's gender, `filterAssignableCombinations` accepts it for both — so
+  one palette look fills a male *and* a female assignment. Rendering only one figure would
+  store a null composite for the other gender and show "preview coming soon" wherever it
+  was assigned, which is why the two go together. Costs two renders (~$0.33), the same as
+  the two separate palette looks it replaces.
+- **Palette looks are never department-scoped.** The route hardcodes `all_departments:
+  true` with an empty `department_ids`, so they apply everywhere including departments
+  added later, and the form asks nothing about it. `departmentName` on the prompt is
+  therefore optional and normally absent, and `buildPaletteLookName()` falls back to the
+  dominant colour ("Blush pink palette") rather than a department, so looks stay
+  distinguishable in a list.
+
 ### Prompt engineering is domain logic
 
 `garmentClause()` in `look-prompt.ts` and `buildPalettePrompt()` both encode non-negotiable requirements: modest church dress (covered shoulders/chest, knee-to-mid-calf skirts, closed-toe shoes) and Black African models. These strings are the product. Tests assert both what must appear (hex + RGB, modesty clauses) and what must **not** (user-supplied colour labels, the word "near"). Change a prompt and the tests will tell you which invariant you broke.
@@ -99,6 +123,30 @@ A suit is built as three pieces — shirt (`top`), jacket (`outer`), trousers (`
 The Stable Video Diffusion step was removed: OpenAI's Videos API (`sora-2`) is deprecated with removal on **24 Sep 2026** and no announced successor, so there was nothing to migrate it to. The `male_gif_url`/`female_gif_url` columns and all their read sites remain so previously generated GIFs still display; nothing writes them anymore. `render-download.ts` already prefers composites and falls back to GIFs.
 
 `replicate_jobs` is now orphaned — nothing writes it. The table was deliberately left in place rather than shipping a destructive migration; the combination-delete route still clears legacy rows.
+
+### Palette look options
+
+Two optional inputs, both handled in `palette-prompt.ts`:
+
+- **Free-text direction** (`notes`, capped at `MAX_PALETTE_NOTES`) is injected as an
+  "additional styling direction" clause, placed **before** the modesty and negative
+  clauses so those still read last, and explicitly subordinated to the colour lock —
+  otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
+  `canvas_data.notes` so a look records what it was generated from.
+- **Both figures are rendered, and the look is stored with `gender: null`.** A palette is
+  a colour scheme for a whole department, and departments have men and women. Null gender
+  is the legacy-look path that every consumer already treats as "either" — the assignment
+  route takes the slot's gender, `filterAssignableCombinations` accepts it for both — so
+  one palette look fills a male *and* a female assignment. Rendering only one figure would
+  store a null composite for the other gender and show "preview coming soon" wherever it
+  was assigned, which is why the two go together. Costs two renders (~$0.33), the same as
+  the two separate palette looks it replaces.
+- **Palette looks are never department-scoped.** The route hardcodes `all_departments:
+  true` with an empty `department_ids`, so they apply everywhere including departments
+  added later, and the form asks nothing about it. `departmentName` on the prompt is
+  therefore optional and normally absent, and `buildPaletteLookName()` falls back to the
+  dominant colour ("Blush pink palette") rather than a department, so looks stay
+  distinguishable in a list.
 
 ### Prompt engineering is domain logic here
 
@@ -186,7 +234,9 @@ department at once.
 
 ## Pure-logic modules and tests
 
-Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`, `scope.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
+Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`, `scope.ts`, `share-card.ts`, `dashboard-hero.ts`, `mood-board-layout.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
+
+`dashboard-hero.ts` picks the look on the dashboard hero plate. Two rules worth knowing: it takes the soonest service that actually **has rendered looks**, not simply the soonest service (services are created ahead in bulk, so the very next one is usually still empty while a later one is fully dressed — the label names whichever was chosen, so it stays honest about the day); and the look is drawn **at random** from that service so the plate varies per visit. The split matters — `collectHeroCandidates()` is deterministic and cached, `heroLookFrom()` does the draw per request. Caching the draw would freeze one department for the whole cache window. `random` is injectable so tests can pin it.
 
 `schedule-package.ts` hand-writes a PDF (`%PDF-1.4`, object table, JPEG XObjects) with no PDF library — sharp prepares the images. It's dense but self-contained; don't add a PDF dependency without a reason.
 

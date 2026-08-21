@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildPaletteLookName, buildPalettePrompt, colorChartInstructions, colorPromptPhrase } from "./palette-prompt.ts";
+import {
+  MAX_PALETTE_NOTES,
+  buildPaletteLookName,
+  buildPalettePrompt,
+  colorChartInstructions,
+  colorPromptPhrase,
+  nearestColorName,
+  sanitizePaletteNotes,
+} from "./palette-prompt.ts";
 
 test("buildPalettePrompt locks generation to exact hex and RGB values without labels", () => {
   const prompt = buildPalettePrompt({
@@ -65,8 +73,65 @@ test("colorChartInstructions numbers the chart around an optional figure referen
   assert.match(colorChartInstructions(true)[0], /second reference image/);
 });
 
-test("buildPaletteLookName falls back to the department palette name", () => {
-  assert.equal(buildPaletteLookName("", "Choir"), "Choir palette");
-  assert.equal(buildPaletteLookName("  ", "Ushers"), "Ushers palette");
-  assert.equal(buildPaletteLookName("Wednesday", "Choir"), "Wednesday");
+test("optional direction reaches the prompt without displacing the hard rules", () => {
+  const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  const prompt = buildPalettePrompt({
+    departmentName: "Choir",
+    gender: "female",
+    palette,
+    notes: "linen texture, add a simple brooch",
+  });
+
+  assert.match(prompt, /additional styling direction: linen texture, add a simple brooch/);
+  // Subordinated to the palette, so direction cannot smuggle in an unapproved colour.
+  assert.match(prompt, /only within the approved colors/);
+  // The non-negotiables must still be present, and still read after the direction.
+  assert.match(prompt, /CRITICAL COLOR LOCK/);
+  assert.match(prompt, /covered chest/);
+  assert.match(prompt, /no bare shoulders/);
+  assert.ok(
+    prompt.indexOf("additional styling direction") < prompt.indexOf("no bare shoulders"),
+    "modesty rules must come after the user's direction"
+  );
+});
+
+test("a prompt with no direction gains no empty clause", () => {
+  const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  for (const notes of [undefined, null, "", "   "]) {
+    const prompt = buildPalettePrompt({ departmentName: "Choir", gender: "male", palette, notes: sanitizePaletteNotes(notes) });
+    assert.doesNotMatch(prompt, /additional styling direction/);
+  }
+});
+
+test("direction is collapsed to one line and capped", () => {
+  assert.equal(sanitizePaletteNotes("  linen   texture\n\nwith a brooch "), "linen texture with a brooch");
+  assert.equal(sanitizePaletteNotes(""), null);
+  assert.equal(sanitizePaletteNotes("   "), null);
+  assert.equal(sanitizePaletteNotes(42), null);
+  assert.equal(sanitizePaletteNotes("x".repeat(MAX_PALETTE_NOTES + 50)).length, MAX_PALETTE_NOTES);
+});
+
+test("nearestColorName gives a readable name for a hex", () => {
+  assert.equal(nearestColorName("#E6D7C3"), "pearl grey");
+  assert.equal(nearestColorName("#704832"), "chocolate brown");
+});
+
+test("an unnamed palette look is named after its dominant colour", () => {
+  // Not after a department — palette looks apply to all of them, so department names
+  // would make every look in the list read the same.
+  const blue = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  assert.equal(buildPaletteLookName("", blue), "Powder blue / sky blue palette");
+  assert.equal(buildPaletteLookName("   ", blue), "Powder blue / sky blue palette");
+  assert.equal(buildPaletteLookName("Wednesday", blue), "Wednesday");
+  assert.equal(buildPaletteLookName("", []), "Colour palette");
+});
+
+test("the department clause is dropped when there is no single department", () => {
+  const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  const shared = buildPalettePrompt({ gender: "female", palette });
+  assert.match(shared, /wearing a coordinated church service uniform outfit,/);
+  assert.doesNotMatch(shared, /department/);
+
+  const named = buildPalettePrompt({ departmentName: "Choir", gender: "female", palette });
+  assert.match(named, /for the Choir department/);
 });

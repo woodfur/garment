@@ -1051,6 +1051,33 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 80px 80px 0 0;
 }
 .dash-hero .plate .silh::before { content: ""; position: absolute; left: 50%; top: -7%; transform: translateX(-50%); width: 32%; aspect-ratio: 1; border-radius: 50%; background: inherit; }
+/* Live hero plate — the real outfit for the next dressed service, linking to the schedule.
+   The render is masked into the SAME wine figure the placeholder draws — head circle plus
+   arched body — so the plate keeps its silhouette and the photo sits inside it. Geometry
+   mirrors .silh: figure box is 60% wide, spanning 10%-100% of the plate height. */
+.dash-hero .plate-live { display: block; text-decoration: none; color: inherit; }
+.dash-hero .plate-figure-frame {
+  position: absolute; left: 20%; top: 10%; width: 60%; height: 90%;
+  background: linear-gradient(180deg, var(--color-primary), var(--color-primary-dark));
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 360' preserveAspectRatio='none'%3E%3Cpath d='M0 360 L0 104 Q0 24 80 24 L112 24 Q192 24 192 104 L192 360 Z' fill='%23fff'/%3E%3Ccircle cx='96' cy='31' r='31' fill='%23fff'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 360' preserveAspectRatio='none'%3E%3Cpath d='M0 360 L0 104 Q0 24 80 24 L112 24 Q192 24 192 104 L192 360 Z' fill='%23fff'/%3E%3Ccircle cx='96' cy='31' r='31' fill='%23fff'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
+.dash-hero .plate-figure {
+  display: block; width: 100%; height: 100%;
+  object-fit: cover; object-position: top center;  /* full figure, head to feet */
+  transition: transform 0.3s ease;
+}
+.dash-hero .plate-live:hover .plate-figure { transform: scale(1.03); }
+/* Sits over the figure's feet, so it needs a scrim to stay legible. Padded clear of the numeral. */
+.dash-hero .plate-caption {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  padding: 1.6rem 4.75rem 0.7rem 1rem;
+  background: linear-gradient(180deg, rgba(240,236,226,0), rgba(240,236,226,0.94) 58%);
+  font-size: 0.56rem; letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+  color: var(--color-text-secondary); line-height: 1.6;
+}
 .dash-hero .plate .kick { position: absolute; top: 1rem; left: 1rem; font-size: 0.5rem; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 700; color: var(--color-text-primary); background: var(--color-bg-surface); border: 1px solid var(--color-border); padding: 0.3rem 0.55rem; }
 .dash-hero .plate .no { position: absolute; bottom: 0.5rem; right: 1rem; font-family: var(--font-heading); font-style: italic; font-size: 4rem; color: rgba(33,28,25,0.13); line-height: 1; }
 .dash-hero .copy { padding: 2.5rem 0 2.5rem 2.75rem; display: flex; flex-direction: column; justify-content: center; }

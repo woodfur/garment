@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { FIGURE_HEIGHT, SWATCH_WIDTH, moodBoardLayout } from "@/lib/mood-board-layout";
 import { createAdminClient } from "@/lib/supabase/server";
 export { buildPaletteLookName, buildPalettePrompt, validatePalette } from "@/lib/palette-prompt";
 import type { PaletteColor } from "@/lib/palette-prompt";
@@ -22,11 +23,11 @@ function textOn(hex: string): string {
 function paletteSvg({
   palette,
   title,
-  departmentName,
+  subtitle,
 }: {
   palette: PaletteColor[];
   title: string;
-  departmentName: string;
+  subtitle: string;
 }): string {
   const width = 420;
   const cardHeight = 230;
@@ -53,45 +54,48 @@ function paletteSvg({
   return `
     <svg width="${width}" height="${totalHeight}" viewBox="0 0 ${width} ${totalHeight}" xmlns="http://www.w3.org/2000/svg">
       <text x="0" y="35" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="#211C19">${escapeXml(title)}</text>
-      <text x="0" y="68" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#6F6257">${escapeXml(departmentName)}</text>
+      <text x="0" y="68" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#6F6257">${escapeXml(subtitle)}</text>
       ${cards}
     </svg>
   `;
 }
 
 export async function createPaletteMoodBoard({
-  personImage,
+  personImages,
   palette,
   title,
-  departmentName,
+  subtitle,
 }: {
-  /** Rendered person image bytes — gpt-image-2 returns base64, so there is no URL to fetch. */
-  personImage: Buffer;
+  /** Rendered figure bytes — gpt-image-2 returns base64, so there is no URL to fetch. */
+  personImages: Buffer[];
   palette: PaletteColor[];
   title: string;
-  departmentName: string;
+  subtitle: string;
 }): Promise<Buffer> {
-  const person = await sharp(personImage)
-    .resize({ width: 690, height: 1280, fit: "cover", position: "top", withoutEnlargement: true })
-    .sharpen({ sigma: 0.85, m1: 1, m2: 2 })
-    .toBuffer();
+  if (personImages.length === 0) throw new Error("createPaletteMoodBoard requires at least one figure");
 
-  const swatches = await sharp(Buffer.from(paletteSvg({ palette, title, departmentName })))
-    .resize({ width: 420, height: 1240, fit: "inside", withoutEnlargement: true })
+  const layout = moodBoardLayout(personImages.length);
+
+  const figures = await Promise.all(
+    personImages.map((image) =>
+      sharp(image)
+        .resize({ width: layout.figureWidth, height: FIGURE_HEIGHT, fit: "cover", position: "top", withoutEnlargement: true })
+        .sharpen({ sigma: 0.85, m1: 1, m2: 2 })
+        .toBuffer()
+    )
+  );
+
+  const swatches = await sharp(Buffer.from(paletteSvg({ palette, title, subtitle })))
+    .resize({ width: SWATCH_WIDTH, height: 1240, fit: "inside", withoutEnlargement: true })
     .png()
     .toBuffer();
 
   return sharp({
-    create: {
-      width: 1200,
-      height: 1400,
-      channels: 4,
-      background: "#F7F1E8",
-    },
+    create: { width: layout.width, height: layout.height, channels: 4, background: "#F7F1E8" },
   })
     .composite([
-      { input: person, left: 48, top: 60 },
-      { input: swatches, left: 738, top: 80 },
+      ...figures.map((figure, index) => ({ input: figure, left: layout.figureLefts[index], top: 60 })),
+      { input: swatches, left: layout.swatchLeft, top: 80 },
     ])
     .png({ compressionLevel: 6 })
     .toBuffer();
