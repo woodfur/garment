@@ -124,8 +124,22 @@ test("nearestColorName gives a readable name for a hex", () => {
   assert.equal(nearestColorName("#704832"), "chocolate brown");
 });
 
-test("buildPaletteLookName falls back to the department palette name", () => {
-  assert.equal(buildPaletteLookName("", "Choir"), "Choir palette");
-  assert.equal(buildPaletteLookName("  ", "Ushers"), "Ushers palette");
-  assert.equal(buildPaletteLookName("Wednesday", "Choir"), "Wednesday");
+test("an unnamed palette look is named after its dominant colour", () => {
+  // Not after a department — palette looks apply to all of them, so department names
+  // would make every look in the list read the same.
+  const blue = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  assert.equal(buildPaletteLookName("", blue), "Powder blue / sky blue palette");
+  assert.equal(buildPaletteLookName("   ", blue), "Powder blue / sky blue palette");
+  assert.equal(buildPaletteLookName("Wednesday", blue), "Wednesday");
+  assert.equal(buildPaletteLookName("", []), "Colour palette");
+});
+
+test("the department clause is dropped when there is no single department", () => {
+  const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  const shared = buildPalettePrompt({ gender: "female", palette });
+  assert.match(shared, /wearing a coordinated church service uniform outfit,/);
+  assert.doesNotMatch(shared, /department/);
+
+  const named = buildPalettePrompt({ departmentName: "Choir", gender: "female", palette });
+  assert.match(named, /for the Choir department/);
 });

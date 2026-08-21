@@ -91,10 +91,17 @@ Two optional inputs, both handled in `palette-prompt.ts`:
   clauses so those still read last, and explicitly subordinated to the colour lock —
   otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
   `canvas_data.notes` so a look records what it was generated from.
-- **Gender is optional.** A palette look is about the colours, so an omitted gender means
-  `pickPaletteGender()` draws one. Exactly one figure is rendered, never both — each
-  render is billed separately. Note the consequence: a randomly-male look cannot later be
-  assigned to a female schedule slot, since the assignment route requires a gender match.
+- **Gender is decided server-side.** `pickPaletteGender()` draws one; the form does not
+  ask. Exactly one figure is rendered, never both — each render is billed separately. Note
+  the consequence: a randomly-male look cannot later be assigned to a female schedule slot,
+  since the assignment route requires a gender match. The API still honours an explicit
+  `gender` if one is sent.
+- **Palette looks are never department-scoped.** The route hardcodes `all_departments:
+  true` with an empty `department_ids`, so they apply everywhere including departments
+  added later, and the form asks nothing about it. `departmentName` on the prompt is
+  therefore optional and normally absent, and `buildPaletteLookName()` falls back to the
+  dominant colour ("Blush pink palette") rather than a department, so looks stay
+  distinguishable in a list.
 
 ### Prompt engineering is domain logic
 
@@ -123,10 +130,17 @@ Two optional inputs, both handled in `palette-prompt.ts`:
   clauses so those still read last, and explicitly subordinated to the colour lock —
   otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
   `canvas_data.notes` so a look records what it was generated from.
-- **Gender is optional.** A palette look is about the colours, so an omitted gender means
-  `pickPaletteGender()` draws one. Exactly one figure is rendered, never both — each
-  render is billed separately. Note the consequence: a randomly-male look cannot later be
-  assigned to a female schedule slot, since the assignment route requires a gender match.
+- **Gender is decided server-side.** `pickPaletteGender()` draws one; the form does not
+  ask. Exactly one figure is rendered, never both — each render is billed separately. Note
+  the consequence: a randomly-male look cannot later be assigned to a female schedule slot,
+  since the assignment route requires a gender match. The API still honours an explicit
+  `gender` if one is sent.
+- **Palette looks are never department-scoped.** The route hardcodes `all_departments:
+  true` with an empty `department_ids`, so they apply everywhere including departments
+  added later, and the form asks nothing about it. `departmentName` on the prompt is
+  therefore optional and normally absent, and `buildPaletteLookName()` falls back to the
+  dominant colour ("Blush pink palette") rather than a department, so looks stay
+  distinguishable in a list.
 
 ### Prompt engineering is domain logic here
 

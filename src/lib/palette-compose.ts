@@ -22,11 +22,11 @@ function textOn(hex: string): string {
 function paletteSvg({
   palette,
   title,
-  departmentName,
+  subtitle,
 }: {
   palette: PaletteColor[];
   title: string;
-  departmentName: string;
+  subtitle: string;
 }): string {
   const width = 420;
   const cardHeight = 230;
@@ -53,7 +53,7 @@ function paletteSvg({
   return `
     <svg width="${width}" height="${totalHeight}" viewBox="0 0 ${width} ${totalHeight}" xmlns="http://www.w3.org/2000/svg">
       <text x="0" y="35" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="#211C19">${escapeXml(title)}</text>
-      <text x="0" y="68" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#6F6257">${escapeXml(departmentName)}</text>
+      <text x="0" y="68" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#6F6257">${escapeXml(subtitle)}</text>
       ${cards}
     </svg>
   `;
@@ -63,20 +63,20 @@ export async function createPaletteMoodBoard({
   personImage,
   palette,
   title,
-  departmentName,
+  subtitle,
 }: {
   /** Rendered person image bytes — gpt-image-2 returns base64, so there is no URL to fetch. */
   personImage: Buffer;
   palette: PaletteColor[];
   title: string;
-  departmentName: string;
+  subtitle: string;
 }): Promise<Buffer> {
   const person = await sharp(personImage)
     .resize({ width: 690, height: 1280, fit: "cover", position: "top", withoutEnlargement: true })
     .sharpen({ sigma: 0.85, m1: 1, m2: 2 })
     .toBuffer();
 
-  const swatches = await sharp(Buffer.from(paletteSvg({ palette, title, departmentName })))
+  const swatches = await sharp(Buffer.from(paletteSvg({ palette, title, subtitle })))
     .resize({ width: 420, height: 1240, fit: "inside", withoutEnlargement: true })
     .png()
     .toBuffer();

@@ -139,19 +139,30 @@ export function pickPaletteGender(random: () => number = Math.random): "male" | 
   return random() < 0.5 ? "female" : "male";
 }
 
-export function buildPaletteLookName(name: string, departmentName: string): string {
+/**
+ * Name a palette look. Falls back to its dominant colour rather than a department, since
+ * palette looks are not department-scoped — "Powder blue palette" distinguishes them in a
+ * list far better than three rows all reading "Choir palette".
+ */
+export function buildPaletteLookName(name: string, palette: PaletteColor[]): string {
   const trimmed = name.trim();
-  return trimmed || `${departmentName.trim()} palette`;
+  if (trimmed) return trimmed;
+
+  const first = palette[0]?.hex;
+  if (!first) return "Colour palette";
+  const colour = nearestColorName(first);
+  return `${colour.charAt(0).toUpperCase()}${colour.slice(1)} palette`;
 }
 
 export function buildPalettePrompt({
-  departmentName,
+  departmentName = null,
   gender,
   palette,
   notes = null,
   hasFigureReference = false,
 }: {
-  departmentName: string;
+  /** Optional — palette looks apply to every department, so there is usually no single one. */
+  departmentName?: string | null;
   gender: "male" | "female";
   palette: PaletteColor[];
   /** Optional free-text styling direction, e.g. a fabric texture or an extra accessory. */
@@ -171,7 +182,9 @@ export function buildPalettePrompt({
 
   return [
     subject,
-    `wearing a coordinated church service uniform outfit for the ${departmentName} department`,
+    departmentName
+      ? `wearing a coordinated church service uniform outfit for the ${departmentName} department`
+      : "wearing a coordinated church service uniform outfit",
     ...colorChartInstructions(hasFigureReference),
     `CRITICAL COLOR LOCK: use only these approved clothing fabric colors and match the hex and RGB values as closely as possible: ${colors}`,
     "The outfit may use one, some, or all approved colors, but every visible clothing fabric color must come from the approved palette",

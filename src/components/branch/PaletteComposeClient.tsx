@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, ArrowUp, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
-import { DepartmentChips } from "./PieceScopeFields";
 import { MAX_PALETTE_NOTES } from "@/lib/palette-prompt";
-import type { Gender } from "@/types/database";
 
-type Department = { id: string; name: string; description: string | null };
 type PaletteColor = { id: string; hex: string };
 type CreatedLook = { id: string };
 
@@ -31,16 +28,11 @@ function textOn(hex: string): string {
 
 export default function PaletteComposeClient() {
   const router = useRouter();
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [selectedDeptId, setSelectedDeptId] = useState("");
-  // Extra departments that reuse this render instead of paying for their own.
-  const [shareWith, setShareWith] = useState<string[]>([]);
-  const [allDepartments, setAllDepartments] = useState(false);
-  // "" means leave it to the app — a palette look is about the colours, not the figure.
-  const [selectedGender, setSelectedGender] = useState<Gender | "">("");
+  // Palette looks are not department-scoped: they apply to every department, and the
+  // figure is drawn server-side. Neither needs to be asked for.
+  const [hasDepartments, setHasDepartments] = useState(true);
   const [notes, setNotes] = useState("");
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [colors, setColors] = useState<PaletteColor[]>(DEFAULT_COLORS);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -50,18 +42,14 @@ export default function PaletteComposeClient() {
     fetch("/api/branch/departments")
       .then((res) => res.json())
       .then((data) => {
+        // Only used to tell the leader to create a department first — a palette look
+        // itself applies to all of them, so which ones exist does not matter here.
         const list = Array.isArray(data) ? data : data.departments ?? [];
-        setDepartments(list);
-        setSelectedDeptId(list[0]?.id ?? "");
+        setHasDepartments(list.length > 0);
       })
       .catch(() => setError("Failed to load departments"))
       .finally(() => setLoading(false));
   }, []);
-
-  const selectedDept = useMemo(
-    () => departments.find((dept) => dept.id === selectedDeptId) ?? null,
-    [departments, selectedDeptId]
-  );
 
   function updateColor(id: string, patch: Partial<Pick<PaletteColor, "hex">>) {
     setColors((prev) => prev.map((color) => color.id === id ? { ...color, ...patch } : color));
@@ -95,7 +83,6 @@ export default function PaletteComposeClient() {
   async function handleGenerate() {
     setError(null);
 
-    if (!selectedDeptId) { setError("Select a department"); return; }
     if (colors.length < 2) { setError("Choose at least two colors"); return; }
     if (colors.some((color) => !HEX_RE.test(color.hex))) { setError("Every color needs a valid hex value"); return; }
 
@@ -106,12 +93,6 @@ export default function PaletteComposeClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          description: description.trim() || null,
-          // The first id names the prompt; the rest simply share this one render.
-          department_ids: [selectedDeptId, ...shareWith.filter((id) => id !== selectedDeptId)],
-          all_departments: allDepartments,
-          // Omitted entirely when left to the app, so the server draws one.
-          ...(selectedGender ? { gender: selectedGender } : {}),
           notes: notes.trim() || null,
           palette: colors.map((color) => ({
             hex: color.hex,
@@ -143,9 +124,6 @@ export default function PaletteComposeClient() {
       <div className="builder-step">
         <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.5rem" }}>Palette compose</div>
         <h2 className="builder-step-title">Choose colors for the <em className="serif-em">look</em></h2>
-        <p className="builder-step-subtitle">
-          Select the department and palette. The studio will generate the outfit and place the colors beside it.
-        </p>
 
         {loading ? (
           <div style={{ display: "grid", placeItems: "center", padding: "3rem", color: "var(--color-text-faint)" }}>
@@ -153,71 +131,6 @@ export default function PaletteComposeClient() {
           </div>
         ) : (
           <>
-            <section style={{ marginBottom: "2rem" }}>
-              <div className="rule-label" style={{ marginBottom: "0.8rem" }}>
-                <span>Department</span><span className="rule" />
-              </div>
-
-              {departments.length === 0 ? (
-                <p className="builder-empty">No departments yet. <Link href="/branch/departments" style={{ color: "var(--color-primary-dark)", fontWeight: 600 }}>Create one first</Link></p>
-              ) : (
-                <div className="dept-grid">
-                  {departments.map((dept) => {
-                    const selected = selectedDeptId === dept.id;
-                    return (
-                      <button
-                        key={dept.id}
-                        className={`dept-card ${selected ? "selected" : ""}`}
-                        onClick={() => setSelectedDeptId(dept.id)}
-                      >
-                        {selected && <span className="dept-card-check">✓</span>}
-                        <span className="dept-card-mono">{dept.name.charAt(0).toUpperCase()}</span>
-                        <span className="dept-card-name">{dept.name}</span>
-                        {dept.description && <span className="dept-card-desc">{dept.description}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section style={{ marginBottom: "2rem" }}>
-              <div className="rule-label" style={{ marginBottom: "0.8rem" }}>
-                <span>Gender</span><span className="rule" />
-              </div>
-              <div className="gender-toggle" role="tablist" aria-label="Choose gender">
-                <button
-                  role="tab"
-                  aria-selected={selectedGender === ""}
-                  className={selectedGender === "" ? "on" : ""}
-                  onClick={() => setSelectedGender("")}
-                >
-                  ✦ Surprise me
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={selectedGender === "female"}
-                  className={selectedGender === "female" ? "on" : ""}
-                  onClick={() => setSelectedGender("female")}
-                >
-                  ♀ Female
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={selectedGender === "male"}
-                  className={selectedGender === "male" ? "on" : ""}
-                  onClick={() => setSelectedGender("male")}
-                >
-                  ♂ Male
-                </button>
-              </div>
-              <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "0.5rem 0 0" }}>
-                {selectedGender === ""
-                  ? "The studio will pick a figure for you. One outfit is rendered, not both."
-                  : "Rendering the " + selectedGender + " figure."}
-              </p>
-            </section>
-
             <section style={{ marginBottom: "2rem" }}>
               <div className="rule-label" style={{ marginBottom: "0.8rem" }}>
                 <span>Colors</span><span className="rule" />
@@ -276,16 +189,9 @@ export default function PaletteComposeClient() {
               <div className="builder-form">
                 <input
                   className="form-input"
-                  placeholder={selectedDept ? `${selectedDept.name} palette` : "Service palette"}
+                  placeholder="Named from the first colour if left blank"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                />
-                <textarea
-                  className="form-input"
-                  placeholder="Optional notes — for your own reference, not sent to the studio"
-                  rows={2}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
                 />
               </div>
             </section>
@@ -303,25 +209,13 @@ export default function PaletteComposeClient() {
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                 />
-                <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "0.4rem 0 0" }}>
-                  Sent to the studio along with the colours. Applied within the approved palette
-                  and modest styling — it cannot introduce an unapproved colour.
-                  {notes.length > 0 && ` · ${notes.length}/${MAX_PALETTE_NOTES}`}
-                </p>
               </div>
             </section>
 
-            {selectedDeptId && (
-              <section style={{ marginTop: "1.5rem" }}>
-                <DepartmentChips
-                  departments={departments.filter((dept) => dept.id !== selectedDeptId)}
-                  departmentIds={shareWith}
-                  allDepartments={allDepartments}
-                  onChange={(next) => { setShareWith(next.departmentIds); setAllDepartments(next.allDepartments); }}
-                  label="Also share this look with"
-                  hint="Optional — these departments reuse this render instead of generating their own."
-                />
-              </section>
+            {!hasDepartments && (
+              <p className="builder-empty" style={{ marginTop: "1rem" }}>
+                No departments yet. <Link href="/branch/departments" style={{ color: "var(--color-primary-dark)", fontWeight: 600 }}>Create one first</Link> — palette looks apply to every department.
+              </p>
             )}
 
             {error && <div className="builder-error" style={{ marginTop: "1rem" }}>{error}</div>}
@@ -330,7 +224,7 @@ export default function PaletteComposeClient() {
               <Link href="/branch/uniforms" className="btn-back" style={{ textDecoration: "none" }}>Cancel</Link>
               <button
                 className="btn-primary"
-                disabled={generating || departments.length === 0}
+                disabled={generating || !hasDepartments}
                 onClick={handleGenerate}
               >
                 {generating ? <><Loader2 size={15} className="animate-spin" /> Generating...</> : <><Sparkles size={15} /> Generate palette look</>}

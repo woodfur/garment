@@ -4,7 +4,6 @@ import { requireBranchLeader } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { persistPreviewImage, renderPaletteLookImage } from "@/lib/preview-render";
 import { baseFigureUrlFor } from "@/lib/mannequin-config";
-import { validateDepartmentScope } from "@/lib/scope";
 import {
   buildPaletteLookName,
   createPaletteMoodBoard,
@@ -48,34 +47,18 @@ export async function POST(request: Request) {
     const description = typeof body.description === "string" && body.description.trim()
       ? body.description.trim()
       : null;
-    // A palette look still renders for one department's naming/prompt, but may be shared
-    // with others so the render is reused rather than repeated.
-    const scope = validateDepartmentScope(body);
-    const departmentId = scope.department_ids[0] ?? "";
+    // Palette looks are not department-scoped: they describe colours, so they apply to
+    // every department automatically, including ones added later. Nothing is asked for
+    // in the form and nothing is read off the request.
+    const scope = { department_ids: [] as string[], all_departments: true };
     // A palette look is about the colours, so the figure can be left to the app.
     // One gender is drawn, never both — each render is billed separately.
     const gender = isGender(body.gender) ? body.gender : pickPaletteGender();
     const notes = sanitizePaletteNotes(body.notes);
     const palette = validatePalette(body.palette);
 
-    // Unlike other looks, a palette look needs one named department even when shared with
-    // all of them: the department name goes into the generation prompt and the look name.
-    if (!departmentId) {
-      return NextResponse.json(
-        { error: "Choose at least one department — the palette prompt is written for it" },
-        { status: 400 }
-      );
-    }
 
-    const { data: department } = await db
-      .from("departments")
-      .select("id, name")
-      .eq("id", departmentId)
-      .eq("branch_id", auth.branchId)
-      .single() as { data: { id: string; name: string } | null };
-
-    if (!department) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
-    const lookName = buildPaletteLookName(name, department.name);
+    const lookName = buildPaletteLookName(name, palette);
 
     const { data: combination, error: comboErr } = await db
       .from("combinations")
@@ -102,7 +85,6 @@ export async function POST(request: Request) {
     combinationId = combination.id;
 
     const personImage = await renderPaletteLookImage({
-      departmentName: department.name,
       gender,
       palette,
       notes,
@@ -113,7 +95,7 @@ export async function POST(request: Request) {
       personImage,
       palette,
       title: lookName,
-      departmentName: department.name,
+      subtitle: "All departments",
     });
     const previewUrl = await uploadPaletteMoodBoard({
       branchId: auth.branchId,

@@ -97,13 +97,14 @@ export async function generateBaseFigureImage(gender: Gender): Promise<Buffer> {
  * garment photos involved. The flat colour chart carries the exact hex values.
  */
 export async function renderPaletteLookImage({
-  departmentName,
+  departmentName = null,
   gender,
   palette,
   notes = null,
   baseFigureUrl,
 }: {
-  departmentName: string;
+  /** Optional — palette looks are not department-scoped. */
+  departmentName?: string | null;
   gender: Gender;
   palette: PaletteColor[];
   /** Optional free-text styling direction from the branch leader. */
