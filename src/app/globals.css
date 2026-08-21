@@ -922,7 +922,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 .viewer-header {
   border-bottom: 1.5px solid var(--color-text-primary);
-  padding: 3rem 2rem 1.5rem;
+  padding: 3.5rem 2rem 1.75rem;
+  background:
+    radial-gradient(120% 140% at 12% -30%, rgba(124, 78, 120, 0.14), transparent 62%),
+    var(--color-bg-surface);
 }
 .viewer-header-inner { max-width: 880px; margin: 0 auto; }
 .viewer-header-inner::before {
@@ -934,7 +937,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading); font-weight: 300; font-size: clamp(2.2rem, 5vw, 3.2rem);
   letter-spacing: -0.02em; line-height: 1; color: var(--color-text-primary); margin-bottom: 0.4rem;
 }
-.viewer-subtitle { color: var(--color-text-muted); font-size: 0.9rem; }
+.viewer-subtitle { color: var(--color-text-muted); font-size: 0.95rem; }
 .viewer-main { max-width: 880px; margin: 0 auto; padding: 2rem; display: flex; flex-direction: column; gap: 1.75rem; }
 .viewer-empty { text-align: center; padding: 4rem 2rem; color: var(--color-text-muted); }
 .viewer-empty-icon { font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5; }
@@ -957,75 +960,90 @@ h1, h2, h3, h4, h5, h6 {
 
 
 /* ── Public viewer: story deck on wide screens, one-answer cards on phones.
-      Both render; CSS picks one, since a JS viewport switch breaks hydration. ── */
-.vw-deck { display: flex; gap: 16px; overflow-x: auto; padding: 4px 0 12px; scroll-snap-type: x mandatory; }
+      Both render; CSS picks one, since a JS viewport switch breaks hydration.
+      The deck's character is type set OVER full-bleed imagery — putting the caption in a
+      block underneath is what made the first build read flat. ── */
+.vw-deck { display: flex; gap: 18px; overflow-x: auto; padding: 4px 2px 16px; scroll-snap-type: x mandatory; }
 .vw-deck::-webkit-scrollbar { height: 6px; }
 .vw-deck::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-full); }
 .vw-answers { display: none; }
 @media (max-width: 768px) {
   .vw-deck { display: none; }
-  .vw-answers { display: grid; gap: 14px; }
+  .vw-answers { display: grid; gap: 16px; }
 }
 
 .vw-story {
-  flex: 0 0 300px; scroll-snap-align: start; border-radius: var(--radius-lg);
-  overflow: hidden; background: var(--color-bg-surface); border: 1px solid var(--color-border);
-  display: flex; flex-direction: column;
+  position: relative; flex: 0 0 288px; height: 432px; scroll-snap-align: start;
+  border-radius: 22px; overflow: hidden; background: #241f2b;
+  box-shadow: 0 20px 40px -26px rgba(33, 28, 25, 0.75);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
-/* 2/3 matches the render's native 1024x1536 — a 3/4 slot crops the head and shoes. */
-.vw-story-media { aspect-ratio: 2 / 3; background: var(--color-bg-board); position: relative; }
-.vw-story-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vw-story:hover { transform: translateY(-4px); box-shadow: 0 28px 52px -26px rgba(33, 28, 25, 0.85); }
+.vw-story-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .vw-story-pending {
   position: absolute; inset: 0; display: grid; place-items: center;
-  font-size: 0.78rem; color: var(--color-text-faint); text-align: center; padding: 8px;
+  font-size: 0.82rem; color: rgba(255,255,255,0.5); text-align: center; padding: 10px;
 }
-.vw-story-body { padding: 14px 15px 15px; display: flex; flex-direction: column; flex: 1; }
+.vw-story-body {
+  position: absolute; inset: auto 0 0 0; z-index: 1; color: #fff;
+  padding: 68px 18px 16px;
+  background: linear-gradient(transparent, rgba(20, 16, 24, 0.55) 26%, rgba(20, 16, 24, 0.93));
+}
 .vw-story-body h3 {
-  font-family: var(--font-heading); font-weight: 400; font-size: 1.25rem; margin: 0 0 10px;
+  font-family: var(--font-heading); font-weight: 400; font-size: 1.65rem;
+  letter-spacing: -0.02em; margin: 0 0 12px; color: #fff;
 }
-.vw-story-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; }
+.vw-story-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.vw-story .vw-g { color: rgba(255,255,255,0.55); }
+.vw-deck li { color: rgba(255,255,255,0.9); }
+.vw-story .vw-look { color: rgba(255,255,255,0.9); }
+.vw-story .vw-dl {
+  margin-top: 14px; color: #fff; border-color: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08); backdrop-filter: blur(6px);
+}
+.vw-story .vw-dl:hover { background: rgba(255,255,255,0.18); }
 
 .vw-answer {
   background: var(--color-bg-card); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); padding: 14px;
+  border-radius: var(--radius-lg); padding: 18px; box-shadow: var(--shadow-card);
 }
 .vw-answer-dept {
-  font-family: var(--font-heading); font-weight: 400; font-size: 1.2rem;
-  margin: 0 0 12px; color: var(--color-primary-dark);
+  font-family: var(--font-heading); font-weight: 400; font-size: 1.45rem;
+  margin: 0 0 14px; color: var(--color-primary-dark); letter-spacing: -0.01em;
 }
-.vw-answer-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.vw-answer-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .vw-answer-fig {
   aspect-ratio: 2 / 3; border-radius: var(--radius-md); overflow: hidden;
-  background: var(--color-bg-board); position: relative; margin-bottom: 9px;
+  background: var(--color-bg-board); position: relative; margin-bottom: 11px;
 }
 .vw-answer-fig img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .vw-g {
   font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase;
-  font-weight: 700; color: var(--color-text-faint); margin-bottom: 7px;
+  font-weight: 700; color: var(--color-text-faint); margin-bottom: 8px;
 }
 .vw-deck ul, .vw-answers ul { list-style: none; margin: 0; padding: 0; }
-.vw-deck li, .vw-answers li {
-  font-size: 0.82rem; color: var(--color-text-secondary); line-height: 1.7;
-}
+.vw-deck li, .vw-answers li { font-size: 0.82rem; line-height: 1.75; }
+.vw-answers li { color: var(--color-text-secondary); }
 .vw-look { font-size: 0.82rem; color: var(--color-text-secondary); margin: 0; }
-.vw-sw { display: flex; gap: 4px; flex-wrap: wrap; }
+.vw-sw { display: flex; gap: 5px; flex-wrap: wrap; }
 .vw-sw i {
-  width: 17px; height: 17px; border-radius: var(--radius-sm);
+  width: 18px; height: 18px; border-radius: var(--radius-sm);
   border: 1px solid var(--color-border); display: inline-block;
 }
 .vw-dl {
-  display: block; text-align: center; margin-top: 13px; text-decoration: none;
+  display: block; text-align: center; margin-top: 15px; text-decoration: none;
   font-size: 0.78rem; font-weight: 600; color: var(--color-primary-dark);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 9px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px;
+  transition: background 0.15s;
 }
 .vw-dl:hover { background: var(--color-primary-light); }
 
 /* Department filter — links, not buttons, so ?dept= stays shareable straight into a group chat */
 .viewer-dept-filter { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1.25rem; }
 .viewer-dept-chip {
-  font-size: 0.78rem; font-weight: 600; text-decoration: none;
-  padding: 0.4rem 0.9rem; border-radius: var(--radius-full);
+  font-size: 0.8rem; font-weight: 600; text-decoration: none;
+  padding: 0.5rem 1.05rem; border-radius: var(--radius-full);
   border: 1px solid var(--color-border); background: var(--color-bg-surface);
   color: var(--color-text-secondary); transition: background 0.15s, border-color 0.15s;
 }

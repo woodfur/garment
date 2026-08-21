@@ -136,7 +136,7 @@ export default async function PublicViewerPage({ params, searchParams }: PagePro
       <header className="viewer-header">
         <div className="viewer-header-inner">
           <h1 className="viewer-title">{branch.name}</h1>
-          <p className="viewer-subtitle">Upcoming Service Uniform Schedule</p>
+          <p className="viewer-subtitle">What each department is wearing</p>
         </div>
       </header>
 
@@ -204,12 +204,10 @@ export default async function PublicViewerPage({ params, searchParams }: PagePro
                 const cover = (f && figureFor(f)) || (m && figureFor(m)) || null;
                 return (
                   <article key={group.id} className="vw-story">
-                    <div className="vw-story-media">
-                      {cover
-                        // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={cover} alt={`${group.name} outfit`} />
-                        : <span className="vw-story-pending">Preview coming soon</span>}
-                    </div>
+                    {cover
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img className="vw-story-media" src={cover} alt={`${group.name} outfit`} />
+                      : <span className="vw-story-pending">Preview coming soon</span>}
                     <div className="vw-story-body">
                       <h3>{group.name}</h3>
                       <div className="vw-story-cols">
