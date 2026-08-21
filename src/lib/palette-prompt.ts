@@ -129,21 +129,6 @@ export function sanitizePaletteNotes(raw: unknown): string | null {
   return cleaned.length > 0 ? cleaned : null;
 }
 
-/**
- * A palette look is about the colours, not the figure, so the gender can be left to the
- * app. One figure is drawn, not both — each render costs money.
- *
- * `random` is injectable so tests can pin the draw; callers pass nothing.
- */
-export function pickPaletteGender(random: () => number = Math.random): "male" | "female" {
-  return random() < 0.5 ? "female" : "male";
-}
-
-/**
- * Name a palette look. Falls back to its dominant colour rather than a department, since
- * palette looks are not department-scoped — "Powder blue palette" distinguishes them in a
- * list far better than three rows all reading "Choir palette".
- */
 export function buildPaletteLookName(name: string, palette: PaletteColor[]): string {
   const trimmed = name.trim();
   if (trimmed) return trimmed;

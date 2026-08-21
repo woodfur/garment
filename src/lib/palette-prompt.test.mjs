@@ -7,7 +7,6 @@ import {
   colorChartInstructions,
   colorPromptPhrase,
   nearestColorName,
-  pickPaletteGender,
   sanitizePaletteNotes,
 } from "./palette-prompt.ts";
 
@@ -110,13 +109,6 @@ test("direction is collapsed to one line and capped", () => {
   assert.equal(sanitizePaletteNotes("   "), null);
   assert.equal(sanitizePaletteNotes(42), null);
   assert.equal(sanitizePaletteNotes("x".repeat(MAX_PALETTE_NOTES + 50)).length, MAX_PALETTE_NOTES);
-});
-
-test("gender can be left to the app, and both figures are reachable", () => {
-  assert.equal(pickPaletteGender(() => 0), "female");
-  assert.equal(pickPaletteGender(() => 0.99), "male");
-  // Exactly one figure is chosen per look — rendering both would double the cost.
-  assert.ok(["male", "female"].includes(pickPaletteGender()));
 });
 
 test("nearestColorName gives a readable name for a hex", () => {

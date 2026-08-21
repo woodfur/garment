@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { FIGURE_HEIGHT, SWATCH_WIDTH, moodBoardLayout } from "@/lib/mood-board-layout";
 import { createAdminClient } from "@/lib/supabase/server";
 export { buildPaletteLookName, buildPalettePrompt, validatePalette } from "@/lib/palette-prompt";
 import type { PaletteColor } from "@/lib/palette-prompt";
@@ -60,38 +61,41 @@ function paletteSvg({
 }
 
 export async function createPaletteMoodBoard({
-  personImage,
+  personImages,
   palette,
   title,
   subtitle,
 }: {
-  /** Rendered person image bytes — gpt-image-2 returns base64, so there is no URL to fetch. */
-  personImage: Buffer;
+  /** Rendered figure bytes — gpt-image-2 returns base64, so there is no URL to fetch. */
+  personImages: Buffer[];
   palette: PaletteColor[];
   title: string;
   subtitle: string;
 }): Promise<Buffer> {
-  const person = await sharp(personImage)
-    .resize({ width: 690, height: 1280, fit: "cover", position: "top", withoutEnlargement: true })
-    .sharpen({ sigma: 0.85, m1: 1, m2: 2 })
-    .toBuffer();
+  if (personImages.length === 0) throw new Error("createPaletteMoodBoard requires at least one figure");
+
+  const layout = moodBoardLayout(personImages.length);
+
+  const figures = await Promise.all(
+    personImages.map((image) =>
+      sharp(image)
+        .resize({ width: layout.figureWidth, height: FIGURE_HEIGHT, fit: "cover", position: "top", withoutEnlargement: true })
+        .sharpen({ sigma: 0.85, m1: 1, m2: 2 })
+        .toBuffer()
+    )
+  );
 
   const swatches = await sharp(Buffer.from(paletteSvg({ palette, title, subtitle })))
-    .resize({ width: 420, height: 1240, fit: "inside", withoutEnlargement: true })
+    .resize({ width: SWATCH_WIDTH, height: 1240, fit: "inside", withoutEnlargement: true })
     .png()
     .toBuffer();
 
   return sharp({
-    create: {
-      width: 1200,
-      height: 1400,
-      channels: 4,
-      background: "#F7F1E8",
-    },
+    create: { width: layout.width, height: layout.height, channels: 4, background: "#F7F1E8" },
   })
     .composite([
-      { input: person, left: 48, top: 60 },
-      { input: swatches, left: 738, top: 80 },
+      ...figures.map((figure, index) => ({ input: figure, left: layout.figureLefts[index], top: 60 })),
+      { input: swatches, left: layout.swatchLeft, top: 80 },
     ])
     .png({ compressionLevel: 6 })
     .toBuffer();

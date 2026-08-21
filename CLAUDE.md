@@ -91,11 +91,14 @@ Two optional inputs, both handled in `palette-prompt.ts`:
   clauses so those still read last, and explicitly subordinated to the colour lock —
   otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
   `canvas_data.notes` so a look records what it was generated from.
-- **Gender is decided server-side.** `pickPaletteGender()` draws one; the form does not
-  ask. Exactly one figure is rendered, never both — each render is billed separately. Note
-  the consequence: a randomly-male look cannot later be assigned to a female schedule slot,
-  since the assignment route requires a gender match. The API still honours an explicit
-  `gender` if one is sent.
+- **Both figures are rendered, and the look is stored with `gender: null`.** A palette is
+  a colour scheme for a whole department, and departments have men and women. Null gender
+  is the legacy-look path that every consumer already treats as "either" — the assignment
+  route takes the slot's gender, `filterAssignableCombinations` accepts it for both — so
+  one palette look fills a male *and* a female assignment. Rendering only one figure would
+  store a null composite for the other gender and show "preview coming soon" wherever it
+  was assigned, which is why the two go together. Costs two renders (~$0.33), the same as
+  the two separate palette looks it replaces.
 - **Palette looks are never department-scoped.** The route hardcodes `all_departments:
   true` with an empty `department_ids`, so they apply everywhere including departments
   added later, and the form asks nothing about it. `departmentName` on the prompt is
@@ -130,11 +133,14 @@ Two optional inputs, both handled in `palette-prompt.ts`:
   clauses so those still read last, and explicitly subordinated to the colour lock —
   otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
   `canvas_data.notes` so a look records what it was generated from.
-- **Gender is decided server-side.** `pickPaletteGender()` draws one; the form does not
-  ask. Exactly one figure is rendered, never both — each render is billed separately. Note
-  the consequence: a randomly-male look cannot later be assigned to a female schedule slot,
-  since the assignment route requires a gender match. The API still honours an explicit
-  `gender` if one is sent.
+- **Both figures are rendered, and the look is stored with `gender: null`.** A palette is
+  a colour scheme for a whole department, and departments have men and women. Null gender
+  is the legacy-look path that every consumer already treats as "either" — the assignment
+  route takes the slot's gender, `filterAssignableCombinations` accepts it for both — so
+  one palette look fills a male *and* a female assignment. Rendering only one figure would
+  store a null composite for the other gender and show "preview coming soon" wherever it
+  was assigned, which is why the two go together. Costs two renders (~$0.33), the same as
+  the two separate palette looks it replaces.
 - **Palette looks are never department-scoped.** The route hardcodes `all_departments:
   true` with an empty `department_ids`, so they apply everywhere including departments
   added later, and the form asks nothing about it. `departmentName` on the prompt is
@@ -228,7 +234,7 @@ department at once.
 
 ## Pure-logic modules and tests
 
-Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`, `scope.ts`, `share-card.ts`, `dashboard-hero.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
+Business rules that are worth testing are extracted into standalone modules under `src/lib/` with a sibling `*.test.mjs`: `flow-rules.mjs`, `render-download.ts`, `schedule-package.ts`, `uniform-reminders.ts`, `palette-prompt.ts`, `palette-swatch.ts`, `look-prompt.ts`, `scope.ts`, `share-card.ts`, `dashboard-hero.ts`, `mood-board-layout.ts`. They import nothing from Next.js or Supabase so the node test runner can load them directly. `flow-rules.mjs` is plain `.mjs` (not TS) for that reason — the newer files use `.ts` and lean on Node's type stripping. **Follow this pattern:** put new decision logic in a pure module and test it, rather than inline in a route handler.
 
 `dashboard-hero.ts` picks the look on the dashboard hero plate. Two rules worth knowing: it takes the soonest service that actually **has rendered looks**, not simply the soonest service (services are created ahead in bulk, so the very next one is usually still empty while a later one is fully dressed — the label names whichever was chosen, so it stays honest about the day); and the look is drawn **at random** from that service so the plate varies per visit. The split matters — `collectHeroCandidates()` is deterministic and cached, `heroLookFrom()` does the draw per request. Caching the draw would freeze one department for the whole cache window. `random` is injectable so tests can pin it.
 

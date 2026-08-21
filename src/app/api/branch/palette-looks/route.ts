@@ -10,7 +10,7 @@ import {
   uploadPaletteMoodBoard,
   validatePalette,
 } from "@/lib/palette-compose";
-import { pickPaletteGender, sanitizePaletteNotes } from "@/lib/palette-prompt";
+import { sanitizePaletteNotes } from "@/lib/palette-prompt";
 import type { Gender } from "@/types/database";
 
 // gpt-image-2 at high quality takes well over a minute for a full-body render.
@@ -27,10 +27,6 @@ type PaletteLooksQuery = {
 type PaletteLooksDb = {
   from(table: string): PaletteLooksQuery;
 };
-
-function isGender(value: unknown): value is Gender {
-  return value === "male" || value === "female";
-}
 
 export async function POST(request: Request) {
   const result = await requireBranchLeader();
@@ -51,9 +47,6 @@ export async function POST(request: Request) {
     // every department automatically, including ones added later. Nothing is asked for
     // in the form and nothing is read off the request.
     const scope = { department_ids: [] as string[], all_departments: true };
-    // A palette look is about the colours, so the figure can be left to the app.
-    // One gender is drawn, never both — each render is billed separately.
-    const gender = isGender(body.gender) ? body.gender : pickPaletteGender();
     const notes = sanitizePaletteNotes(body.notes);
     const palette = validatePalette(body.palette);
 
@@ -67,7 +60,9 @@ export async function POST(request: Request) {
         description,
         department_ids: scope.department_ids,
         all_departments: scope.all_departments,
-        gender,
+        // Deliberately null: a palette is a colour scheme for a whole department, so the
+        // look carries a figure for each gender and slots into either schedule assignment.
+        gender: null,
         branch_id: auth.branchId,
         created_by: auth.userId,
         preview_status: "processing",
@@ -84,15 +79,30 @@ export async function POST(request: Request) {
     if (comboErr || !combination) throw comboErr ?? new Error("Failed to create palette look");
     combinationId = combination.id;
 
-    const personImage = await renderPaletteLookImage({
-      gender,
-      palette,
-      notes,
-      baseFigureUrl: baseFigureUrlFor(gender, false),
-    });
-    const personImageUrl = await persistPreviewImage(personImage, combination.id, gender);
+    // Both figures from the same palette, in parallel. Departments have men and women, so
+    // a colour scheme needs both; rendering one would leave the other slot unfillable.
+    const genders: Gender[] = ["female", "male"];
+    const rendered = await Promise.all(
+      genders.map(async (figure) => ({
+        gender: figure,
+        image: await renderPaletteLookImage({
+          gender: figure,
+          palette,
+          notes,
+          baseFigureUrl: baseFigureUrlFor(figure, false),
+        }),
+      }))
+    );
+
+    const persisted = await Promise.all(
+      rendered.map(async (entry) => ({
+        gender: entry.gender,
+        url: await persistPreviewImage(entry.image, combination.id, entry.gender),
+      }))
+    );
+
     const board = await createPaletteMoodBoard({
-      personImage,
+      personImages: rendered.map((entry) => entry.image),
       palette,
       title: lookName,
       subtitle: "All departments",
@@ -108,7 +118,8 @@ export async function POST(request: Request) {
       .update({
         preview_url: previewUrl,
         preview_status: "ready",
-        [gender === "male" ? "male_composite_url" : "female_composite_url"]: personImageUrl,
+        male_composite_url: persisted.find((entry) => entry.gender === "male")?.url ?? null,
+        female_composite_url: persisted.find((entry) => entry.gender === "female")?.url ?? null,
       })
       .eq("id", combinationId)
       .select("id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, preview_status, created_at")
