@@ -2,19 +2,23 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/server";
 
+type ZoneItemRow = { combination_id: string; gender: string; zone: string; uniform: { name: string } | null };
+type ViewerCombination = {
+  id: string;
+  name: string;
+  preview_status: string;
+  male_composite_url: string | null;
+  female_composite_url: string | null;
+  male_gif_url: string | null;
+  female_gif_url: string | null;
+  canvas_data: { mode?: string; palette?: Array<{ hex: string }> } | null;
+};
+
 type ViewerAssignment = {
   id: string;
   gender: "male" | "female" | null;
   department: { id: string; name: string } | null;
-  combination: {
-    id: string;
-    name: string;
-    preview_status: string;
-    male_composite_url: string | null;
-    female_composite_url: string | null;
-    male_gif_url: string | null;
-    female_gif_url: string | null;
-  } | null;
+  combination: ViewerCombination | null;
 };
 
 interface PageProps {
@@ -60,7 +64,7 @@ export default async function PublicViewerPage({ params, searchParams }: PagePro
         id,
         gender,
         department:departments(id, name),
-        combination:combinations(id, name, gender, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url)
+        combination:combinations(id, name, gender, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, canvas_data)
       )
     `
     )
@@ -93,6 +97,39 @@ export default async function PublicViewerPage({ params, searchParams }: PagePro
     }
     return groups.sort((a, b) => a.name.localeCompare(b.name));
   };
+
+  // Garment names per look and gender, so the card lists what to wear rather than only
+  // naming the look. Palette looks have no garment rows and fall back to their colours.
+  const comboIds = [...new Set(
+    ((schedules ?? []) as Array<{ assignments?: ViewerAssignment[] }>)
+      .flatMap((s) => (s.assignments ?? []).map((a) => a.combination?.id))
+      .filter((id): id is string => !!id)
+  )];
+
+  const { data: zoneItems } = comboIds.length
+    ? await admin
+        .from("combination_zone_items")
+        .select("combination_id, gender, zone, uniform:uniforms(name)")
+        .in("combination_id", comboIds) as { data: ZoneItemRow[] | null }
+    : { data: [] as ZoneItemRow[] };
+
+  const piecesFor = (combinationId: string | undefined, gender: string | null): string[] => {
+    if (!combinationId || !gender) return [];
+    return (zoneItems ?? [])
+      .filter((z) => z.combination_id === combinationId && z.gender === gender && z.uniform?.name)
+      .map((z) => z.uniform!.name);
+  };
+
+  const paletteFor = (combination: ViewerCombination | null | undefined): string[] =>
+    combination?.canvas_data?.mode === "palette"
+      ? (combination.canvas_data.palette ?? []).map((c) => c.hex)
+      : [];
+
+  const figureFor = (a: ViewerAssignment) =>
+    a.gender === "male" ? a.combination?.male_composite_url : a.combination?.female_composite_url;
+
+  const ladies = (list: ViewerAssignment[]) => list.find((a) => a.gender === "female");
+  const men = (list: ViewerAssignment[]) => list.find((a) => a.gender === "male");
 
   return (
     <div className="viewer-root">
@@ -158,80 +195,98 @@ export default async function PublicViewerPage({ params, searchParams }: PagePro
               </p>
             )}
 
-            {groupByDepartment(schedule.assignments).map((group) => (
-              <section key={group.id} className="viewer-dept-group">
-                <div className="viewer-dept-group-header">
-                  <h3 className="viewer-dept-group-name">{group.name}</h3>
-                  <a
-                    href={`/api/public/schedules/${schedule.id}/departments/${group.id}/card?code=${encodeURIComponent(code)}`}
-                    className="viewer-download-btn"
-                    style={{ textDecoration: "none" }}
-                  >
-                    ↓ Download {group.name} pack
-                  </a>
-                </div>
-
-                <div className="viewer-assignments">
-              {group.assignments.map((a) => {
-                const gender = a.gender === "male" || a.gender === "female" ? a.gender : null;
-                const imageUrl = gender === "male"
-                  ? a.combination?.male_composite_url
-                  : gender === "female"
-                    ? a.combination?.female_composite_url
-                    : null;
-                const videoUrl = gender === "male"
-                  ? a.combination?.male_gif_url
-                  : gender === "female"
-                    ? a.combination?.female_gif_url
-                    : null;
-                const assetUrl = imageUrl || videoUrl;
+            {/* Wide screens: a deck of tall department cards. Both layouts render and CSS
+                picks one — switching on viewport in JS would break hydration. */}
+            <div className="vw-deck">
+              {groupByDepartment(schedule.assignments).map((group) => {
+                const f = ladies(group.assignments);
+                const m = men(group.assignments);
+                const cover = (f && figureFor(f)) || (m && figureFor(m)) || null;
                 return (
-                <div key={a.id} className="viewer-assignment">
-                  {gender && (
-                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", textTransform: "capitalize", marginBottom: "0.5rem" }}>
-                      {gender}
+                  <article key={group.id} className="vw-story">
+                    <div className="vw-story-media">
+                      {cover
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={cover} alt={`${group.name} outfit`} />
+                        : <span className="vw-story-pending">Preview coming soon</span>}
                     </div>
-                  )}
-
-                  {a.combination?.preview_status === "ready" && assetUrl && gender ? (
-                    <div className="viewer-previews">
-                      <div className="viewer-preview-item">
-                        <span className="viewer-gender-label">{gender === "male" ? "Male" : "Female"}</span>
-                        {imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={imageUrl} alt={`${a.combination.name} ${gender} preview`} className="viewer-video" />
-                        ) : (
-                          <video
-                            // Only reached when assetUrl was truthy and imageUrl was not,
-                            // so videoUrl is set — the coalesce just satisfies the type.
-                            src={videoUrl ?? undefined}
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className="viewer-video"
-                          />
-                        )}
-                        <a
-                          href={`/api/public/combinations/${a.combination.id}/download?gender=${gender}&code=${encodeURIComponent(code)}`}
-                          className="viewer-download-btn"
-                        >
-                          ↓ Download
-                        </a>
+                    <div className="vw-story-body">
+                      <h3>{group.name}</h3>
+                      <div className="vw-story-cols">
+                        {[["Ladies", f], ["Men", m]].map(([label, a]) => {
+                          const asg = a as ViewerAssignment | undefined;
+                          if (!asg) return null;
+                          const pieces = piecesFor(asg.combination?.id, asg.gender);
+                          const colours = paletteFor(asg.combination);
+                          return (
+                            <div key={label as string}>
+                              <div className="vw-g">{label as string}</div>
+                              {pieces.length > 0 ? (
+                                <ul>{pieces.map((n) => <li key={n}>{n}</li>)}</ul>
+                              ) : colours.length > 0 ? (
+                                <div className="vw-sw">{colours.map((hex) => (
+                                  <i key={hex} style={{ background: hex }} title={hex} />))}</div>
+                              ) : (
+                                <p className="vw-look">{asg.combination?.name}</p>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
+                      <a className="vw-dl"
+                         href={`/api/public/schedules/${schedule.id}/departments/${group.id}/card?code=${encodeURIComponent(code)}`}>
+                        Download {group.name} pack
+                      </a>
                     </div>
-                  ) : (
-                    <div className="viewer-preview-pending">
-                      <span className="viewer-clock">🕐</span>
-                      <span>Outfit preview coming soon</span>
-                    </div>
-                  )}
-                </div>
+                  </article>
                 );
               })}
-                </div>
-              </section>
-            ))}
+            </div>
+
+            {/* Phones: one answer per department, Ladies and Men side by side. */}
+            <div className="vw-answers">
+              {groupByDepartment(schedule.assignments).map((group) => {
+                const f = ladies(group.assignments);
+                const m = men(group.assignments);
+                return (
+                  <article key={group.id} className="vw-answer">
+                    <h3 className="vw-answer-dept">{group.name}</h3>
+                    <div className="vw-answer-two">
+                      {[["Ladies", f], ["Men", m]].map(([label, a]) => {
+                        const asg = a as ViewerAssignment | undefined;
+                        const url = asg ? figureFor(asg) : null;
+                        const pieces = asg ? piecesFor(asg.combination?.id, asg.gender) : [];
+                        const colours = asg ? paletteFor(asg.combination) : [];
+                        return (
+                          <div className="vw-answer-col" key={label as string}>
+                            <div className="vw-g">{label as string}</div>
+                            <div className="vw-answer-fig">
+                              {url
+                                // eslint-disable-next-line @next/next/no-img-element
+                                ? <img src={url} alt={`${group.name} ${label as string} outfit`} />
+                                : <span className="vw-story-pending">{asg ? "Coming soon" : "Not set"}</span>}
+                            </div>
+                            {pieces.length > 0 ? (
+                              <ul>{pieces.map((n) => <li key={n}>{n}</li>)}</ul>
+                            ) : colours.length > 0 ? (
+                              <div className="vw-sw">{colours.map((hex) => (
+                                <i key={hex} style={{ background: hex }} title={hex} />))}</div>
+                            ) : asg ? (
+                              <p className="vw-look">{asg.combination?.name}</p>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <a className="vw-dl"
+                       href={`/api/public/schedules/${schedule.id}/departments/${group.id}/card?code=${encodeURIComponent(code)}`}>
+                      Download {group.name} pack
+                    </a>
+                  </article>
+                );
+              })}
+            </div>
+
           </div>
         ))}
       </main>

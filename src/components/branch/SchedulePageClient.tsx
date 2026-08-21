@@ -1,7 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import PublicScheduleShareButton from "@/components/branch/PublicScheduleShareButton";
+import {
+  assignmentsByDepartment,
+  coverageRows,
+  coverageSummary,
+  pickFeatured,
+  relativeDayLabel,
+  serviceDayLabel,
+  serviceDayShort,
+} from "@/lib/schedule-view";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,36 +64,25 @@ interface GroupedSchedule {
 
 function AssignForm({
   scheduleId,
-  existingAssignments,
+  departments,
+  initialDeptId = "",
   onAssigned,
   onCancel,
 }: {
   scheduleId: string;
-  existingAssignments: Assignment[];
+  departments: Department[];
+  /** Pre-selected when opened from a coverage-grid cell. */
+  initialDeptId?: string;
   onAssigned: (assignment: Assignment) => void;
   onCancel: () => void;
 }) {
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [combinations, setCombinations] = useState<Combination[]>([]);
-  const [selectedDeptId, setSelectedDeptId] = useState("");
+  const [selectedDeptId, setSelectedDeptId] = useState(initialDeptId);
   const [selectedGender, setSelectedGender] = useState<"male" | "female" | "">("");
   const [selectedComboId, setSelectedComboId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loadingDepts, setLoadingDepts] = useState(true);
   const [loadingCombos, setLoadingCombos] = useState(false);
-
-  // Load departments on mount
-  useEffect(() => {
-    setLoadingDepts(true);
-    fetch("/api/branch/departments")
-      .then((r) => r.json())
-      .then((data) => {
-        setDepartments(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setError("Failed to load departments"))
-      .finally(() => setLoadingDepts(false));
-  }, []);
 
   // Load combinations when department changes
   useEffect(() => {
@@ -150,10 +148,7 @@ function AssignForm({
         <label className="spc-label" htmlFor="dept-select">
           Department
         </label>
-        {loadingDepts ? (
-          <div className="skeleton spc-select-skeleton" />
-        ) : (
-          <select
+        <select
             id="dept-select"
             className="spc-select"
             value={selectedDeptId}
@@ -170,8 +165,7 @@ function AssignForm({
                 {d.name}
               </option>
             ))}
-          </select>
-        )}
+        </select>
       </div>
 
       <div className="spc-form-row">
@@ -253,6 +247,57 @@ function AssignForm({
 
 // ─── Preview Status Badge ─────────────────────────────────────────────────────
 
+function ServicePanel({
+  group, departments, initialDeptId, onAssigned, onRemove, onClose,
+}: {
+  group: GroupedSchedule;
+  departments: Department[];
+  initialDeptId: string;
+  onAssigned: (assignment: Assignment) => void;
+  onRemove: (scheduleId: string, departmentId: string, gender: string | undefined, assignmentId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="spc-panel">
+      {group.assignments.length === 0 && (
+        <p className="spc-assignments-empty">No outfits assigned to this service yet.</p>
+      )}
+      {group.assignments.map((a) => {
+        const preview = getAssignmentPreview(a);
+        return (
+          <div key={a.id} className="spc-assignment-row">
+            <div className="spc-assignment-dept">{a.department?.name ?? "—"}</div>
+            <div className="spc-assignment-combo">
+              <div className="spc-assignment-combo-name">{a.combination?.name ?? "—"}</div>
+              {a.gender && <div className="spc-assignment-gender">{a.gender === "male" ? "Men" : "Ladies"}</div>}
+            </div>
+            <div className="spc-assignment-right">
+              {a.combination?.preview_status === "ready" && preview ? (
+                <a className="spc-btn spc-btn-ghost spc-btn-sm"
+                   href={`/api/branch/combinations/${a.combination.id}/download?gender=${preview.gender}`}>
+                  Download
+                </a>
+              ) : (
+                <PreviewBadge status={a.combination?.preview_status ?? "none"} />
+              )}
+              <button className="spc-btn spc-btn-danger"
+                onClick={() => onRemove(a._scheduleId, a.department_id, a.gender ?? undefined, a.id)}
+                title="Remove this assignment">✕</button>
+            </div>
+          </div>
+        );
+      })}
+      <AssignForm
+        scheduleId={group.id}
+        departments={departments}
+        initialDeptId={initialDeptId}
+        onAssigned={onAssigned}
+        onCancel={onClose}
+      />
+    </div>
+  );
+}
+
 function PreviewBadge({ status }: { status: string }) {
   const cfg: Record<string, { label: string; cls: string }> = {
     ready: { label: "✓ Ready", cls: "badge-success" },
@@ -301,6 +346,8 @@ function nextRegularServices(): { date: string; title: string }[] {
 
 export default function SchedulePageClient() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  // Held here rather than in the assign form: the coverage grid needs them for its columns.
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -331,6 +378,25 @@ export default function SchedulePageClient() {
   // day passes. Set in an effect (not at render) to avoid SSR/hydration drift.
   const [todayStr, setTodayStr] = useState("");
   useEffect(() => { setTodayStr(localDateStr(new Date())); }, []);
+
+  // Which service's detail panel is open, and which department to pre-select in its form.
+  const [openServiceId, setOpenServiceId] = useState<string | null>(null);
+  const [pendingDeptId, setPendingDeptId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    // Async callback rather than a synchronous setState in the effect body.
+    (async () => {
+      try {
+        const res = await fetch("/api/branch/departments");
+        const data = await res.json();
+        if (!cancelled) setDepartments(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setError("Failed to load departments");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Load schedules
   const loadSchedules = useCallback(async () => {
@@ -555,6 +621,15 @@ export default function SchedulePageClient() {
 
   // Hide services whose date has already passed (today's service stays until the
   // day is over). Rows remain in the DB — they're just no longer shown here.
+  const openService = useCallback((id: string, deptId = "") => {
+    setPendingDeptId(deptId);
+    setOpenServiceId(id);
+  }, []);
+  const closeService = useCallback(() => {
+    setOpenServiceId(null);
+    setPendingDeptId("");
+  }, []);
+
   const visibleSchedules = todayStr
     ? schedules.filter((s) => s.service_date >= todayStr)
     : schedules;
@@ -592,6 +667,12 @@ export default function SchedulePageClient() {
       (a, b) => new Date(a.service_date).getTime() - new Date(b.service_date).getTime()
     );
   })();
+
+  const featured = pickFeatured(groupedByDate);
+  const rows = coverageRows(groupedByDate, departments);
+  const summary = coverageSummary(rows);
+  const openGroup = groupedByDate.find((g) => g.id === openServiceId) ?? null;
+
 
   return (
     <div className="spc-root">
@@ -956,6 +1037,142 @@ export default function SchedulePageClient() {
           padding: 64px 24px;
           color: var(--color-text-muted);
         }
+
+        /* ── Layout switch: featured hero on wide screens, coverage grid on phones.
+              Both render; CSS picks one, since switching on viewport in JS breaks
+              hydration in a server-rendered app. ── */
+        .spc-wide { display: block; }
+        .spc-narrow { display: none; }
+        @media (max-width: 768px) {
+          .spc-wide { display: none; }
+          .spc-narrow { display: block; }
+        }
+
+        /* Featured service */
+        .spc-hero {
+          background: var(--color-bg-card);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-lg);
+          padding: 22px;
+          margin-bottom: 30px;
+        }
+        .spc-hero-head {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+        }
+        .spc-hero-kick {
+          font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
+          font-weight: 700; color: var(--color-accent);
+        }
+        .spc-hero-title {
+          font-family: var(--font-heading); font-weight: 400; font-size: 2rem;
+          letter-spacing: -0.02em; margin: 6px 0 4px;
+        }
+        .spc-hero-date { font-size: 0.86rem; color: var(--color-text-muted); margin: 0; }
+        .spc-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .spc-hero-grid {
+          display: grid; gap: 14px;
+          grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        }
+        .spc-dept-card {
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg-surface);
+        }
+        .spc-dept-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--color-border-subtle); }
+        .spc-dept-fig { position: relative; aspect-ratio: 3/4; background: var(--color-bg-board); overflow: hidden; }
+        .spc-dept-fig img, .spc-dept-fig video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .spc-fig-tag {
+          position: absolute; left: 6px; bottom: 6px; font-size: 0.55rem; font-weight: 700;
+          letter-spacing: 0.1em; text-transform: uppercase; background: rgba(0,0,0,0.62);
+          color: #fff; padding: 2px 6px; border-radius: var(--radius-full);
+        }
+        .spc-fig-pending {
+          position: absolute; inset: 0; display: grid; place-items: center;
+          font-size: 0.7rem; color: var(--color-text-faint);
+        }
+        .spc-dept-meta { padding: 10px 12px; }
+        .spc-dept-meta b { display: block; font-size: 0.9rem; }
+        .spc-dept-meta span { display: block; font-size: 0.76rem; color: var(--color-text-muted); margin-top: 2px; }
+
+        /* Following services */
+        .spc-strip-heading {
+          font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
+          color: var(--color-text-muted); font-weight: 700; margin: 0 0 6px;
+        }
+        .spc-strip-item { border-top: 1px solid var(--color-border-subtle); }
+        .spc-strip-row {
+          display: flex; align-items: center; gap: 14px; padding: 14px 2px; flex-wrap: wrap;
+        }
+        .spc-strip-when { flex: 1 1 200px; }
+        .spc-strip-when b { display: block; font-size: 0.95rem; font-weight: 600; }
+        .spc-strip-when span { font-size: 0.8rem; color: var(--color-text-muted); }
+        .spc-strip-actions { display: flex; gap: 8px; }
+        .spc-pill {
+          font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+          padding: 4px 10px; border-radius: var(--radius-full);
+        }
+        .spc-pill-ok { background: var(--color-success-bg); color: var(--color-success); }
+        .spc-pill-gap { background: var(--color-warning-bg); color: var(--color-warning); }
+
+        /* Coverage grid */
+        .spc-cov-summary {
+          font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 12px;
+        }
+        .spc-cov-summary b { color: var(--color-text-primary); }
+        .spc-cov { display: grid; gap: 5px; }
+        .spc-cov-head {
+          font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase;
+          font-weight: 700; color: var(--color-text-muted); padding: 0 2px 2px;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .spc-cov-rowlab {
+          border: 0; background: none; text-align: left; padding: 6px 6px 6px 0;
+          cursor: pointer; font: inherit; color: inherit;
+        }
+        .spc-cov-rowlab b { display: block; font-size: 0.76rem; font-weight: 700; }
+        .spc-cov-rowlab span { font-size: 0.64rem; color: var(--color-text-muted); }
+        .spc-cov-cell {
+          border: 0; cursor: pointer; font: inherit; border-radius: var(--radius-md);
+          min-height: 58px; padding: 7px 6px; display: flex; flex-direction: column;
+          justify-content: space-between; align-items: flex-start; text-align: left;
+        }
+        .spc-cov-full { background: var(--color-primary-dark); color: #fff; }
+        .spc-cov-partial { background: var(--color-warning-bg); color: var(--color-warning); }
+        .spc-cov-empty {
+          background: var(--color-bg-elevated); color: var(--color-text-faint);
+          border: 1px dashed var(--color-border); align-items: center; justify-content: center;
+        }
+        .spc-cov-look {
+          font-size: 0.6rem; font-weight: 600; line-height: 1.25;
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .spc-cov-plus { font-size: 1rem; }
+        .spc-cov-dots { display: flex; gap: 3px; }
+        .spc-cov-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.28; }
+        .spc-cov-dots i.on { opacity: 1; }
+        .spc-cov-key {
+          display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.68rem;
+          color: var(--color-text-muted); margin: 12px 0 0;
+        }
+        .spc-cov-key i.k { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+        .k-full { background: var(--color-primary-dark); }
+        .k-part { background: var(--color-warning); }
+        .k-none { background: var(--color-bg-elevated); border: 1px dashed var(--color-border); }
+
+        /* Phone detail sheet */
+        .spc-sheet {
+          margin-top: 18px; background: var(--color-bg-card);
+          border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 14px;
+        }
+        .spc-sheet-head {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          gap: 12px; margin-bottom: 10px;
+        }
+        .spc-sheet-head b { display: block; font-size: 1rem; }
+        .spc-sheet-head span { font-size: 0.78rem; color: var(--color-text-muted); }
+        .spc-sheet-foot { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+        .spc-panel { border-top: 1px solid var(--color-border-subtle); padding-top: 10px; }
+        .spc-assignment-gender { font-size: 0.72rem; color: var(--color-text-muted); }
         .spc-page-error {
           background: var(--color-error-bg);
           border: 1px solid var(--color-error);
@@ -1084,151 +1301,195 @@ export default function SchedulePageClient() {
         </div>
       )}
 
-      {/* Schedule list — one card per calendar day */}
-      {!loading &&
-        groupedByDate.map((schedule) => {
-          const isDeleting = schedule.ids.some((id) => deletingIds.has(id));
-          const isAssigning = assigningScheduleId === schedule.id;
-          const formattedDate = new Date(
-            schedule.service_date + "T00:00:00"
-          ).toLocaleDateString("en-GB", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          });
-
-          return (
-            <div
-              key={schedule.id}
-              className="spc-schedule-card"
-              style={{ opacity: isDeleting ? 0.5 : 1 }}
-            >
-              {/* Card header */}
-              <div className="spc-schedule-card-header">
-                <div className="spc-schedule-meta">
-                  <div className="spc-date-badge">{formattedDate}</div>
-                  <p className="spc-schedule-title-text">{schedule.title}</p>
-                  {schedule.notes && (
-                    <p className="spc-schedule-notes-text">{schedule.notes}</p>
-                  )}
+      {/* ── Wide screens: the next dressed service featured, the rest as a strip ── */}
+      {!loading && groupedByDate.length > 0 && (
+        <div className="spc-wide">
+          {featured && (
+            <section className="spc-hero">
+              <div className="spc-hero-head">
+                <div>
+                  <div className="spc-hero-kick">
+                    Next service{todayStr ? ` · ${relativeDayLabel(featured.service_date, todayStr)}` : ""}
+                  </div>
+                  <h2 className="spc-hero-title">{featured.title}</h2>
+                  <p className="spc-hero-date">
+                    {serviceDayLabel(featured.service_date)} ·{" "}
+                    {featured.assignments.length === 0
+                      ? "nothing assigned yet"
+                      : `${assignmentsByDepartment(featured).length} departments dressed`}
+                  </p>
                 </div>
-                <div className="spc-schedule-actions">
-                  <a
-                    className="spc-btn spc-btn-ghost spc-btn-sm"
-                    href={`/api/branch/schedules/${schedule.id}/package`}
-                  >
+                <div className="spc-hero-actions">
+                  <a className="spc-btn spc-btn-ghost spc-btn-sm" href={`/api/branch/schedules/${featured.id}/package`}>
                     Download package
                   </a>
-                  <button
-                    className="spc-btn spc-btn-danger"
-                    onClick={() => handleDeleteGroup(schedule.ids)}
-                    disabled={isDeleting}
-                    title="Delete this service date"
-                  >
-                    {isDeleting ? "Deleting…" : "🗑 Delete"}
+                  <button className="spc-btn spc-btn-ghost spc-btn-sm" onClick={() => openService(featured.id)}>
+                    ＋ Assign outfit
                   </button>
                 </div>
               </div>
 
-              {/* Assignments */}
-              <div className="spc-assignments-section">
-                {schedule.assignments.length === 0 && !isAssigning && (
-                  <p className="spc-assignments-empty">
-                    No outfits assigned to this service date yet.
-                  </p>
-                )}
-
-                {schedule.assignments.map((a) => {
-                  const preview = getAssignmentPreview(a);
-                  return (
-                  <div key={a.id} className="spc-assignment-row">
-                    <div className="spc-assignment-dept">
-                      {a.department?.name ?? "—"}
-                    </div>
-                    <div className="spc-assignment-combo">
-                      <div className="spc-assignment-combo-name">
-                        {a.combination?.name ?? "—"}
+              {assignmentsByDepartment(featured).length > 0 && (
+                <div className="spc-hero-grid">
+                  {assignmentsByDepartment(featured).map((dept) => (
+                    <article key={dept.id} className="spc-dept-card">
+                      <div className="spc-dept-figs">
+                        {dept.assignments.map((a) => {
+                          const preview = getAssignmentPreview(a);
+                          return (
+                            <div key={a.id} className="spc-dept-fig">
+                              {preview ? (
+                                preview.isVideo ? (
+                                  <video src={preview.url} autoPlay loop muted playsInline />
+                                ) : (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={preview.url} alt={`${a.combination?.name ?? "Look"} ${preview.gender}`} />
+                                )
+                              ) : (
+                                <span className="spc-fig-pending">Rendering…</span>
+                              )}
+                              <span className="spc-fig-tag">{a.gender === "male" ? "Men" : "Ladies"}</span>
+                            </div>
+                          );
+                        })}
                       </div>
-                      {a.gender && (
-                        <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", textTransform: "capitalize" }}>
-                          {a.gender}
-                        </div>
-                      )}
-                    </div>
-                    <div className="spc-assignment-right">
-                      {/* Preview */}
-                      {a.combination?.preview_status === "ready" && preview ? (
-                        <div className="spc-assignment-previews">
-                          <div className="spc-preview-thumb">
-                            <span className="spc-preview-label">{preview.gender === "male" ? "M" : "F"}</span>
-                            {preview.isVideo ? (
-                              <video
-                                src={preview.url}
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
-                                className="spc-preview-video"
-                              />
-                            ) : (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={preview.url} alt={`${a.combination.name} ${preview.gender} preview`} className="spc-preview-video" />
-                            )}
-                            <a
-                              href={`/api/branch/combinations/${a.combination.id}/download?gender=${preview.gender}`}
-                              className="spc-preview-download"
-                            >
-                              Download
-                            </a>
-                          </div>
-                        </div>
-                      ) : (
-                        <PreviewBadge
-                          status={a.combination?.preview_status ?? "none"}
-                        />
-                      )}
-                      <button
-                        className="spc-btn spc-btn-danger"
-                        onClick={() =>
-                          handleRemoveAssignment(
-                            a._scheduleId,
-                            a.department_id,
-                            a.gender ?? undefined,
-                            a.id
-                          )
-                        }
-                        title="Remove this assignment"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                  );
-                })}
+                      <div className="spc-dept-meta">
+                        <b>{dept.name}</b>
+                        <span>{[...new Set(dept.assignments.map((a) => a.combination?.name).filter(Boolean))].join(" · ")}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
 
-                {/* Inline assign form */}
-                {isAssigning ? (
-                  <AssignForm
-                    scheduleId={schedule.id}
-                    existingAssignments={schedule.assignments}
-                    onAssigned={(assignment) =>
-                      handleAssigned(schedule.id, assignment)
-                    }
-                    onCancel={() => setAssigningScheduleId(null)}
+              {openServiceId === featured.id && (
+                <ServicePanel
+                  group={featured}
+                  departments={departments}
+                  initialDeptId={pendingDeptId}
+                  onAssigned={(a) => handleAssigned(featured.id, a)}
+                  onRemove={handleRemoveAssignment}
+                  onClose={closeService}
+                />
+              )}
+            </section>
+          )}
+
+          <h3 className="spc-strip-heading">Services after that</h3>
+          {groupedByDate.filter((g) => g.id !== featured?.id).map((group) => {
+            const isDeleting = group.ids.some((id) => deletingIds.has(id));
+            const dressed = assignmentsByDepartment(group).length;
+            return (
+              <div key={group.id} className="spc-strip-item" style={{ opacity: isDeleting ? 0.5 : 1 }}>
+                <div className="spc-strip-row">
+                  <div className="spc-strip-when">
+                    <b>{group.title}</b>
+                    <span>{serviceDayLabel(group.service_date)}</span>
+                  </div>
+                  <div className="spc-strip-state">
+                    {dressed > 0
+                      ? <span className="spc-pill spc-pill-ok">{dressed} dressed</span>
+                      : <span className="spc-pill spc-pill-gap">Nothing assigned</span>}
+                  </div>
+                  <div className="spc-strip-actions">
+                    <button className="spc-btn spc-btn-ghost spc-btn-sm"
+                      onClick={() => (openServiceId === group.id ? closeService() : openService(group.id))}>
+                      {openServiceId === group.id ? "Close" : "Assign"}
+                    </button>
+                    <button className="spc-btn spc-btn-danger" onClick={() => handleDeleteGroup(group.ids)}
+                      disabled={isDeleting} title="Delete this service date">✕</button>
+                  </div>
+                </div>
+                {openServiceId === group.id && (
+                  <ServicePanel
+                    group={group}
+                    departments={departments}
+                    initialDeptId={pendingDeptId}
+                    onAssigned={(a) => handleAssigned(group.id, a)}
+                    onRemove={handleRemoveAssignment}
+                    onClose={closeService}
                   />
-                ) : (
-                  <button
-                    className="spc-btn spc-btn-ghost spc-btn-sm spc-add-assign-btn"
-                    onClick={() => setAssigningScheduleId(schedule.id)}
-                  >
-                    ＋ Assign Department Outfit
-                  </button>
                 )}
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Phones: coverage grid, services down and departments across ── */}
+      {!loading && groupedByDate.length > 0 && (
+        <div className="spc-narrow">
+          <div className="spc-cov-summary">
+            <b>{summary.filled} of {summary.total}</b> department slots dressed
+            {summary.emptyServices > 0 && <span> · {summary.emptyServices} services empty</span>}
+          </div>
+
+          <div className="spc-cov" style={{ gridTemplateColumns: `minmax(74px,1fr) repeat(${departments.length || 1}, 1fr)` }}>
+            <div />
+            {departments.map((d) => (
+              <div key={d.id} className="spc-cov-head" title={d.name}>{d.name}</div>
+            ))}
+
+            {rows.map((row) => (
+              <Fragment key={row.scheduleId}>
+                <button className="spc-cov-rowlab" onClick={() => openService(row.scheduleId)}>
+                  <b>{serviceDayShort(row.serviceDate)}</b>
+                  <span>{row.title.replace(" Service", "")}</span>
+                </button>
+                {row.cells.map((cell) => (
+                  <button
+                    key={cell.departmentId}
+                    className={`spc-cov-cell spc-cov-${cell.state}`}
+                    onClick={() => openService(row.scheduleId, cell.state === "empty" ? cell.departmentId : "")}
+                    aria-label={`${cell.departmentName}, ${serviceDayShort(row.serviceDate)}, ${
+                      cell.state === "empty" ? "nothing assigned" : cell.lookNames.join(", ")}`}
+                  >
+                    {cell.state === "empty"
+                      ? <span className="spc-cov-plus">＋</span>
+                      : <>
+                          <span className="spc-cov-look">{cell.lookNames[0] ?? "Assigned"}</span>
+                          <span className="spc-cov-dots">
+                            <i className={cell.genders.includes("female") ? "on" : ""} />
+                            <i className={cell.genders.includes("male") ? "on" : ""} />
+                          </span>
+                        </>}
+                  </button>
+                ))}
+              </Fragment>
+            ))}
+          </div>
+
+          <p className="spc-cov-key">
+            <span><i className="k k-full" /> Ladies &amp; Men</span>
+            <span><i className="k k-part" /> One missing</span>
+            <span><i className="k k-none" /> Nothing</span>
+          </p>
+
+          {openGroup && (
+            <div className="spc-sheet">
+              <div className="spc-sheet-head">
+                <div>
+                  <b>{openGroup.title}</b>
+                  <span>{serviceDayLabel(openGroup.service_date)}</span>
+                </div>
+                <button className="spc-btn spc-btn-ghost spc-btn-sm" onClick={closeService}>Close</button>
+              </div>
+              <ServicePanel
+                group={openGroup}
+                departments={departments}
+                initialDeptId={pendingDeptId}
+                onAssigned={(a) => handleAssigned(openGroup.id, a)}
+                onRemove={handleRemoveAssignment}
+                onClose={closeService}
+              />
+              <div className="spc-sheet-foot">
+                <a className="spc-btn spc-btn-ghost spc-btn-sm" href={`/api/branch/schedules/${openGroup.id}/package`}>Download package</a>
+                <button className="spc-btn spc-btn-danger" onClick={() => handleDeleteGroup(openGroup.ids)}>Delete service</button>
+              </div>
             </div>
-          );
-        })}
+          )}
+        </div>
+      )}
     </div>
   );
 }

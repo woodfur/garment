@@ -954,8 +954,71 @@ h1, h2, h3, h4, h5, h6 {
 .viewer-schedule-title { font-family: var(--font-heading); font-weight: 500; font-size: 1.5rem; letter-spacing: -0.01em; }
 .viewer-schedule-notes { font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.35rem; }
 .viewer-no-outfits { padding: 1rem 1.5rem; font-size: 0.85rem; color: var(--color-text-muted); }
-.viewer-assignments { display: flex; flex-direction: column; gap: 0; }
-.viewer-assignment { padding: 1.5rem; border-top: 1px solid var(--color-border-subtle); }
+
+
+/* ── Public viewer: story deck on wide screens, one-answer cards on phones.
+      Both render; CSS picks one, since a JS viewport switch breaks hydration. ── */
+.vw-deck { display: flex; gap: 16px; overflow-x: auto; padding: 4px 0 12px; scroll-snap-type: x mandatory; }
+.vw-deck::-webkit-scrollbar { height: 6px; }
+.vw-deck::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-full); }
+.vw-answers { display: none; }
+@media (max-width: 768px) {
+  .vw-deck { display: none; }
+  .vw-answers { display: grid; gap: 14px; }
+}
+
+.vw-story {
+  flex: 0 0 300px; scroll-snap-align: start; border-radius: var(--radius-lg);
+  overflow: hidden; background: var(--color-bg-surface); border: 1px solid var(--color-border);
+  display: flex; flex-direction: column;
+}
+.vw-story-media { aspect-ratio: 3/4; background: var(--color-bg-board); position: relative; }
+.vw-story-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vw-story-pending {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 0.78rem; color: var(--color-text-faint); text-align: center; padding: 8px;
+}
+.vw-story-body { padding: 14px 15px 15px; display: flex; flex-direction: column; flex: 1; }
+.vw-story-body h3 {
+  font-family: var(--font-heading); font-weight: 400; font-size: 1.25rem; margin: 0 0 10px;
+}
+.vw-story-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; }
+
+.vw-answer {
+  background: var(--color-bg-card); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); padding: 14px;
+}
+.vw-answer-dept {
+  font-family: var(--font-heading); font-weight: 400; font-size: 1.2rem;
+  margin: 0 0 12px; color: var(--color-primary-dark);
+}
+.vw-answer-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.vw-answer-fig {
+  aspect-ratio: 3/4; border-radius: var(--radius-md); overflow: hidden;
+  background: var(--color-bg-board); position: relative; margin-bottom: 9px;
+}
+.vw-answer-fig img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.vw-g {
+  font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase;
+  font-weight: 700; color: var(--color-text-faint); margin-bottom: 7px;
+}
+.vw-deck ul, .vw-answers ul { list-style: none; margin: 0; padding: 0; }
+.vw-deck li, .vw-answers li {
+  font-size: 0.82rem; color: var(--color-text-secondary); line-height: 1.7;
+}
+.vw-look { font-size: 0.82rem; color: var(--color-text-secondary); margin: 0; }
+.vw-sw { display: flex; gap: 4px; flex-wrap: wrap; }
+.vw-sw i {
+  width: 17px; height: 17px; border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border); display: inline-block;
+}
+.vw-dl {
+  display: block; text-align: center; margin-top: 13px; text-decoration: none;
+  font-size: 0.78rem; font-weight: 600; color: var(--color-primary-dark);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 9px;
+}
+.vw-dl:hover { background: var(--color-primary-light); }
 
 /* Department filter — links, not buttons, so ?dept= stays shareable straight into a group chat */
 .viewer-dept-filter { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1.25rem; }
@@ -970,25 +1033,6 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--color-primary-dark); border-color: var(--color-primary-dark); color: #fff;
 }
 
-.viewer-dept-group { border-top: 1px solid var(--color-border-subtle); }
-.viewer-dept-group-header {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 0.75rem; padding: 1.1rem 1.5rem 0;
-}
-.viewer-dept-group-name {
-  font-family: var(--font-heading); font-style: italic; font-weight: 400;
-  font-size: 1.15rem; color: var(--color-primary-dark);
-}
-.viewer-dept-group-header .viewer-download-btn { display: inline-block; padding: 0.4rem 0.9rem; }
-.viewer-dept-group .viewer-assignment { border-top: none; padding-top: 1rem; }
-.viewer-dept-label {
-  font-family: var(--font-heading); font-style: italic; font-weight: 400;
-  font-size: 1.15rem; color: var(--color-primary-dark); margin-bottom: 1rem;
-}
-.viewer-previews { display: flex; gap: 1.25rem; }
-.viewer-preview-item { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; max-width: 300px; }
-.viewer-gender-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-text-faint); text-align: center; }
-.viewer-video { width: 100%; border-radius: var(--radius-md); background: var(--color-bg-board); border: 1px solid var(--color-border); }
 .viewer-download-btn {
   display: block; text-align: center; font-size: 0.72rem; font-weight: 600;
   color: var(--color-primary-dark); text-decoration: none; padding: 0.4rem;
@@ -996,12 +1040,6 @@ h1, h2, h3, h4, h5, h6 {
   transition: background 0.15s;
 }
 .viewer-download-btn:hover { background: var(--color-primary-light); }
-.viewer-preview-pending {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 1rem; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md);
-  color: var(--color-text-muted); font-size: 0.85rem;
-}
-.viewer-clock { font-size: 1.25rem; }
 
 /* ═══════════════════════════════════════════════════════════════════
    BRANCH SHELL — editorial rail + masthead (Atelier × Lookbook)
