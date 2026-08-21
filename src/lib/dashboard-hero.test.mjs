@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assignmentImage, pickHeroLook, serviceLabel } from "./dashboard-hero.ts";
+import { assignmentImage, collectHeroCandidates, pickHeroLook, serviceLabel } from "./dashboard-hero.ts";
+
+/** Pin the draw so a random pick can still be asserted. */
+const always = (value) => () => value;
 
 const look = (dept, gender, { ready = true, url = `https://example.test/${dept}-${gender}.png` } = {}) => ({
   gender,
@@ -45,20 +48,52 @@ test("a service whose previews are still rendering counts as empty", () => {
   assert.equal(hero.departmentName, "Ushers");
 });
 
-test("picks deterministically: department A-Z, then Ladies before Men", () => {
-  const hero = pickHeroLook([
+test("draws at random across every dressed look, not always the same department", () => {
+  const schedules = [
     schedule("2026-08-23", [
       look("Ushers", "male"),
       look("Choir", "male"),
       look("Choir", "female"),
       look("Praise Team", "female"),
     ]),
-  ]);
+  ];
 
-  assert.equal(hero.departmentName, "Choir");
-  assert.equal(hero.gender, "female");
-  // Every dressed department is listed for the caption, deduplicated and sorted.
-  assert.deepEqual(hero.departmentNames, ["Choir", "Praise Team", "Ushers"]);
+  // The pool is ordered department A-Z then Ladies before Men, so a pinned draw is exact.
+  assert.equal(pickHeroLook(schedules, always(0)).departmentName, "Choir");
+  assert.equal(pickHeroLook(schedules, always(0)).gender, "female");
+  assert.equal(pickHeroLook(schedules, always(0.99)).departmentName, "Ushers");
+
+  // Every look in the service must be reachable — nothing is stranded.
+  const reached = new Set();
+  for (let i = 0; i < 4; i += 1) {
+    const hero = pickHeroLook(schedules, always(i / 4));
+    reached.add(`${hero.departmentName}/${hero.gender}`);
+  }
+  assert.deepEqual(
+    [...reached].sort(),
+    ["Choir/female", "Choir/male", "Praise Team/female", "Ushers/male"]
+  );
+});
+
+test("a random draw of exactly 1 cannot index past the end", () => {
+  const schedules = [schedule("2026-08-23", [look("Choir", "female"), look("Ushers", "male")])];
+  const hero = pickHeroLook(schedules, always(1));
+  assert.ok(hero, "must still return a look");
+  assert.equal(hero.departmentName, "Ushers");
+});
+
+test("the caption lists every dressed department regardless of which look was drawn", () => {
+  const schedules = [
+    schedule("2026-08-23", [look("Ushers", "male"), look("Choir", "female"), look("Choir", "male")]),
+  ];
+  for (const draw of [0, 0.5, 0.99]) {
+    assert.deepEqual(pickHeroLook(schedules, always(draw)).departmentNames, ["Choir", "Ushers"]);
+  }
+});
+
+test("collectHeroCandidates stays deterministic so it is safe to cache", () => {
+  const schedules = [schedule("2026-08-23", [look("Ushers", "male"), look("Choir", "female")])];
+  assert.deepEqual(collectHeroCandidates(schedules), collectHeroCandidates(schedules));
 });
 
 test("returns null when nothing is dressed, so the plate keeps its placeholder", () => {

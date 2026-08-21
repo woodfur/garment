@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { pickHeroLook, type HeroSchedule } from "@/lib/dashboard-hero";
+import { collectHeroCandidates, heroLookFrom, type HeroSchedule } from "@/lib/dashboard-hero";
 import { getAuthContext } from "@/lib/auth";
 import { unstable_cache } from "next/cache";
 import { formatDate, truncate } from "@/lib/utils";
@@ -73,8 +73,10 @@ export default async function BranchDashboardPage() {
     { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
   )();
 
-  // The look shown on the hero plate — the soonest service that actually has renders.
-  const heroLook = await unstable_cache(
+  // Candidates for the hero plate — the soonest service that actually has renders.
+  // Only the pool is cached; the draw happens per request below, so the plate shows a
+  // different department each visit rather than freezing one for the cache window.
+  const heroCandidates = await unstable_cache(
     async () => {
       const adminClient = createAdminClient();
       const res = await (adminClient as any)
@@ -89,11 +91,13 @@ export default async function BranchDashboardPage() {
         .gte("service_date", today)
         .order("service_date", { ascending: true })
         .limit(8);
-      return pickHeroLook((res.data ?? []) as HeroSchedule[]);
+      return collectHeroCandidates((res.data ?? []) as HeroSchedule[]);
     },
     [`dashboard-hero-${branchId}`],
     { tags: [`dashboard-lists-${branchId}`], revalidate: 30 }
   )();
+
+  const heroLook = heroCandidates ? heroLookFrom(heroCandidates) : null;
 
   // A few existing looks for quick access / assignment
   const recentLooks = await unstable_cache(
