@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Trash2, Loader2, RefreshCw, Sparkles, CalendarPlus, X, Download } from "lucide-react";
+import { ArrowLeft, Trash2, Loader2, RefreshCw, Sparkles, CalendarPlus, X, Download, Pencil, Check } from "lucide-react";
 import { STANDARD_ZONES, ACCESSORY_ZONES, zoneLabel } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 
@@ -51,6 +51,9 @@ export default function CombinationDetailClient({ combinationId }: { combination
   const [selectedScheduleId, setSelectedScheduleId] = useState("");
   const [assignGender, setAssignGender] = useState<Gender | "">("");
   const [assignDeptId, setAssignDeptId] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
@@ -102,6 +105,36 @@ export default function CombinationDetailClient({ combinationId }: { combination
     }, POLL_INTERVAL);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [combo?.preview_status, combinationId, generationKey]);
+
+  function startRename() {
+    if (!combo) return;
+    setDraftName(combo.name);
+    setRenaming(true);
+  }
+
+  async function saveRename() {
+    if (!combo) return;
+    const next = draftName.trim();
+    // An empty name would leave the look unidentifiable in every list; treat it as cancel.
+    if (!next || next === combo.name) { setRenaming(false); return; }
+
+    setSavingName(true);
+    try {
+      const res = await fetch(`/api/branch/combinations/${combinationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(data.error ?? "Failed to rename. Please try again."); return; }
+      setCombo((prev) => prev ? { ...prev, name: data.name ?? next } : prev);
+      setRenaming(false);
+    } catch {
+      alert("Network error — failed to rename. Please try again.");
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   const handleDelete = async () => {
     if (!confirm(`Delete "${combo?.name}"? This cannot be undone.`)) return;
@@ -224,7 +257,41 @@ export default function CombinationDetailClient({ combinationId }: { combination
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", paddingBottom: "0.875rem", marginBottom: "1.75rem", borderBottom: "1.5px solid var(--color-text-primary)" }}>
         <div>
           <div className="eyebrow eyebrow-accent">{departmentLabel || "A look"}</div>
-          <h1 className="display-serif" style={{ fontSize: "2.4rem", marginTop: "0.3rem" }}>{combo.name}</h1>
+          {renaming ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.3rem", flexWrap: "wrap" }}>
+              <input
+                autoFocus
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveRename();
+                  if (e.key === "Escape") setRenaming(false);
+                }}
+                disabled={savingName}
+                aria-label="Look name"
+                className="display-serif"
+                style={{ fontSize: "2rem", padding: "0.2rem 0.5rem", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg-elevated)", outline: "none", minWidth: "min(100%, 22ch)" }}
+              />
+              <button onClick={saveRename} disabled={savingName} className="btn-primary" style={{ padding: "0.45rem 0.9rem" }}>
+                {savingName ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
+              </button>
+              <button onClick={() => setRenaming(false)} disabled={savingName} className="btn-back" style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.45rem 0.9rem" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.3rem" }}>
+              <h1 className="display-serif" style={{ fontSize: "2.4rem" }}>{combo.name}</h1>
+              <button
+                onClick={startRename}
+                title="Rename this look"
+                aria-label="Rename this look"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0.35rem", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "transparent", cursor: "pointer", color: "var(--color-text-muted)" }}
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
+          )}
           {combo.description && <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", marginTop: "0.4rem", maxWidth: "52ch" }}>{combo.description}</p>}
         </div>
         <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
