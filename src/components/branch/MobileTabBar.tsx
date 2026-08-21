@@ -8,12 +8,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, Shirt, Calendar, Users, Plus } from "lucide-react";
+import { branchNavItem } from "@/lib/branch-nav";
 
+// Order is mobile-specific — the two highest-traffic tabs sit left of the compose
+// button — but every label comes from BRANCH_NAV so it matches the desktop sidebar.
 const TABS = [
-  { href: "/branch/dashboard", label: "Studio", icon: LayoutGrid },
-  { href: "/branch/uniforms", label: "Wardrobe", icon: Shirt },
-  { href: "/branch/departments", label: "Roster", icon: Users },
-  { href: "/branch/schedule", label: "Schedule", icon: Calendar },
+  { ...branchNavItem("/branch/dashboard"), icon: LayoutGrid },
+  { ...branchNavItem("/branch/uniforms"), icon: Shirt },
+  { ...branchNavItem("/branch/departments"), icon: Users },
+  { ...branchNavItem("/branch/schedule"), icon: Calendar },
 ];
 
 export default function MobileTabBar() {
@@ -70,6 +73,7 @@ function Tab({ href, label, Icon, pathname }: { href: string; label: string; Ico
       style={{
         display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
         textDecoration: "none", fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.03em",
+        whiteSpace: "nowrap",
         color: on ? "var(--color-primary-dark)" : "var(--color-text-faint)",
       }}
     >

@@ -922,7 +922,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 .viewer-header {
   border-bottom: 1.5px solid var(--color-text-primary);
-  padding: 3rem 2rem 1.5rem;
+  padding: 3.5rem 2rem 1.75rem;
+  background:
+    radial-gradient(120% 140% at 12% -30%, rgba(124, 78, 120, 0.14), transparent 62%),
+    var(--color-bg-surface);
 }
 .viewer-header-inner { max-width: 880px; margin: 0 auto; }
 .viewer-header-inner::before {
@@ -934,7 +937,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading); font-weight: 300; font-size: clamp(2.2rem, 5vw, 3.2rem);
   letter-spacing: -0.02em; line-height: 1; color: var(--color-text-primary); margin-bottom: 0.4rem;
 }
-.viewer-subtitle { color: var(--color-text-muted); font-size: 0.9rem; }
+.viewer-subtitle { color: var(--color-text-muted); font-size: 0.95rem; }
 .viewer-main { max-width: 880px; margin: 0 auto; padding: 2rem; display: flex; flex-direction: column; gap: 1.75rem; }
 .viewer-empty { text-align: center; padding: 4rem 2rem; color: var(--color-text-muted); }
 .viewer-empty-icon { font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.5; }
@@ -954,14 +957,93 @@ h1, h2, h3, h4, h5, h6 {
 .viewer-schedule-title { font-family: var(--font-heading); font-weight: 500; font-size: 1.5rem; letter-spacing: -0.01em; }
 .viewer-schedule-notes { font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.35rem; }
 .viewer-no-outfits { padding: 1rem 1.5rem; font-size: 0.85rem; color: var(--color-text-muted); }
-.viewer-assignments { display: flex; flex-direction: column; gap: 0; }
-.viewer-assignment { padding: 1.5rem; border-top: 1px solid var(--color-border-subtle); }
+
+
+/* ── Public viewer: story deck on wide screens, one-answer cards on phones.
+      Both render; CSS picks one, since a JS viewport switch breaks hydration.
+      The deck's character is type set OVER full-bleed imagery — putting the caption in a
+      block underneath is what made the first build read flat. ── */
+.vw-deck { display: flex; gap: 18px; overflow-x: auto; padding: 4px 2px 16px; scroll-snap-type: x mandatory; }
+.vw-deck::-webkit-scrollbar { height: 6px; }
+.vw-deck::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-full); }
+.vw-answers { display: none; }
+@media (max-width: 768px) {
+  .vw-deck { display: none; }
+  .vw-answers { display: grid; gap: 16px; }
+}
+
+.vw-story {
+  position: relative; flex: 0 0 288px; height: 432px; scroll-snap-align: start;
+  border-radius: 22px; overflow: hidden; background: #241f2b;
+  box-shadow: 0 20px 40px -26px rgba(33, 28, 25, 0.75);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.vw-story:hover { transform: translateY(-4px); box-shadow: 0 28px 52px -26px rgba(33, 28, 25, 0.85); }
+.vw-story-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.vw-story-pending {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 0.82rem; color: rgba(255,255,255,0.5); text-align: center; padding: 10px;
+}
+.vw-story-body {
+  position: absolute; inset: auto 0 0 0; z-index: 1; color: #fff;
+  padding: 68px 18px 16px;
+  background: linear-gradient(transparent, rgba(20, 16, 24, 0.55) 26%, rgba(20, 16, 24, 0.93));
+}
+.vw-story-body h3 {
+  font-family: var(--font-heading); font-weight: 400; font-size: 1.65rem;
+  letter-spacing: -0.02em; margin: 0 0 12px; color: #fff;
+}
+.vw-story-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.vw-story .vw-g { color: rgba(255,255,255,0.55); }
+.vw-deck li { color: rgba(255,255,255,0.9); }
+.vw-story .vw-look { color: rgba(255,255,255,0.9); }
+.vw-story .vw-dl {
+  margin-top: 14px; color: #fff; border-color: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08); backdrop-filter: blur(6px);
+}
+.vw-story .vw-dl:hover { background: rgba(255,255,255,0.18); }
+
+.vw-answer {
+  background: var(--color-bg-card); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); padding: 18px; box-shadow: var(--shadow-card);
+}
+.vw-answer-dept {
+  font-family: var(--font-heading); font-weight: 400; font-size: 1.45rem;
+  margin: 0 0 14px; color: var(--color-primary-dark); letter-spacing: -0.01em;
+}
+.vw-answer-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.vw-answer-fig {
+  aspect-ratio: 2 / 3; border-radius: var(--radius-md); overflow: hidden;
+  background: var(--color-bg-board); position: relative; margin-bottom: 11px;
+}
+.vw-answer-fig img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.vw-g {
+  font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase;
+  font-weight: 700; color: var(--color-text-faint); margin-bottom: 8px;
+}
+.vw-deck ul, .vw-answers ul { list-style: none; margin: 0; padding: 0; }
+.vw-deck li, .vw-answers li { font-size: 0.82rem; line-height: 1.75; }
+.vw-answers li { color: var(--color-text-secondary); }
+.vw-look { font-size: 0.82rem; color: var(--color-text-secondary); margin: 0; }
+.vw-sw { display: flex; gap: 5px; flex-wrap: wrap; }
+.vw-sw i {
+  width: 18px; height: 18px; border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border); display: inline-block;
+}
+.vw-dl {
+  display: block; text-align: center; margin-top: 15px; text-decoration: none;
+  font-size: 0.78rem; font-weight: 600; color: var(--color-primary-dark);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px;
+  transition: background 0.15s;
+}
+.vw-dl:hover { background: var(--color-primary-light); }
 
 /* Department filter — links, not buttons, so ?dept= stays shareable straight into a group chat */
 .viewer-dept-filter { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1.25rem; }
 .viewer-dept-chip {
-  font-size: 0.78rem; font-weight: 600; text-decoration: none;
-  padding: 0.4rem 0.9rem; border-radius: var(--radius-full);
+  font-size: 0.8rem; font-weight: 600; text-decoration: none;
+  padding: 0.5rem 1.05rem; border-radius: var(--radius-full);
   border: 1px solid var(--color-border); background: var(--color-bg-surface);
   color: var(--color-text-secondary); transition: background 0.15s, border-color 0.15s;
 }
@@ -970,25 +1052,6 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--color-primary-dark); border-color: var(--color-primary-dark); color: #fff;
 }
 
-.viewer-dept-group { border-top: 1px solid var(--color-border-subtle); }
-.viewer-dept-group-header {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 0.75rem; padding: 1.1rem 1.5rem 0;
-}
-.viewer-dept-group-name {
-  font-family: var(--font-heading); font-style: italic; font-weight: 400;
-  font-size: 1.15rem; color: var(--color-primary-dark);
-}
-.viewer-dept-group-header .viewer-download-btn { display: inline-block; padding: 0.4rem 0.9rem; }
-.viewer-dept-group .viewer-assignment { border-top: none; padding-top: 1rem; }
-.viewer-dept-label {
-  font-family: var(--font-heading); font-style: italic; font-weight: 400;
-  font-size: 1.15rem; color: var(--color-primary-dark); margin-bottom: 1rem;
-}
-.viewer-previews { display: flex; gap: 1.25rem; }
-.viewer-preview-item { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; max-width: 300px; }
-.viewer-gender-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-text-faint); text-align: center; }
-.viewer-video { width: 100%; border-radius: var(--radius-md); background: var(--color-bg-board); border: 1px solid var(--color-border); }
 .viewer-download-btn {
   display: block; text-align: center; font-size: 0.72rem; font-weight: 600;
   color: var(--color-primary-dark); text-decoration: none; padding: 0.4rem;
@@ -996,12 +1059,6 @@ h1, h2, h3, h4, h5, h6 {
   transition: background 0.15s;
 }
 .viewer-download-btn:hover { background: var(--color-primary-light); }
-.viewer-preview-pending {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 1rem; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md);
-  color: var(--color-text-muted); font-size: 0.85rem;
-}
-.viewer-clock { font-size: 1.25rem; }
 
 /* ═══════════════════════════════════════════════════════════════════
    BRANCH SHELL — editorial rail + masthead (Atelier × Lookbook)
@@ -1114,7 +1171,12 @@ h1, h2, h3, h4, h5, h6 {
   text-decoration: none; color: inherit; display: block;
 }
 .plate-look:hover { transform: translateY(-4px); box-shadow: 0 26px 48px -22px rgba(40,30,25,0.5); }
-.plate-look .pl-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.plate-look .pl-media {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  /* Renders are 2:3; these tiles are not. Crop from the bottom so the head survives —
+     the caption overlays the lower edge anyway. */
+  object-position: top center;
+}
 .plate-look .silh { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 58%; height: 80%; background: linear-gradient(180deg, #5b4f47, #2A2420); border-radius: 60px 60px 0 0; }
 .plate-look .silh.p { background: linear-gradient(180deg, var(--color-primary), var(--color-primary-dark)); }
 .plate-look .silh::before { content: ""; position: absolute; left: 50%; top: -7%; transform: translateX(-50%); width: 32%; aspect-ratio: 1; border-radius: 50%; background: inherit; }
@@ -1172,6 +1234,20 @@ h1, h2, h3, h4, h5, h6 {
   .dash-band .col:first-child { padding-right: 0; border-right: none; border-bottom: 1px solid var(--color-border); }
   .dash-band .col:last-child { padding-left: 0; }
   .g-lg, .g-md, .g-sm { grid-column: span 6; aspect-ratio: 3/4; align-self: auto; }
+}
+@media (max-width: 768px) {
+  /* Keep the Looks/Pieces pill and the actions on one row, actions flush right.
+     Without nowrap the header wraps and the buttons drop under the pill. */
+  .ward-head { flex-wrap: nowrap; align-items: center; gap: 0.6rem; }
+  .ward-toggle { margin-bottom: 0; flex: 0 0 auto; }
+  .ward-toggle button { padding: 0.4rem 0.85rem; font-size: 0.78rem; }
+  /* Buttons shrink rather than wrap; a third one (Show archived) scrolls into reach. */
+  .ward-actions {
+    flex-wrap: nowrap; justify-content: flex-end; gap: 0.4rem;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .ward-actions::-webkit-scrollbar { display: none; }
+  .ward-actions > * { flex: 0 0 auto; padding: 0.5rem 0.8rem !important; font-size: 0.78rem !important; }
 }
 @media (max-width: 560px) {
   .dash-mast .ttl { font-size: 1.05rem; }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BRANCH_NAV } from "@/lib/branch-nav";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -13,11 +14,10 @@ interface BranchSidebarProps {
 
 // Roman numerals give the rail its editorial, lookbook-index feel.
 // The Wardrobe now holds both finished looks and individual pieces.
-const navItems = [
-  { href: "/branch/dashboard",     label: "The Studio",   ix: "i" },
-  { href: "/branch/departments",   label: "Departments",  ix: "ii" },
-  { href: "/branch/uniforms",      label: "Wardrobe",     ix: "iii" },
-  { href: "/branch/schedule",      label: "Schedule",     ix: "iv" },
+const navItems: Array<{ href: string; label: string; ix: string }> = [
+  // Labels come from BRANCH_NAV so desktop and mobile cannot drift; the roman
+  // numerals are a desktop-only flourish.
+  ...BRANCH_NAV.map((item, index) => ({ ...item, ix: ["i", "ii", "iii", "iv"][index] })),
 ];
 
 export default function BranchSidebar({ branchName, leaderName }: BranchSidebarProps) {
