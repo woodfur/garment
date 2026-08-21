@@ -692,7 +692,7 @@ export default function SchedulePageClient() {
       <style>{`
         /* ── Root ── */
         .spc-root {
-          max-width: 860px;
+          max-width: 1040px;
           margin: 0 auto;
         }
 
@@ -898,12 +898,12 @@ export default function SchedulePageClient() {
         .spc-assignment-row {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 10px 14px;
+          gap: 14px;
+          padding: 12px 14px;
           background: var(--color-bg-primary);
           border: 1px solid var(--color-border-subtle);
           border-radius: var(--radius-md);
-          margin-bottom: 8px;
+          margin-bottom: 10px;
           transition: background 0.15s;
         }
         .spc-assignment-row:hover { background: var(--color-bg-elevated); }
@@ -1066,32 +1066,32 @@ export default function SchedulePageClient() {
           background: var(--color-bg-card);
           border: 1px solid var(--color-border);
           border-radius: var(--radius-lg);
-          padding: 22px;
-          margin-bottom: 30px;
+          padding: 30px;
+          margin-bottom: 42px;
         }
         .spc-hero-head {
           display: flex; justify-content: space-between; align-items: flex-start;
-          gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+          gap: 16px; flex-wrap: wrap; margin-bottom: 28px;
         }
         .spc-hero-kick {
           font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
           font-weight: 700; color: var(--color-accent);
         }
         .spc-hero-title {
-          font-family: var(--font-heading); font-weight: 400; font-size: 2rem;
-          letter-spacing: -0.02em; margin: 6px 0 4px;
+          font-family: var(--font-heading); font-weight: 400; font-size: 2.2rem;
+          letter-spacing: -0.02em; margin: 8px 0 5px;
         }
         .spc-hero-date { font-size: 0.86rem; color: var(--color-text-muted); margin: 0; }
         .spc-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .spc-hero-grid {
-          display: grid; gap: 14px;
-          grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+          display: grid; gap: 22px;
+          grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
         }
         .spc-dept-card {
           border: 1px solid var(--color-border-subtle);
           border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg-surface);
         }
-        .spc-dept-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--color-border-subtle); }
+        .spc-dept-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--color-border-subtle); }
         .spc-dept-fig { position: relative; aspect-ratio: 3/4; background: var(--color-bg-board); overflow: hidden; }
         .spc-dept-fig img, .spc-dept-fig video { width: 100%; height: 100%; object-fit: cover; display: block; }
         .spc-fig-tag {
@@ -1103,18 +1103,21 @@ export default function SchedulePageClient() {
           position: absolute; inset: 0; display: grid; place-items: center;
           font-size: 0.7rem; color: var(--color-text-faint);
         }
-        .spc-dept-meta { padding: 10px 12px; }
-        .spc-dept-meta b { display: block; font-size: 0.9rem; }
-        .spc-dept-meta span { display: block; font-size: 0.76rem; color: var(--color-text-muted); margin-top: 2px; }
+        .spc-dept-meta { padding: 15px 16px 16px; }
+        .spc-dept-meta b { display: block; font-size: 1rem; letter-spacing: -0.01em; }
+        .spc-dept-meta span {
+          display: block; font-size: 0.8rem; color: var(--color-text-muted);
+          margin-top: 5px; line-height: 1.55;
+        }
 
         /* Following services */
         .spc-strip-heading {
           font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
-          color: var(--color-text-muted); font-weight: 700; margin: 0 0 6px;
+          color: var(--color-text-muted); font-weight: 700; margin: 0 0 10px;
         }
         .spc-strip-item { border-top: 1px solid var(--color-border-subtle); }
         .spc-strip-row {
-          display: flex; align-items: center; gap: 14px; padding: 14px 2px; flex-wrap: wrap;
+          display: flex; align-items: center; gap: 18px; padding: 20px 2px; flex-wrap: wrap;
         }
         .spc-strip-when { flex: 1 1 200px; }
         .spc-strip-when b { display: block; font-size: 0.95rem; font-weight: 600; }
@@ -1184,7 +1187,7 @@ export default function SchedulePageClient() {
         .spc-sheet-head b { display: block; font-size: 1rem; }
         .spc-sheet-head span { font-size: 0.78rem; color: var(--color-text-muted); }
         .spc-sheet-foot { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-        .spc-panel { border-top: 1px solid var(--color-border-subtle); padding-top: 10px; }
+        .spc-panel { border-top: 1px solid var(--color-border-subtle); margin-top: 18px; padding-top: 18px; }
         .spc-assignment-gender { font-size: 0.72rem; color: var(--color-text-muted); }
 
         .spc-add-service {
@@ -1200,9 +1203,9 @@ export default function SchedulePageClient() {
           gap: 12px; margin-bottom: 14px;
         }
         /* Thumbnails so a service reads as outfits, not just a coloured pill. */
-        .spc-strip-thumbs { display: flex; align-items: center; gap: 6px; }
+        .spc-strip-thumbs { display: flex; align-items: center; gap: 8px; }
         .spc-strip-thumbs img, .spc-thumb-blank {
-          width: 30px; height: 38px; border-radius: var(--radius-sm); object-fit: cover;
+          width: 38px; height: 48px; border-radius: var(--radius-sm); object-fit: cover;
           background: var(--color-bg-board); border: 1px solid var(--color-border-subtle); display: block;
         }
         .spc-assignment-thumb {
