@@ -1173,6 +1173,20 @@ h1, h2, h3, h4, h5, h6 {
   .dash-band .col:last-child { padding-left: 0; }
   .g-lg, .g-md, .g-sm { grid-column: span 6; aspect-ratio: 3/4; align-self: auto; }
 }
+@media (max-width: 768px) {
+  /* Keep the Looks/Pieces pill and the actions on one row, actions flush right.
+     Without nowrap the header wraps and the buttons drop under the pill. */
+  .ward-head { flex-wrap: nowrap; align-items: center; gap: 0.6rem; }
+  .ward-toggle { margin-bottom: 0; flex: 0 0 auto; }
+  .ward-toggle button { padding: 0.4rem 0.85rem; font-size: 0.78rem; }
+  /* Buttons shrink rather than wrap; a third one (Show archived) scrolls into reach. */
+  .ward-actions {
+    flex-wrap: nowrap; justify-content: flex-end; gap: 0.4rem;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .ward-actions::-webkit-scrollbar { display: none; }
+  .ward-actions > * { flex: 0 0 auto; padding: 0.5rem 0.8rem !important; font-size: 0.78rem !important; }
+}
 @media (max-width: 560px) {
   .dash-mast .ttl { font-size: 1.05rem; }
   .dash-ledger .v { font-size: 2.4rem; }
