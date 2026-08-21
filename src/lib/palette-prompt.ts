@@ -113,6 +113,32 @@ function colorDistance(
     + ((767 - redMean) * blueDiff * blueDiff) / 256;
 }
 
+/** Hard cap on free-text direction — long enough to be useful, short enough not to derail. */
+export const MAX_PALETTE_NOTES = 400;
+
+/**
+ * Clean free-text styling direction before it reaches the prompt.
+ *
+ * Newlines and runs of whitespace are collapsed because the prompt is one comma-joined
+ * sentence; a stray line break just fragments it. Returns null when nothing usable is
+ * left, so callers can omit the clause entirely rather than emitting an empty one.
+ */
+export function sanitizePaletteNotes(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, MAX_PALETTE_NOTES);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+/**
+ * A palette look is about the colours, not the figure, so the gender can be left to the
+ * app. One figure is drawn, not both — each render costs money.
+ *
+ * `random` is injectable so tests can pin the draw; callers pass nothing.
+ */
+export function pickPaletteGender(random: () => number = Math.random): "male" | "female" {
+  return random() < 0.5 ? "female" : "male";
+}
+
 export function buildPaletteLookName(name: string, departmentName: string): string {
   const trimmed = name.trim();
   return trimmed || `${departmentName.trim()} palette`;
@@ -122,11 +148,14 @@ export function buildPalettePrompt({
   departmentName,
   gender,
   palette,
+  notes = null,
   hasFigureReference = false,
 }: {
   departmentName: string;
   gender: "male" | "female";
   palette: PaletteColor[];
+  /** Optional free-text styling direction, e.g. a fabric texture or an extra accessory. */
+  notes?: string | null;
   /** True when a base mannequin photo precedes the colour chart in the reference list. */
   hasFigureReference?: boolean;
 }): string {
@@ -149,6 +178,13 @@ export function buildPalettePrompt({
     "A single-color outfit is allowed when the clothing color is one of the approved colors",
     "Do not substitute related, darker, warmer, cooler, muted, pastel, redder, or purpler colors; no unapproved garment colors",
     garmentGuidance,
+    // Placed before the modesty and negative clauses so those still read last and win.
+    // Explicitly subordinated to the colour lock, since direction like "add a red scarf"
+    // would otherwise fight the whole point of a palette look.
+    ...(notes
+      ? [`additional styling direction: ${notes}`,
+         "apply that direction only within the approved colors and the modest church styling rules"]
+      : []),
     "front-facing pose with hands gently clasped or relaxed at the front, head to toe visible",
     "seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet",
     "natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and shoes, polished but respectful church styling",

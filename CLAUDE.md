@@ -82,6 +82,20 @@ Reference order is always: base figure (if configured) → colour chart (if colo
 - Editing **regenerates pixels rather than warping the input**. Photographed garments are re-interpreted, not composited — the honest trade made when IDM-VTON was dropped.
 - ~$0.165 per high-quality 1024×1536 image, so a two-gender look costs ~$0.33.
 
+### Palette look options
+
+Two optional inputs, both handled in `palette-prompt.ts`:
+
+- **Free-text direction** (`notes`, capped at `MAX_PALETTE_NOTES`) is injected as an
+  "additional styling direction" clause, placed **before** the modesty and negative
+  clauses so those still read last, and explicitly subordinated to the colour lock —
+  otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
+  `canvas_data.notes` so a look records what it was generated from.
+- **Gender is optional.** A palette look is about the colours, so an omitted gender means
+  `pickPaletteGender()` draws one. Exactly one figure is rendered, never both — each
+  render is billed separately. Note the consequence: a randomly-male look cannot later be
+  assigned to a female schedule slot, since the assignment route requires a gender match.
+
 ### Prompt engineering is domain logic
 
 `garmentClause()` in `look-prompt.ts` and `buildPalettePrompt()` both encode non-negotiable requirements: modest church dress (covered shoulders/chest, knee-to-mid-calf skirts, closed-toe shoes) and Black African models. These strings are the product. Tests assert both what must appear (hex + RGB, modesty clauses) and what must **not** (user-supplied colour labels, the word "near"). Change a prompt and the tests will tell you which invariant you broke.
@@ -99,6 +113,20 @@ A suit is built as three pieces — shirt (`top`), jacket (`outer`), trousers (`
 The Stable Video Diffusion step was removed: OpenAI's Videos API (`sora-2`) is deprecated with removal on **24 Sep 2026** and no announced successor, so there was nothing to migrate it to. The `male_gif_url`/`female_gif_url` columns and all their read sites remain so previously generated GIFs still display; nothing writes them anymore. `render-download.ts` already prefers composites and falls back to GIFs.
 
 `replicate_jobs` is now orphaned — nothing writes it. The table was deliberately left in place rather than shipping a destructive migration; the combination-delete route still clears legacy rows.
+
+### Palette look options
+
+Two optional inputs, both handled in `palette-prompt.ts`:
+
+- **Free-text direction** (`notes`, capped at `MAX_PALETTE_NOTES`) is injected as an
+  "additional styling direction" clause, placed **before** the modesty and negative
+  clauses so those still read last, and explicitly subordinated to the colour lock —
+  otherwise direction like "add a red scarf" defeats the point of a palette. Stored on
+  `canvas_data.notes` so a look records what it was generated from.
+- **Gender is optional.** A palette look is about the colours, so an omitted gender means
+  `pickPaletteGender()` draws one. Exactly one figure is rendered, never both — each
+  render is billed separately. Note the consequence: a randomly-male look cannot later be
+  assigned to a female schedule slot, since the assignment route requires a gender match.
 
 ### Prompt engineering is domain logic here
 

@@ -11,6 +11,7 @@ import {
   uploadPaletteMoodBoard,
   validatePalette,
 } from "@/lib/palette-compose";
+import { pickPaletteGender, sanitizePaletteNotes } from "@/lib/palette-prompt";
 import type { Gender } from "@/types/database";
 
 // gpt-image-2 at high quality takes well over a minute for a full-body render.
@@ -51,7 +52,10 @@ export async function POST(request: Request) {
     // with others so the render is reused rather than repeated.
     const scope = validateDepartmentScope(body);
     const departmentId = scope.department_ids[0] ?? "";
-    const gender = isGender(body.gender) ? body.gender : null;
+    // A palette look is about the colours, so the figure can be left to the app.
+    // One gender is drawn, never both — each render is billed separately.
+    const gender = isGender(body.gender) ? body.gender : pickPaletteGender();
+    const notes = sanitizePaletteNotes(body.notes);
     const palette = validatePalette(body.palette);
 
     // Unlike other looks, a palette look needs one named department even when shared with
@@ -62,7 +66,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (!gender) return NextResponse.json({ error: "Gender is required" }, { status: 400 });
 
     const { data: department } = await db
       .from("departments")
@@ -88,6 +91,8 @@ export async function POST(request: Request) {
         canvas_data: {
           mode: "palette",
           palette,
+          // Kept so the look records the direction it was generated from.
+          ...(notes ? { notes } : {}),
         },
       })
       .select("id, name, description, department_ids, all_departments, gender, canvas_data, preview_url, preview_status, created_at")
@@ -100,6 +105,7 @@ export async function POST(request: Request) {
       departmentName: department.name,
       gender,
       palette,
+      notes,
       baseFigureUrl: baseFigureUrlFor(gender, false),
     });
     const personImageUrl = await persistPreviewImage(personImage, combination.id, gender);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, ArrowUp, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { DepartmentChips } from "./PieceScopeFields";
+import { MAX_PALETTE_NOTES } from "@/lib/palette-prompt";
 import type { Gender } from "@/types/database";
 
 type Department = { id: string; name: string; description: string | null };
@@ -35,7 +36,9 @@ export default function PaletteComposeClient() {
   // Extra departments that reuse this render instead of paying for their own.
   const [shareWith, setShareWith] = useState<string[]>([]);
   const [allDepartments, setAllDepartments] = useState(false);
-  const [selectedGender, setSelectedGender] = useState<Gender>("female");
+  // "" means leave it to the app — a palette look is about the colours, not the figure.
+  const [selectedGender, setSelectedGender] = useState<Gender | "">("");
+  const [notes, setNotes] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [colors, setColors] = useState<PaletteColor[]>(DEFAULT_COLORS);
@@ -107,7 +110,9 @@ export default function PaletteComposeClient() {
           // The first id names the prompt; the rest simply share this one render.
           department_ids: [selectedDeptId, ...shareWith.filter((id) => id !== selectedDeptId)],
           all_departments: allDepartments,
-          gender: selectedGender,
+          // Omitted entirely when left to the app, so the server draws one.
+          ...(selectedGender ? { gender: selectedGender } : {}),
+          notes: notes.trim() || null,
           palette: colors.map((color) => ({
             hex: color.hex,
           })),
@@ -183,6 +188,14 @@ export default function PaletteComposeClient() {
               <div className="gender-toggle" role="tablist" aria-label="Choose gender">
                 <button
                   role="tab"
+                  aria-selected={selectedGender === ""}
+                  className={selectedGender === "" ? "on" : ""}
+                  onClick={() => setSelectedGender("")}
+                >
+                  ✦ Surprise me
+                </button>
+                <button
+                  role="tab"
                   aria-selected={selectedGender === "female"}
                   className={selectedGender === "female" ? "on" : ""}
                   onClick={() => setSelectedGender("female")}
@@ -198,6 +211,11 @@ export default function PaletteComposeClient() {
                   ♂ Male
                 </button>
               </div>
+              <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "0.5rem 0 0" }}>
+                {selectedGender === ""
+                  ? "The studio will pick a figure for you. One outfit is rendered, not both."
+                  : "Rendering the " + selectedGender + " figure."}
+              </p>
             </section>
 
             <section style={{ marginBottom: "2rem" }}>
@@ -264,11 +282,32 @@ export default function PaletteComposeClient() {
                 />
                 <textarea
                   className="form-input"
-                  placeholder="Optional notes"
-                  rows={3}
+                  placeholder="Optional notes — for your own reference, not sent to the studio"
+                  rows={2}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                 />
+              </div>
+            </section>
+
+            <section style={{ marginTop: "1.5rem" }}>
+              <div className="rule-label" style={{ marginBottom: "0.8rem" }}>
+                <span>Extra direction <span style={{ color: "var(--color-text-faint)", fontWeight: 500 }}>(optional)</span></span><span className="rule" />
+              </div>
+              <div className="builder-form">
+                <textarea
+                  className="form-input"
+                  placeholder="e.g. linen texture, add a simple brooch, long sleeves"
+                  rows={2}
+                  maxLength={MAX_PALETTE_NOTES}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                />
+                <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "0.4rem 0 0" }}>
+                  Sent to the studio along with the colours. Applied within the approved palette
+                  and modest styling — it cannot introduce an unapproved colour.
+                  {notes.length > 0 && ` · ${notes.length}/${MAX_PALETTE_NOTES}`}
+                </p>
               </div>
             </section>
 

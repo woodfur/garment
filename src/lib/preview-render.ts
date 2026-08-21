@@ -100,17 +100,21 @@ export async function renderPaletteLookImage({
   departmentName,
   gender,
   palette,
+  notes = null,
   baseFigureUrl,
 }: {
   departmentName: string;
   gender: Gender;
   palette: PaletteColor[];
+  /** Optional free-text styling direction from the branch leader. */
+  notes?: string | null;
   baseFigureUrl: string | null;
 }): Promise<Buffer> {
   const prompt = buildPalettePrompt({
     departmentName,
     gender,
     palette,
+    notes,
     hasFigureReference: !!baseFigureUrl,
   });
 

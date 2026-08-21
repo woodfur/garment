@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildPaletteLookName, buildPalettePrompt, colorChartInstructions, colorPromptPhrase } from "./palette-prompt.ts";
+import {
+  MAX_PALETTE_NOTES,
+  buildPaletteLookName,
+  buildPalettePrompt,
+  colorChartInstructions,
+  colorPromptPhrase,
+  nearestColorName,
+  pickPaletteGender,
+  sanitizePaletteNotes,
+} from "./palette-prompt.ts";
 
 test("buildPalettePrompt locks generation to exact hex and RGB values without labels", () => {
   const prompt = buildPalettePrompt({
@@ -63,6 +72,56 @@ test("buildPalettePrompt points the model at the colour chart and forbids drawin
 test("colorChartInstructions numbers the chart around an optional figure reference", () => {
   assert.match(colorChartInstructions(false)[0], /first reference image/);
   assert.match(colorChartInstructions(true)[0], /second reference image/);
+});
+
+test("optional direction reaches the prompt without displacing the hard rules", () => {
+  const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  const prompt = buildPalettePrompt({
+    departmentName: "Choir",
+    gender: "female",
+    palette,
+    notes: "linen texture, add a simple brooch",
+  });
+
+  assert.match(prompt, /additional styling direction: linen texture, add a simple brooch/);
+  // Subordinated to the palette, so direction cannot smuggle in an unapproved colour.
+  assert.match(prompt, /only within the approved colors/);
+  // The non-negotiables must still be present, and still read after the direction.
+  assert.match(prompt, /CRITICAL COLOR LOCK/);
+  assert.match(prompt, /covered chest/);
+  assert.match(prompt, /no bare shoulders/);
+  assert.ok(
+    prompt.indexOf("additional styling direction") < prompt.indexOf("no bare shoulders"),
+    "modesty rules must come after the user's direction"
+  );
+});
+
+test("a prompt with no direction gains no empty clause", () => {
+  const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  for (const notes of [undefined, null, "", "   "]) {
+    const prompt = buildPalettePrompt({ departmentName: "Choir", gender: "male", palette, notes: sanitizePaletteNotes(notes) });
+    assert.doesNotMatch(prompt, /additional styling direction/);
+  }
+});
+
+test("direction is collapsed to one line and capped", () => {
+  assert.equal(sanitizePaletteNotes("  linen   texture\n\nwith a brooch "), "linen texture with a brooch");
+  assert.equal(sanitizePaletteNotes(""), null);
+  assert.equal(sanitizePaletteNotes("   "), null);
+  assert.equal(sanitizePaletteNotes(42), null);
+  assert.equal(sanitizePaletteNotes("x".repeat(MAX_PALETTE_NOTES + 50)).length, MAX_PALETTE_NOTES);
+});
+
+test("gender can be left to the app, and both figures are reachable", () => {
+  assert.equal(pickPaletteGender(() => 0), "female");
+  assert.equal(pickPaletteGender(() => 0.99), "male");
+  // Exactly one figure is chosen per look — rendering both would double the cost.
+  assert.ok(["male", "female"].includes(pickPaletteGender()));
+});
+
+test("nearestColorName gives a readable name for a hex", () => {
+  assert.equal(nearestColorName("#E6D7C3"), "pearl grey");
+  assert.equal(nearestColorName("#704832"), "chocolate brown");
 });
 
 test("buildPaletteLookName falls back to the department palette name", () => {
