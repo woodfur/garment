@@ -1090,7 +1090,8 @@ export default function SchedulePageClient() {
           border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg-surface);
         }
         .spc-dept-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--color-border-subtle); }
-        .spc-dept-fig { position: relative; aspect-ratio: 3/4; background: var(--color-bg-board); overflow: hidden; }
+        /* 2/3 matches the render's native 1024x1536, so nothing is cropped. */
+        .spc-dept-fig { position: relative; aspect-ratio: 2 / 3; background: var(--color-bg-board); overflow: hidden; }
         .spc-dept-fig img, .spc-dept-fig video { width: 100%; height: 100%; object-fit: cover; display: block; }
         .spc-fig-tag {
           position: absolute; left: 6px; bottom: 6px; font-size: 0.55rem; font-weight: 700;
@@ -1162,12 +1163,12 @@ export default function SchedulePageClient() {
         }
         .spc-svc-fig { display: block; width: 54px; }
         .spc-svc-fig img {
-          width: 54px; height: 70px; object-fit: cover; display: block;
+          width: 54px; height: 81px; object-fit: cover; display: block;
           border-radius: var(--radius-md); background: var(--color-bg-board);
           border: 1px solid var(--color-border-subtle);
         }
         .spc-svc-fig i {
-          width: 54px; height: 70px; display: grid; place-items: center; font-style: normal;
+          width: 54px; height: 81px; display: grid; place-items: center; font-style: normal;
           border-radius: var(--radius-md); border: 1.5px dashed var(--color-border);
           color: var(--color-text-faint); font-size: 1rem;
         }
@@ -1216,11 +1217,11 @@ export default function SchedulePageClient() {
         /* Thumbnails so a service reads as outfits, not just a coloured pill. */
         .spc-strip-thumbs { display: flex; align-items: center; gap: 8px; }
         .spc-strip-thumbs img, .spc-thumb-blank {
-          width: 38px; height: 48px; border-radius: var(--radius-sm); object-fit: cover;
+          width: 36px; height: 54px; border-radius: var(--radius-sm); object-fit: cover;
           background: var(--color-bg-board); border: 1px solid var(--color-border-subtle); display: block;
         }
         .spc-assignment-thumb {
-          width: 34px; height: 44px; border-radius: var(--radius-sm); overflow: hidden;
+          width: 34px; height: 51px; border-radius: var(--radius-sm); overflow: hidden;
           background: var(--color-bg-board); flex: 0 0 auto;
         }
         .spc-assignment-thumb img, .spc-assignment-thumb video {
