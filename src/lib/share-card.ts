@@ -1,6 +1,9 @@
 import sharp from "sharp";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import type { ReactNode } from "react";
+import { ImageResponse } from "next/og.js";
 import type { Gender } from "@/types/database";
 
 /**
@@ -49,10 +52,10 @@ const SWATCH = 18;
 const LINE_HEIGHT = 34;
 const CAPTION_TOP_GAP = 28;
 const FOOTER_HEIGHT = 56;
-const CARD_FONT_FAMILY = "GarmentCard, Arial, Helvetica, sans-serif";
+const CARD_FONT_FAMILY = "GarmentCard";
 
 const GENDER_HEADING: Record<Gender, string> = { female: "Ladies", male: "Men" };
-let cachedFontCss: string | null = null;
+let cachedFontData: Buffer | null = null;
 
 /** Order columns the way the WhatsApp posts read: Ladies on the left, Men on the right. */
 export function orderColumns(columns: ShareCardColumn[]): ShareCardColumn[] {
@@ -108,20 +111,11 @@ export function columnGeometry(count: number): Array<{ x: number; width: number 
   }));
 }
 
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function cardFontCss(): string {
-  if (cachedFontCss) return cachedFontCss;
-  try {
-    const font = readFileSync(join(process.cwd(), "public", "fonts", "geist-regular.ttf")).toString("base64");
-    cachedFontCss = `@font-face{font-family:GarmentCard;src:url(data:font/ttf;base64,${font}) format('truetype');font-weight:400 800;font-style:normal;}`;
-  } catch {
-    cachedFontCss = "";
+function cardFontData(): Buffer {
+  if (!cachedFontData) {
+    cachedFontData = readFileSync(join(process.cwd(), "public", "fonts", "geist-regular.ttf"));
   }
-  return cachedFontCss;
+  return cachedFontData;
 }
 
 /** Trim a garment name that would overflow its column rather than letting it run off. */
@@ -130,49 +124,155 @@ export function truncateForColumn(text: string, columnWidth: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
-export function buildShareCardSvg(input: ShareCardInput): string {
+async function imageResponseToBuffer(response: Response): Promise<Buffer> {
+  return Buffer.from(await response.arrayBuffer());
+}
+
+function textNode(
+  text: string,
+  style: Record<string, string | number>,
+) {
+  return createElement("div", { style }, text);
+}
+
+export async function renderShareCardBaseLayer(input: ShareCardInput): Promise<Buffer> {
   const columns = orderColumns(input.columns);
   const height = shareCardHeight(columns);
   const geometry = columnGeometry(columns.length);
   const band = imageBandHeight(columns);
 
-  const headings = columns.map((column, index) => {
+  const columnNodes = columns.flatMap((column, index) => {
     const { x, width } = geometry[index];
     const centre = x + width / 2;
     const captionTop = HEADER_HEIGHT + band + CAPTION_TOP_GAP;
+    const nodes: Array<ReactNode | null> = [
+      !column.image
+        ? textNode("Preview not ready yet", {
+            position: "absolute",
+            left: x,
+            top: HEADER_HEIGHT + band / 2 - 14,
+            width,
+            textAlign: "center",
+            fontSize: 22,
+            color: "#9A9183",
+            fontFamily: CARD_FONT_FAMILY,
+          })
+        : null,
+      textNode(GENDER_HEADING[column.gender], {
+        position: "absolute",
+        left: x,
+        top: captionTop - 32,
+        width,
+        textAlign: "center",
+        fontSize: 34,
+        fontWeight: 700,
+        color: "#211C19",
+        fontFamily: CARD_FONT_FAMILY,
+      }),
+    ];
 
-    const heading = `<text x="${centre}" y="${captionTop}" text-anchor="middle" font-family="${CARD_FONT_FAMILY}" font-size="34" font-weight="700" fill="#211C19">${escapeXml(GENDER_HEADING[column.gender])}</text>`;
-
-    const lines = column.items.map((item, itemIndex) => {
-      const y = captionTop + (itemIndex + 1) * LINE_HEIGHT;
-      const label = escapeXml(truncateForColumn(item.label, width - (item.hex ? SWATCH + 12 : 0)));
+    column.items.forEach((item, itemIndex) => {
+      const y = captionTop + (itemIndex + 1) * LINE_HEIGHT - 25;
+      const label = truncateForColumn(item.label, width - (item.hex ? SWATCH + 12 : 0));
       if (!item.hex) {
-        return `<text x="${centre}" y="${y}" text-anchor="middle" font-family="${CARD_FONT_FAMILY}" font-size="22" fill="#4A443C">${label}</text>`;
+        nodes.push(textNode(label, {
+          position: "absolute",
+          left: x,
+          top: y,
+          width,
+          textAlign: "center",
+          fontSize: 22,
+          color: "#4A443C",
+          fontFamily: CARD_FONT_FAMILY,
+        }));
+        return;
       }
-      // Swatch sits to the left of a left-aligned label so the pair reads as one unit.
+
       const textX = centre - width / 4 + SWATCH + 12;
-      return `<rect x="${centre - width / 4}" y="${y - SWATCH + 3}" width="${SWATCH}" height="${SWATCH}" rx="3" fill="${escapeXml(item.hex)}" stroke="#DCD5C7"/>`
-        + `<text x="${textX}" y="${y}" font-family="${CARD_FONT_FAMILY}" font-size="22" fill="#4A443C">${label}</text>`;
-    }).join("");
+      nodes.push(createElement("div", {
+        key: `${column.gender}-swatch-${itemIndex}`,
+        style: {
+          position: "absolute",
+          left: centre - width / 4,
+          top: y + 5,
+          width: SWATCH,
+          height: SWATCH,
+          borderRadius: 3,
+          background: item.hex,
+          border: "1px solid #DCD5C7",
+        },
+      }));
+      nodes.push(textNode(label, {
+        position: "absolute",
+        left: textX,
+        top: y,
+        width: x + width - textX,
+        fontSize: 22,
+        color: "#4A443C",
+        fontFamily: CARD_FONT_FAMILY,
+      }));
+    });
 
-    const placeholder = column.image
-      ? ""
-      : `<text x="${centre}" y="${HEADER_HEIGHT + band / 2 + 8}" text-anchor="middle" font-family="${CARD_FONT_FAMILY}" font-size="22" fill="#9A9183">Preview not ready yet</text>`;
+    return nodes.filter(Boolean).map((node, nodeIndex) => createElement("div", { key: `${column.gender}-${nodeIndex}`, style: { display: "contents" } }, node));
+  });
 
-    return placeholder + heading + lines;
-  }).join("");
+  const response = new ImageResponse(
+    createElement("div", {
+      style: {
+        display: "flex",
+        position: "relative",
+        width: `${WIDTH}px`,
+        height: `${height}px`,
+        background: "#F4F1EA",
+        fontFamily: CARD_FONT_FAMILY,
+      },
+    }, [
+      textNode(input.branchName, {
+        position: "absolute",
+        left: MARGIN,
+        top: 36,
+        fontSize: 26,
+        color: "#6E665C",
+        fontFamily: CARD_FONT_FAMILY,
+      }),
+      textNode(input.departmentName, {
+        position: "absolute",
+        left: MARGIN,
+        top: 75,
+        fontSize: 46,
+        fontWeight: 700,
+        color: "#211C19",
+        fontFamily: CARD_FONT_FAMILY,
+      }),
+      textNode(`${input.serviceTitle} · ${formatServiceDate(input.serviceDate)}`, {
+        position: "absolute",
+        left: MARGIN,
+        top: 130,
+        fontSize: 24,
+        color: "#7C4E78",
+        fontFamily: CARD_FONT_FAMILY,
+      }),
+      createElement("div", {
+        key: "rule",
+        style: {
+          position: "absolute",
+          left: MARGIN,
+          top: HEADER_HEIGHT - 9,
+          width: WIDTH - MARGIN * 2,
+          height: 2,
+          background: "#DCD5C7",
+        },
+      }),
+      ...columnNodes,
+    ]),
+    {
+      width: WIDTH,
+      height,
+      fonts: [{ name: CARD_FONT_FAMILY, data: cardFontData(), weight: 400, style: "normal" }],
+    },
+  );
 
-  return `
-    <svg width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs><style>${cardFontCss()}</style></defs>
-      <rect width="${WIDTH}" height="${height}" fill="#F4F1EA"/>
-      <text x="${MARGIN}" y="60" font-family="${CARD_FONT_FAMILY}" font-size="26" fill="#6E665C">${escapeXml(input.branchName)}</text>
-      <text x="${MARGIN}" y="112" font-family="${CARD_FONT_FAMILY}" font-size="46" font-weight="700" fill="#211C19">${escapeXml(input.departmentName)}</text>
-      <text x="${MARGIN}" y="150" font-family="${CARD_FONT_FAMILY}" font-size="24" fill="#7C4E78">${escapeXml(input.serviceTitle)} · ${escapeXml(formatServiceDate(input.serviceDate))}</text>
-      <line x1="${MARGIN}" y1="${HEADER_HEIGHT - 8}" x2="${WIDTH - MARGIN}" y2="${HEADER_HEIGHT - 8}" stroke="#DCD5C7" stroke-width="2"/>
-      ${headings}
-    </svg>
-  `;
+  return imageResponseToBuffer(response);
 }
 
 export async function renderShareCard(input: ShareCardInput): Promise<Buffer> {
@@ -183,7 +283,7 @@ export async function renderShareCard(input: ShareCardInput): Promise<Buffer> {
   const geometry = columnGeometry(columns.length);
 
   const overlays: sharp.OverlayOptions[] = [
-    { input: Buffer.from(buildShareCardSvg({ ...input, columns })), left: 0, top: 0 },
+    { input: await renderShareCardBaseLayer({ ...input, columns }), left: 0, top: 0 },
   ];
 
   for (const [index, column] of columns.entries()) {

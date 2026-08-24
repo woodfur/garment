@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  buildShareCardSvg,
   buildShareCardFilename,
   columnGeometry,
   formatServiceDate,
   orderColumns,
+  renderShareCardBaseLayer,
   renderShareCard,
   shareCardHeight,
   truncateForColumn,
@@ -80,8 +80,8 @@ test("colour items carry a hex so the card can draw a swatch", async () => {
   assert.equal(png.subarray(1, 4).toString("ascii"), "PNG");
 });
 
-test("the server-rendered card SVG embeds its font for production", () => {
-  const svg = buildShareCardSvg({
+test("the server-rendered card text layer uses the bundled font renderer", async () => {
+  const png = await renderShareCardBaseLayer({
     branchName: "Kharis Church Freetown",
     departmentName: "Ushers",
     serviceTitle: "Wednesday Service",
@@ -89,10 +89,8 @@ test("the server-rendered card SVG embeds its font for production", () => {
     columns: [column("female", ["White", "Sky blue"])],
   });
 
-  assert.match(svg, /@font-face/);
-  assert.match(svg, /data:font\/ttf;base64/);
-  assert.match(svg, /GarmentCard/);
-  assert.doesNotMatch(svg, /Georgia/);
+  assert.equal(png.subarray(1, 4).toString("ascii"), "PNG");
+  assert.ok(png.length > 0);
 });
 
 test("renders a PNG even when a preview is not ready", async () => {
