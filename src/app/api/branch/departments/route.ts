@@ -42,14 +42,10 @@ export async function GET() {
     // department_ids array, and migrations 005/006 dropped the department_id foreign keys
     // PostgREST used to resolve `uniforms(count)` / `combinations(count)`. Attempting
     // either embed makes the whole query fail, which blanks the department list app-wide.
-    // Only department_members still has its foreign key, so only it stays embedded.
-    const [deptRes, piecesRes, looksRes] = await Promise.all([
+    const [deptRes, piecesRes, looksRes, membershipsRes] = await Promise.all([
       (admin as any)
         .from("departments")
-        .select(`
-          id, name, description, branch_id, created_at,
-          department_members(count)
-        `)
+        .select("id, name, description, branch_id, created_at")
         .eq("branch_id", auth.branchId)
         .order("created_at", { ascending: true }),
       admin
@@ -60,25 +56,34 @@ export async function GET() {
         .from("combinations")
         .select("department_ids, all_departments")
         .eq("branch_id", auth.branchId),
+      (admin as any)
+        .from("department_memberships")
+        .select("department_id")
+        .eq("branch_id", auth.branchId),
     ]) as [
       {
         data: Array<{
           id: string; name: string; description: string | null;
           branch_id: string; created_at: string;
-          department_members: [{ count: number }];
         }> | null;
         error: unknown;
       },
       ScopedRowsResult,
       ScopedRowsResult,
+      { data: Array<{ department_id: string }> | null; error: unknown },
     ];
 
     if (deptRes.error) throw deptRes.error;
     if (piecesRes.error) throw piecesRes.error;
     if (looksRes.error) throw looksRes.error;
+    if (membershipsRes.error) throw membershipsRes.error;
 
     const pieceCounts = countByDepartment(piecesRes.data);
     const lookCounts = countByDepartment(looksRes.data);
+    const memberCounts = new Map<string, number>();
+    for (const membership of membershipsRes.data ?? []) {
+      memberCounts.set(membership.department_id, (memberCounts.get(membership.department_id) ?? 0) + 1);
+    }
 
     const departments = (deptRes.data ?? []).map((d) => ({
       id: d.id,
@@ -88,7 +93,7 @@ export async function GET() {
       created_at: d.created_at,
       uniform_count: pieceCounts.forDepartment(d.id),
       combination_count: lookCounts.forDepartment(d.id),
-      member_count: d.department_members?.[0]?.count ?? 0,
+      member_count: memberCounts.get(d.id) ?? 0,
     }));
 
     return NextResponse.json(departments);

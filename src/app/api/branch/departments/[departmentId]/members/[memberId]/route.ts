@@ -14,9 +14,10 @@ export async function DELETE(_request: Request, { params }: Params) {
   try {
     const admin = createAdminClient();
 
-    // Verify the member belongs to this branch (branch_id check prevents cross-branch deletion)
+    // memberId is the department_memberships.id. Removing a member from one department
+    // must not delete the person, because the same person may serve elsewhere.
     const { data: member } = await (admin as any)
-      .from("department_members")
+      .from("department_memberships")
       .select("id, branch_id")
       .eq("id", memberId)
       .eq("department_id", departmentId)
@@ -27,7 +28,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     }
 
     const { error } = await (admin as any)
-      .from("department_members")
+      .from("department_memberships")
       .delete()
       .eq("id", memberId);
 

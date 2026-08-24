@@ -8,7 +8,7 @@ interface DepartmentCardProps {
   department: DepartmentWithCounts;
   onUpdate: (id: string, name: string, description: string | null) => Promise<void>;
   onDelete: (id: string) => Promise<string | null>; // returns error message or null
-  onAddMember: (departmentId: string, name: string) => Promise<DepartmentMember | null>;
+  onAddMember: (departmentId: string, name: string, gender: "male" | "female") => Promise<DepartmentMember | null>;
   onRemoveMember: (departmentId: string, memberId: string) => Promise<void>;
 }
 
@@ -37,6 +37,7 @@ export default function DepartmentCard({
 
   // Add member state
   const [memberName, setMemberName] = useState("");
+  const [memberGender, setMemberGender] = useState<"male" | "female">("male");
   const [addingMember, setAddingMember] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
 
@@ -86,7 +87,7 @@ export default function DepartmentCard({
     if (!memberName.trim()) { setMemberError("Name is required"); return; }
     setAddingMember(true);
     setMemberError(null);
-    const member = await onAddMember(department.id, memberName.trim());
+    const member = await onAddMember(department.id, memberName.trim(), memberGender);
     if (member) {
       setMembers((prev) => [...(prev ?? []), member].sort((a, b) => a.name.localeCompare(b.name)));
       setMemberName("");
@@ -312,7 +313,12 @@ export default function DepartmentCard({
                       padding: "0.45rem 0.75rem", borderRadius: "var(--radius-md)",
                       background: "var(--color-bg-surface)", border: "1px solid var(--color-border)",
                     }}>
-                      <span style={{ fontSize: "0.875rem" }}>{m.name}</span>
+                      <span style={{ fontSize: "0.875rem" }}>
+                        {m.name}
+                        <span style={{ color: "var(--color-text-faint)", fontSize: "0.75rem", marginLeft: "0.35rem" }}>
+                          · {m.gender === "male" ? "Male" : "Female"}
+                        </span>
+                      </span>
                       <button
                         onClick={() => handleRemoveMember(m.id)}
                         title="Remove member"
@@ -343,6 +349,22 @@ export default function DepartmentCard({
                   onFocus={(e) => { e.target.style.borderColor = "var(--color-primary-dark)"; }}
                   onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; }}
                 />
+                <select
+                  value={memberGender}
+                  onChange={(e) => setMemberGender(e.target.value as "male" | "female")}
+                  style={{
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "0.45rem 0.55rem",
+                    fontSize: "0.82rem",
+                    background: "var(--color-bg-elevated)",
+                    color: "var(--color-text-secondary)",
+                    outline: "none",
+                  }}
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
                 <button
                   onClick={handleAddMember}
                   disabled={addingMember || !memberName.trim()}

@@ -71,11 +71,16 @@ export default function DepartmentsPageClient() {
     return null;
   }
 
-  async function handleAddMember(departmentId: string, name: string): Promise<DepartmentMember | null> {
+  async function handleAddMember(
+    departmentId: string,
+    name: string,
+    gender: "male" | "female",
+    personId?: string
+  ): Promise<DepartmentMember | null> {
     const res = await fetch(`/api/branch/departments/${departmentId}/members`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, gender, person_id: personId }),
     });
     if (!res.ok) return null;
     const member = await res.json();
