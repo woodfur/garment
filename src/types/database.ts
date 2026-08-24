@@ -3,6 +3,8 @@ export type InvitationStatus = "pending" | "accepted" | "expired";
 export type UniformCategory = "top" | "bottom" | "footwear" | "accessory" | "outer" | "head" | "full_body";
 export type PreviewStatus = "none" | "processing" | "ready" | "failed";
 export type Gender = "male" | "female";
+export type InventoryAssignmentStatus = "assigned" | "returned" | "damaged" | "destroyed" | "missing";
+export type InventoryStockEventType = "manual_adjustment" | "assigned" | "returned" | "damaged" | "destroyed" | "missing";
 export type BodyZone =
   | "head" | "top" | "outer" | "bottom" | "footwear" | "full_body"
   | "accessory_neck" | "accessory_wrist_left" | "accessory_wrist_right"
@@ -123,7 +125,8 @@ export interface Database {
           combination_id: string;
           gender: Gender;
           zone: BodyZone;
-          uniform_id: string;
+          uniform_id: string | null;
+          inventory_item_id: string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["combination_zone_items"]["Row"], "id" | "created_at">;
@@ -215,6 +218,102 @@ export interface Database {
         Insert: Omit<Database["public"]["Tables"]["schedules"]["Row"], "id" | "created_at">;
         Update: Partial<Database["public"]["Tables"]["schedules"]["Insert"]>;
       };
+      inventory_categories: {
+        Row: {
+          id: string;
+          branch_id: string;
+          name: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["inventory_categories"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["inventory_categories"]["Insert"]>;
+      };
+      inventory_accessories: {
+        Row: {
+          id: string;
+          branch_id: string;
+          category_id: string;
+          name: string;
+          quantity: number;
+          image_url: string | null;
+          raw_image_url: string | null;
+          storage_path: string | null;
+          bg_removed: boolean;
+          is_archived: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["inventory_accessories"]["Row"], "id" | "created_at" | "updated_at">;
+        Update: Partial<Database["public"]["Tables"]["inventory_accessories"]["Insert"]>;
+      };
+      people: {
+        Row: {
+          id: string;
+          branch_id: string;
+          name: string;
+          gender: Gender;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["people"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["people"]["Insert"]>;
+      };
+      department_memberships: {
+        Row: {
+          id: string;
+          branch_id: string;
+          department_id: string;
+          person_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["department_memberships"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["department_memberships"]["Insert"]>;
+      };
+      inventory_assignments: {
+        Row: {
+          id: string;
+          branch_id: string;
+          schedule_id: string;
+          department_id: string;
+          person_id: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["inventory_assignments"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["inventory_assignments"]["Insert"]>;
+      };
+      inventory_assignment_items: {
+        Row: {
+          id: string;
+          assignment_id: string;
+          inventory_item_id: string;
+          quantity: number;
+          status: InventoryAssignmentStatus;
+          returned_at: string | null;
+          was_overdue: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["inventory_assignment_items"]["Row"], "id" | "created_at" | "updated_at">;
+        Update: Partial<Database["public"]["Tables"]["inventory_assignment_items"]["Insert"]>;
+      };
+      inventory_stock_events: {
+        Row: {
+          id: string;
+          branch_id: string;
+          inventory_item_id: string;
+          assignment_item_id: string | null;
+          event_type: InventoryStockEventType;
+          quantity_delta: number;
+          quantity_before: number;
+          quantity_after: number;
+          reason: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["inventory_stock_events"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["inventory_stock_events"]["Insert"]>;
+      };
       inventory_items: {
         Row: {
           id: string;
@@ -282,7 +381,14 @@ export type Branch = Database["public"]["Tables"]["branches"]["Row"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Invitation = Database["public"]["Tables"]["invitations"]["Row"];
 export type Department = Database["public"]["Tables"]["departments"]["Row"];
-export type DepartmentMember = Database["public"]["Tables"]["department_members"]["Row"];
+export type DepartmentMember = {
+  id: string;
+  membership_id: string;
+  person_id: string;
+  name: string;
+  gender: Gender;
+  created_at: string;
+};
 export type Uniform = Database["public"]["Tables"]["uniforms"]["Row"];
 export type Combination = Database["public"]["Tables"]["combinations"]["Row"];
 export type CombinationItem = Database["public"]["Tables"]["combination_items"]["Row"];
@@ -291,7 +397,14 @@ export type ReplicateJob = Database["public"]["Tables"]["replicate_jobs"]["Row"]
 export type Schedule = Database["public"]["Tables"]["schedules"]["Row"];
 export type ScheduleAssignment = Database["public"]["Tables"]["schedule_assignments"]["Row"];
 export type UniformReminderDelivery = Database["public"]["Tables"]["uniform_reminder_deliveries"]["Row"];
-export type InventoryItem = Database["public"]["Tables"]["inventory_items"]["Row"];
+export type InventoryCategory = Database["public"]["Tables"]["inventory_categories"]["Row"];
+export type InventoryItem = Database["public"]["Tables"]["inventory_accessories"]["Row"];
+export type Person = Database["public"]["Tables"]["people"]["Row"];
+export type DepartmentMembership = Database["public"]["Tables"]["department_memberships"]["Row"];
+export type InventoryAssignment = Database["public"]["Tables"]["inventory_assignments"]["Row"];
+export type InventoryAssignmentItem = Database["public"]["Tables"]["inventory_assignment_items"]["Row"];
+export type InventoryStockEvent = Database["public"]["Tables"]["inventory_stock_events"]["Row"];
+export type LegacyInventoryItem = Database["public"]["Tables"]["inventory_items"]["Row"];
 export type InventoryTransaction = Database["public"]["Tables"]["inventory_transactions"]["Row"];
 export type Announcement = Database["public"]["Tables"]["announcements"]["Row"];
 export type AuditLog = Database["public"]["Tables"]["audit_logs"]["Row"];
@@ -306,6 +419,11 @@ export type DepartmentWithCounts = Department & {
 // Zone item with joined uniform data (uniform may be null if the uniform was deleted)
 export type CombinationZoneItemWithUniform = CombinationZoneItem & {
   uniform: Uniform | null;
+};
+
+export type CombinationZoneItemWithSource = CombinationZoneItem & {
+  uniform: Uniform | null;
+  inventory_item: InventoryItem | null;
 };
 
 // Schedule with nested assignments
