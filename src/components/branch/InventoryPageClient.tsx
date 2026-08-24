@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Trash2,
   Upload,
   UserPlus,
   X,
@@ -147,12 +148,13 @@ export default function InventoryPageClient() {
   const [useExistingPerson, setUseExistingPerson] = useState(false);
   const [existingPersonId, setExistingPersonId] = useState("");
   const [savingMember, setSavingMember] = useState(false);
-  const [memberDepartmentId, setMemberDepartmentId] = useState("");
+  const [memberDepartmentIds, setMemberDepartmentIds] = useState<string[]>([]);
   const [memberTabName, setMemberTabName] = useState("");
   const [memberTabGender, setMemberTabGender] = useState<Gender>("male");
   const [memberTabUseExisting, setMemberTabUseExisting] = useState(false);
   const [memberTabExistingPersonId, setMemberTabExistingPersonId] = useState("");
   const [savingMemberTab, setSavingMemberTab] = useState(false);
+  const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
   const [memberSuccess, setMemberSuccess] = useState<string | null>(null);
   const [memberError, setMemberError] = useState<string | null>(null);
 
@@ -192,7 +194,7 @@ export default function InventoryPageClient() {
       setItems(Array.isArray(itemData) ? itemData : []);
       setCategories(Array.isArray(categoryData) ? categoryData : []);
       setDepartments(Array.isArray(deptData) ? deptData : []);
-      if (Array.isArray(deptData) && deptData[0]) setMemberDepartmentId((current) => current || deptData[0].id);
+      if (Array.isArray(deptData) && deptData[0]) setMemberDepartmentIds((current) => current.length > 0 ? current : [deptData[0].id]);
       setSchedules(Array.isArray(scheduleData) ? scheduleData : []);
       setAssignments(Array.isArray(assignmentData) ? assignmentData : []);
       setHistory(Array.isArray(historyData) ? historyData : []);
@@ -456,6 +458,18 @@ export default function InventoryPageClient() {
     ));
   }
 
+  function removeMemberLocally(departmentId: string, membershipId: string) {
+    const remove = (list: Member[]) => list.filter((member) => member.id !== membershipId);
+    const removed = membersByDepartment[departmentId]?.find((member) => member.id === membershipId);
+    setMembersByDepartment((prev) => ({ ...prev, [departmentId]: remove(prev[departmentId] ?? []) }));
+    if (selectedDepartmentId === departmentId) setMembers((prev) => remove(prev));
+    if (removed && selectedDepartmentId === departmentId && selectedPersonId === removed.person_id) {
+      setSelectedPersonId("");
+      setSelectedItems([]);
+      setSuggestions([]);
+    }
+  }
+
   async function createOrLinkMember({
     departmentId,
     useExisting,
@@ -510,19 +524,27 @@ export default function InventoryPageClient() {
   }
 
   async function saveMemberFromTab() {
-    if (!memberDepartmentId) return;
+    if (memberDepartmentIds.length === 0) return;
     setSavingMemberTab(true);
     setMemberSuccess(null);
     setMemberError(null);
     try {
-      const member = await createOrLinkMember({
-        departmentId: memberDepartmentId,
-        useExisting: memberTabUseExisting,
-        personId: memberTabExistingPersonId,
-        name: memberTabName,
-        gender: memberTabGender,
-      });
-      setMemberSuccess(`${member.name} added to ${departments.find((department) => department.id === memberDepartmentId)?.name ?? "department"}`);
+      let personId = memberTabExistingPersonId;
+      let savedName = memberTabName.trim();
+
+      for (const [index, departmentId] of memberDepartmentIds.entries()) {
+        const member = await createOrLinkMember({
+          departmentId,
+          useExisting: memberTabUseExisting || index > 0,
+          personId,
+          name: memberTabName,
+          gender: memberTabGender,
+        });
+        personId = member.person_id;
+        savedName = member.name;
+      }
+
+      setMemberSuccess(`${savedName} added to ${memberDepartmentIds.length} ${memberDepartmentIds.length === 1 ? "department" : "departments"}`);
       setMemberTabName("");
       setMemberTabExistingPersonId("");
       setMemberTabUseExisting(false);
@@ -531,6 +553,24 @@ export default function InventoryPageClient() {
     } finally {
       setSavingMemberTab(false);
     }
+  }
+
+  async function deleteMemberFromDepartment(departmentId: string, member: Member) {
+    const departmentName = departments.find((department) => department.id === departmentId)?.name ?? "this department";
+    if (!window.confirm(`Remove ${member.name} from ${departmentName}?`)) return;
+
+    setDeletingMemberId(member.id);
+    setMemberSuccess(null);
+    setMemberError(null);
+    const res = await fetch(`/api/branch/departments/${departmentId}/members/${member.id}`, { method: "DELETE" });
+    setDeletingMemberId(null);
+    if (res.ok) {
+      removeMemberLocally(departmentId, member.id);
+      setMemberSuccess(`${member.name} removed from ${departmentName}`);
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    setMemberError(data.error ?? "Failed to remove member");
   }
 
   async function createAssignment() {
@@ -738,8 +778,43 @@ export default function InventoryPageClient() {
                 Existing person
               </label>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr) auto", gap: "0.6rem", alignItems: "end" }}>
-              <Select label="Department" value={memberDepartmentId} onChange={setMemberDepartmentId} options={departments.map((department) => ({ value: department.id, label: department.name }))} />
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 2fr) auto", gap: "0.6rem", alignItems: "end" }}>
+              <div>
+                <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Departments</span>
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.45rem", background: "var(--color-bg-elevated)", minHeight: 43 }}>
+                  {departments.map((department) => {
+                    const active = memberDepartmentIds.includes(department.id);
+                    return (
+                      <button
+                        key={department.id}
+                        type="button"
+                        onClick={() => {
+                          setMemberDepartmentIds((prev) =>
+                            active
+                              ? prev.filter((id) => id !== department.id)
+                              : [...prev, department.id]
+                          );
+                          setMemberSuccess(null);
+                          setMemberError(null);
+                        }}
+                        style={{
+                          border: active ? "1px solid var(--color-primary-dark)" : "1px solid var(--color-border)",
+                          borderRadius: "var(--radius-full)",
+                          background: active ? "var(--color-primary-dark)" : "transparent",
+                          color: active ? "#fff" : "var(--color-text-muted)",
+                          padding: "0.3rem 0.65rem",
+                          font: "inherit",
+                          fontSize: "0.76rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {department.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {memberTabUseExisting ? (
                 <label style={{ display: "block" }}>
                   <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Person</span>
@@ -783,7 +858,7 @@ export default function InventoryPageClient() {
               <button
                 className="btn-secondary"
                 style={{ padding: "0.65rem 1rem" }}
-                disabled={savingMemberTab || !memberDepartmentId || (memberTabUseExisting ? !memberTabExistingPersonId : !memberTabName.trim())}
+                disabled={savingMemberTab || memberDepartmentIds.length === 0 || (memberTabUseExisting ? !memberTabExistingPersonId : !memberTabName.trim())}
                 onClick={saveMemberFromTab}
               >
                 {savingMemberTab ? "Saving..." : memberTabUseExisting ? "Link" : "Add"}
@@ -822,8 +897,28 @@ export default function InventoryPageClient() {
                       ) : (
                         <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
                           {list.map((member) => (
-                            <span key={member.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.3rem 0.65rem", background: "var(--color-bg-elevated)" }}>
+                            <span key={member.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.25rem 0.35rem 0.25rem 0.65rem", background: "var(--color-bg-elevated)" }}>
                               {member.name} <span style={{ color: "var(--color-text-muted)", textTransform: "capitalize" }}>{member.gender}</span>
+                              <button
+                                type="button"
+                                title={`Remove ${member.name}`}
+                                onClick={() => deleteMemberFromDepartment(department.id, member)}
+                                disabled={deletingMemberId === member.id}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: 22,
+                                  height: 22,
+                                  border: "1px solid var(--color-border)",
+                                  borderRadius: "50%",
+                                  background: "transparent",
+                                  color: "var(--color-text-muted)",
+                                  cursor: deletingMemberId === member.id ? "default" : "pointer",
+                                }}
+                              >
+                                {deletingMemberId === member.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                              </button>
                             </span>
                           ))}
                         </div>
