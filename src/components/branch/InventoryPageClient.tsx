@@ -94,6 +94,10 @@ function dateLabel(value: string | undefined): string {
   });
 }
 
+function todayString(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
 function statusColor(status: InventoryAssignmentStatus, overdue?: boolean): string {
   if (overdue) return "var(--color-error)";
   if (status === "assigned") return "var(--color-primary)";
@@ -240,6 +244,15 @@ export default function InventoryPageClient() {
     [assignments]
   );
   const openLines = assignedLines.filter(({ line }) => line.status === "assigned");
+  const upcomingSchedules = useMemo(
+    () => schedules.filter((schedule) => schedule.service_date >= todayString()),
+    [schedules]
+  );
+
+  useEffect(() => {
+    if (selectedScheduleId || upcomingSchedules.length === 0) return;
+    setSelectedScheduleId(upcomingSchedules[0].id);
+  }, [selectedScheduleId, upcomingSchedules]);
 
   function resetItemForm() {
     setShowItemForm(false);
@@ -607,7 +620,7 @@ export default function InventoryPageClient() {
           <div className="card" style={{ padding: "1.25rem" }}>
             <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.35rem" }}>Issue items</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
-              <Select label="Service" value={selectedScheduleId} onChange={setSelectedScheduleId} options={schedules.map((s) => ({ value: s.id, label: `${dateLabel(s.service_date)} - ${s.title}` }))} />
+              <Select label="Service" value={selectedScheduleId} onChange={setSelectedScheduleId} options={upcomingSchedules.map((s) => ({ value: s.id, label: `${dateLabel(s.service_date)} - ${s.title}` }))} />
               <Select label="Department" value={selectedDepartmentId} onChange={setSelectedDepartmentId} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
               <Select label="Member" value={selectedPersonId} onChange={setSelectedPersonId} options={members.map((m) => ({ value: m.person_id, label: `${m.name} · ${m.gender}` }))} />
             </div>
