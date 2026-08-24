@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  buildShareCardSvg,
   buildShareCardFilename,
   columnGeometry,
   formatServiceDate,
@@ -77,6 +78,21 @@ test("colour items carry a hex so the card can draw a swatch", async () => {
     columns: [column("female", [{ label: "pearl grey", hex: "#E6D7C3" }, { label: "chocolate brown", hex: "#704832" }])],
   });
   assert.equal(png.subarray(1, 4).toString("ascii"), "PNG");
+});
+
+test("the server-rendered card SVG embeds its font for production", () => {
+  const svg = buildShareCardSvg({
+    branchName: "Kharis Church Freetown",
+    departmentName: "Ushers",
+    serviceTitle: "Wednesday Service",
+    serviceDate: "2026-08-26",
+    columns: [column("female", ["White", "Sky blue"])],
+  });
+
+  assert.match(svg, /@font-face/);
+  assert.match(svg, /data:font\/ttf;base64/);
+  assert.match(svg, /GarmentCard/);
+  assert.doesNotMatch(svg, /Georgia/);
 });
 
 test("renders a PNG even when a preview is not ready", async () => {

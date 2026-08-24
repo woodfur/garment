@@ -1,4 +1,6 @@
 import sharp from "sharp";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Gender } from "@/types/database";
 
 /**
@@ -47,8 +49,10 @@ const SWATCH = 18;
 const LINE_HEIGHT = 34;
 const CAPTION_TOP_GAP = 28;
 const FOOTER_HEIGHT = 56;
+const CARD_FONT_FAMILY = "GarmentCard, Arial, Helvetica, sans-serif";
 
 const GENDER_HEADING: Record<Gender, string> = { female: "Ladies", male: "Men" };
+let cachedFontCss: string | null = null;
 
 /** Order columns the way the WhatsApp posts read: Ladies on the left, Men on the right. */
 export function orderColumns(columns: ShareCardColumn[]): ShareCardColumn[] {
@@ -109,13 +113,26 @@ function escapeXml(value: string): string {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function cardFontCss(): string {
+  if (cachedFontCss) return cachedFontCss;
+  try {
+    const font = readFileSync(join(process.cwd(), "public", "fonts", "geist-regular.ttf")).toString("base64");
+    cachedFontCss = `@font-face{font-family:GarmentCard;src:url(data:font/ttf;base64,${font}) format('truetype');font-weight:400 800;font-style:normal;}`;
+  } catch {
+    cachedFontCss = "";
+  }
+  return cachedFontCss;
+}
+
 /** Trim a garment name that would overflow its column rather than letting it run off. */
 export function truncateForColumn(text: string, columnWidth: number): string {
   const maxChars = Math.max(8, Math.floor(columnWidth / 11));
   return text.length <= maxChars ? text : `${text.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
-function cardSvg(input: ShareCardInput, columns: ShareCardColumn[], height: number): string {
+export function buildShareCardSvg(input: ShareCardInput): string {
+  const columns = orderColumns(input.columns);
+  const height = shareCardHeight(columns);
   const geometry = columnGeometry(columns.length);
   const band = imageBandHeight(columns);
 
@@ -124,33 +141,34 @@ function cardSvg(input: ShareCardInput, columns: ShareCardColumn[], height: numb
     const centre = x + width / 2;
     const captionTop = HEADER_HEIGHT + band + CAPTION_TOP_GAP;
 
-    const heading = `<text x="${centre}" y="${captionTop}" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-weight="700" fill="#211C19">${escapeXml(GENDER_HEADING[column.gender])}</text>`;
+    const heading = `<text x="${centre}" y="${captionTop}" text-anchor="middle" font-family="${CARD_FONT_FAMILY}" font-size="34" font-weight="700" fill="#211C19">${escapeXml(GENDER_HEADING[column.gender])}</text>`;
 
     const lines = column.items.map((item, itemIndex) => {
       const y = captionTop + (itemIndex + 1) * LINE_HEIGHT;
       const label = escapeXml(truncateForColumn(item.label, width - (item.hex ? SWATCH + 12 : 0)));
       if (!item.hex) {
-        return `<text x="${centre}" y="${y}" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="#4A443C">${label}</text>`;
+        return `<text x="${centre}" y="${y}" text-anchor="middle" font-family="${CARD_FONT_FAMILY}" font-size="22" fill="#4A443C">${label}</text>`;
       }
       // Swatch sits to the left of a left-aligned label so the pair reads as one unit.
       const textX = centre - width / 4 + SWATCH + 12;
       return `<rect x="${centre - width / 4}" y="${y - SWATCH + 3}" width="${SWATCH}" height="${SWATCH}" rx="3" fill="${escapeXml(item.hex)}" stroke="#DCD5C7"/>`
-        + `<text x="${textX}" y="${y}" font-family="Georgia, serif" font-size="22" fill="#4A443C">${label}</text>`;
+        + `<text x="${textX}" y="${y}" font-family="${CARD_FONT_FAMILY}" font-size="22" fill="#4A443C">${label}</text>`;
     }).join("");
 
     const placeholder = column.image
       ? ""
-      : `<text x="${centre}" y="${HEADER_HEIGHT + band / 2 + 8}" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="#9A9183">Preview not ready yet</text>`;
+      : `<text x="${centre}" y="${HEADER_HEIGHT + band / 2 + 8}" text-anchor="middle" font-family="${CARD_FONT_FAMILY}" font-size="22" fill="#9A9183">Preview not ready yet</text>`;
 
     return placeholder + heading + lines;
   }).join("");
 
   return `
     <svg width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <defs><style>${cardFontCss()}</style></defs>
       <rect width="${WIDTH}" height="${height}" fill="#F4F1EA"/>
-      <text x="${MARGIN}" y="60" font-family="Georgia, serif" font-size="26" fill="#6E665C">${escapeXml(input.branchName)}</text>
-      <text x="${MARGIN}" y="112" font-family="Georgia, serif" font-size="46" font-weight="700" fill="#211C19">${escapeXml(input.departmentName)}</text>
-      <text x="${MARGIN}" y="150" font-family="Georgia, serif" font-size="24" fill="#7C4E78">${escapeXml(input.serviceTitle)} · ${escapeXml(formatServiceDate(input.serviceDate))}</text>
+      <text x="${MARGIN}" y="60" font-family="${CARD_FONT_FAMILY}" font-size="26" fill="#6E665C">${escapeXml(input.branchName)}</text>
+      <text x="${MARGIN}" y="112" font-family="${CARD_FONT_FAMILY}" font-size="46" font-weight="700" fill="#211C19">${escapeXml(input.departmentName)}</text>
+      <text x="${MARGIN}" y="150" font-family="${CARD_FONT_FAMILY}" font-size="24" fill="#7C4E78">${escapeXml(input.serviceTitle)} · ${escapeXml(formatServiceDate(input.serviceDate))}</text>
       <line x1="${MARGIN}" y1="${HEADER_HEIGHT - 8}" x2="${WIDTH - MARGIN}" y2="${HEADER_HEIGHT - 8}" stroke="#DCD5C7" stroke-width="2"/>
       ${headings}
     </svg>
@@ -165,7 +183,7 @@ export async function renderShareCard(input: ShareCardInput): Promise<Buffer> {
   const geometry = columnGeometry(columns.length);
 
   const overlays: sharp.OverlayOptions[] = [
-    { input: Buffer.from(cardSvg(input, columns, height)), left: 0, top: 0 },
+    { input: Buffer.from(buildShareCardSvg({ ...input, columns })), left: 0, top: 0 },
   ];
 
   for (const [index, column] of columns.entries()) {

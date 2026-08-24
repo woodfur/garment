@@ -340,8 +340,7 @@ export async function createSchedulePackagePdf(input: SchedulePackageInput): Pro
   const pdf = new PdfBuilder();
   const pagesId = pdf.reserve();
   const fontId = pdf.add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  const serifFontId = pdf.add("<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>");
-  const serifBoldFontId = pdf.add("<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>");
+  const boldFontId = pdf.add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
   const pageIds: number[] = [];
 
   pages.forEach((page, pageIndex) => {
@@ -361,7 +360,7 @@ export async function createSchedulePackagePdf(input: SchedulePackageInput): Pro
     const content = buildPageContent(input, page, imageNames, pageIndex + 1, pages.length);
     const contentId = pdf.add(pdf.stream("", content));
     const resources = [
-      `/Font << /F1 ${fontId} 0 R /F2 ${serifBoldFontId} 0 R /F3 ${serifFontId} 0 R >>`,
+      `/Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R /F3 ${fontId} 0 R >>`,
       xObjectEntries.length > 0 ? `/XObject << ${xObjectEntries.join(" ")} >>` : "",
     ].filter(Boolean).join(" ");
     const pageId = pdf.add([
