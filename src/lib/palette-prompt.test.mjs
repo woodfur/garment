@@ -40,6 +40,7 @@ test("buildPalettePrompt styles palette looks as Wednesday smart casual instead 
 
   assert.match(male, /Wednesday service smart-casual church outfit/);
   assert.match(male, /untucked collared shirt/);
+  assert.match(male, /linen shirt/);
   assert.match(male, /sneakers, trainers, loafers/);
   assert.doesNotMatch(male, /closed-toe dress shoes/);
 

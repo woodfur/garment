@@ -158,7 +158,7 @@ export function buildPalettePrompt({
   const colors = palette.map((color, index) => `approved color ${index + 1}: ${colorPromptPhrase(color.hex)}`).join("; ");
   const model = gender === "male" ? "male" : "female";
   const garmentGuidance = gender === "male"
-    ? "use the approved colors naturally across the modest untucked collared shirt, fine-knit polo, casual overshirt, light jacket, chinos, relaxed trousers, smart jeans, clean sneakers, trainers, loafers, belt, or accessories"
+    ? "use the approved colors naturally across the modest untucked collared shirt, linen shirt, linen overshirt, fine-knit polo, casual overshirt, light jacket, chinos, relaxed trousers, smart jeans, clean sneakers, trainers, loafers, belt, or accessories"
     : "use the approved colors naturally across the modest blouse, soft shirt, cardigan, light jacket, jean trousers, wide-leg trousers, dress pants, modest skirt, clean sneakers, trainers, flats, loafers, belt, or accessories";
   const modestyGuidance = gender === "male"
     ? "covered chest, respectful relaxed fit, no shorts, no tight fit, no formal suit-and-tie styling, no tucked-in formal shirt styling"
