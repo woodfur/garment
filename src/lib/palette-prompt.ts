@@ -158,18 +158,22 @@ export function buildPalettePrompt({
   const colors = palette.map((color, index) => `approved color ${index + 1}: ${colorPromptPhrase(color.hex)}`).join("; ");
   const model = gender === "male" ? "male" : "female";
   const garmentGuidance = gender === "male"
-    ? "use the approved colors naturally across the modest collared shirt, jacket, tailored trousers, shoes, belt, or accessories"
-    : "use the approved colors naturally across the modest blouse, knee-to-mid-calf A-line skirt, dress, shoes, belt, or accessories";
+    ? "use the approved colors naturally across the modest untucked collared shirt, linen shirt, linen overshirt, fine-knit polo, casual overshirt, light jacket, chinos, relaxed trousers, smart jeans, clean sneakers, trainers, loafers, belt, or accessories"
+    : "use the approved colors naturally across the modest blouse, soft shirt, cardigan, light jacket, jean trousers, wide-leg trousers, dress pants, modest skirt, clean sneakers, trainers, flats, loafers, belt, or accessories";
+  const modestyGuidance = gender === "male"
+    ? "covered chest, respectful relaxed fit, no shorts, no tight fit, no formal suit-and-tie styling, no tucked-in formal shirt styling"
+    : "covered chest, respectful relaxed fit, no low neckline, no off-shoulder top, no strapless top, no shorts, no mini skirt, no tight bodycon fit, no bare shoulders";
 
   const subject = hasFigureReference
     ? `Redress the person in the first reference photograph as one modestly dressed adult Black African ${model} church uniform model, keeping their face, body, pose, and the plain white studio setting unchanged`
-    : `Highly realistic, tack-sharp, full-body white studio clothing-catalogue photograph of one modestly dressed adult Black African ${model} church uniform model`;
+    : `Highly realistic, tack-sharp, full-body white studio outfit-reference photograph of one modestly dressed adult Black African ${model} church uniform model`;
 
   return [
     subject,
     departmentName
-      ? `wearing a coordinated church service uniform outfit for the ${departmentName} department`
-      : "wearing a coordinated church service uniform outfit",
+      ? `wearing a coordinated Wednesday service smart-casual church outfit for the ${departmentName} department`
+      : "wearing a coordinated Wednesday service smart-casual church outfit",
+    "relaxed but neat midweek service styling, less formal than Sunday service wear",
     ...colorChartInstructions(hasFigureReference),
     `CRITICAL COLOR LOCK: use only these approved clothing fabric colors and match the hex and RGB values as closely as possible: ${colors}`,
     "The outfit may use one, some, or all approved colors, but every visible clothing fabric color must come from the approved palette",
@@ -185,8 +189,8 @@ export function buildPalettePrompt({
       : []),
     "front-facing pose with hands gently clasped or relaxed at the front, head to toe visible",
     "seamless pure white studio background, soft even professional e-commerce lighting, subtle realistic shadow beneath feet",
-    "natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and shoes, polished but respectful church styling",
-    "covered chest, clearly separate blouse plus knee-to-mid-calf skirt when a two-piece female outfit is used, closed-toe dress shoes, no low neckline, no off-shoulder top, no strapless top, no shorts, no mini skirt, no tight bodycon fit, no bare shoulders",
+    "natural skin texture, accurate fabric detail, deep focus, sharp focus on face, hands, clothing and casual footwear, neat but relaxed church styling",
+    modestyGuidance,
     "no blur, no shallow depth of field, no cropped feet, no text, no color cards, no logos, no watermark",
   ].join(", ");
 }

@@ -77,6 +77,7 @@ type HistoryEvent = {
   } | null;
 };
 type Selection = { inventory_item_id: string; quantity: number };
+type MemberDeleteTarget = { departmentId: string; departmentName: string; member: Member };
 
 const STATUS_LABELS: Record<InventoryAssignmentStatus, string> = {
   assigned: "Assigned",
@@ -155,6 +156,7 @@ export default function InventoryPageClient() {
   const [memberTabExistingPersonId, setMemberTabExistingPersonId] = useState("");
   const [savingMemberTab, setSavingMemberTab] = useState(false);
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
+  const [memberDeleteTarget, setMemberDeleteTarget] = useState<MemberDeleteTarget | null>(null);
   const [memberSuccess, setMemberSuccess] = useState<string | null>(null);
   const [memberError, setMemberError] = useState<string | null>(null);
 
@@ -555,10 +557,7 @@ export default function InventoryPageClient() {
     }
   }
 
-  async function deleteMemberFromDepartment(departmentId: string, member: Member) {
-    const departmentName = departments.find((department) => department.id === departmentId)?.name ?? "this department";
-    if (!window.confirm(`Remove ${member.name} from ${departmentName}?`)) return;
-
+  async function deleteMemberFromDepartment({ departmentId, departmentName, member }: MemberDeleteTarget) {
     setDeletingMemberId(member.id);
     setMemberSuccess(null);
     setMemberError(null);
@@ -566,6 +565,7 @@ export default function InventoryPageClient() {
     setDeletingMemberId(null);
     if (res.ok) {
       removeMemberLocally(departmentId, member.id);
+      setMemberDeleteTarget(null);
       setMemberSuccess(`${member.name} removed from ${departmentName}`);
       return;
     }
@@ -902,7 +902,7 @@ export default function InventoryPageClient() {
                               <button
                                 type="button"
                                 title={`Remove ${member.name}`}
-                                onClick={() => deleteMemberFromDepartment(department.id, member)}
+                                onClick={() => setMemberDeleteTarget({ departmentId: department.id, departmentName: department.name, member })}
                                 disabled={deletingMemberId === member.id}
                                 style={{
                                   display: "inline-flex",
@@ -1075,6 +1075,60 @@ export default function InventoryPageClient() {
             </div>
           )}
         </section>
+      )}
+
+      {memberDeleteTarget && (
+        <div
+          role="presentation"
+          onClick={() => {
+            if (!deletingMemberId) setMemberDeleteTarget(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(33,28,25,0.5)", backdropFilter: "blur(3px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-member-title"
+            className="card"
+            onClick={(event) => event.stopPropagation()}
+            style={{ width: "100%", maxWidth: 420, padding: "1.5rem", position: "relative" }}
+          >
+            <button
+              type="button"
+              aria-label="Close remove member confirmation"
+              onClick={() => setMemberDeleteTarget(null)}
+              disabled={Boolean(deletingMemberId)}
+              style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: deletingMemberId ? "default" : "pointer", color: "var(--color-text-muted)" }}
+            >
+              <X size={18} />
+            </button>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.4rem" }}>Members</div>
+            <h2 id="remove-member-title" className="display-serif" style={{ fontSize: "1.35rem", marginBottom: "0.7rem" }}>Remove <em className="serif-em">member</em></h2>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: "0.9rem", lineHeight: 1.55, margin: "0 0 1.2rem" }}>
+              Remove {memberDeleteTarget.member.name} from {memberDeleteTarget.departmentName}? Their person record will stay available for other departments.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.65rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setMemberDeleteTarget(null)}
+                disabled={Boolean(deletingMemberId)}
+                style={{ padding: "0.65rem 1rem" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => deleteMemberFromDepartment(memberDeleteTarget)}
+                disabled={Boolean(deletingMemberId)}
+                style={{ padding: "0.65rem 1rem", background: "var(--color-error)", borderColor: "var(--color-error)" }}
+              >
+                {deletingMemberId ? <><Loader2 size={15} className="animate-spin" /> Removing...</> : <><Trash2 size={15} /> Remove</>}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showItemForm && (

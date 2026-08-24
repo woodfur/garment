@@ -8,6 +8,8 @@ import {
   type PackageCombinationAsset,
   type SchedulePackageAssignment,
 } from "@/lib/schedule-package";
+import { nearestColorName } from "@/lib/palette-prompt";
+import { ZONE_LAYER_ORDER } from "@/types/zones";
 import type { Gender } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -23,30 +25,56 @@ type SchedulePackageRow = {
     gender: Gender | null;
     department: { name: string } | null;
     combination: (PackageCombinationAsset & {
+      id: string;
       name: string;
       preview_status: string;
+      canvas_data: { mode?: string; palette?: Array<{ hex: string }> } | null;
     }) | null;
   }>;
+};
+
+type ZoneItemRow = {
+  combination_id: string;
+  gender: Gender;
+  zone: string;
+  uniform: { name: string } | null;
+  inventory_item: { name: string } | null;
 };
 
 function isGender(value: unknown): value is Gender {
   return value === "male" || value === "female";
 }
 
-function buildAssignments(schedule: SchedulePackageRow): SchedulePackageAssignment[] {
+function buildAssignments(schedule: SchedulePackageRow, zoneItems: ZoneItemRow[]): SchedulePackageAssignment[] {
+  const itemsFor = (combinationId: string, gender: Gender): SchedulePackageAssignment["items"] =>
+    zoneItems
+      .filter((item) => item.combination_id === combinationId && item.gender === gender && (item.uniform?.name || item.inventory_item?.name))
+      .sort((a, b) => ZONE_LAYER_ORDER.indexOf(a.zone as never) - ZONE_LAYER_ORDER.indexOf(b.zone as never))
+      .map((item) => ({ label: item.uniform?.name ?? item.inventory_item!.name }));
+
   return (schedule.assignments ?? [])
     .filter((assignment) => isGender(assignment.gender) && assignment.department && assignment.combination)
-    .map((assignment) => ({
-      departmentName: assignment.department!.name,
-      gender: assignment.gender!,
-      combinationName: assignment.combination!.name,
-      imageUrl: assignment.combination!.preview_status === "ready"
-        ? pickAssignmentAsset({
-            gender: assignment.gender,
-            combination: assignment.combination,
-          })
-        : null,
-    }));
+    .map((assignment) => {
+      const gender = assignment.gender!;
+      const combination = assignment.combination!;
+      const palette = combination.canvas_data?.mode === "palette" ? combination.canvas_data.palette ?? [] : [];
+      const items = palette.length > 0
+        ? palette.map((colour) => ({ label: nearestColorName(colour.hex), hex: colour.hex }))
+        : itemsFor(combination.id, gender);
+
+      return {
+        departmentName: assignment.department!.name,
+        gender,
+        combinationName: combination.name,
+        imageUrl: combination.preview_status === "ready"
+          ? pickAssignmentAsset({
+              gender,
+              combination,
+            })
+          : null,
+        items,
+      };
+    });
 }
 
 export async function GET(
@@ -67,7 +95,7 @@ export async function GET(
       assignments:schedule_assignments(
         id, gender,
         department:departments(name),
-        combination:combinations(name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url)
+        combination:combinations(id, name, preview_status, male_composite_url, female_composite_url, male_gif_url, female_gif_url, canvas_data)
       )
     `)
     .eq("id", scheduleId)
@@ -83,6 +111,19 @@ export async function GET(
   const publicScheduleUrl = schedule.branch?.view_code
     ? new URL(`/view/${schedule.branch.view_code}`, req.url).toString()
     : null;
+  const combinationIds = [
+    ...new Set(
+      (schedule.assignments ?? [])
+        .map((assignment) => assignment.combination?.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const { data: zoneItems } = combinationIds.length > 0
+    ? await (admin as any)
+        .from("combination_zone_items")
+        .select("combination_id, gender, zone, uniform:uniforms(name), inventory_item:inventory_accessories(name)")
+        .in("combination_id", combinationIds)
+    : { data: [] };
 
   const pdf = await createSchedulePackagePdf({
     branchName,
@@ -90,7 +131,7 @@ export async function GET(
     serviceDate: schedule.service_date,
     notes: schedule.notes,
     publicScheduleUrl,
-    assignments: buildAssignments(schedule),
+    assignments: buildAssignments(schedule, (zoneItems ?? []) as ZoneItemRow[]),
   });
 
   const filename = buildSchedulePackageFilename({

@@ -65,4 +65,40 @@ describe("schedule package helpers", () => {
     assert.equal(Buffer.from(pdf.subarray(0, 5)).toString("utf8"), "%PDF-");
     assert.ok(pdf.length > 500);
   });
+
+  it("renders department handout pages with gender headings and uniform breakdowns", async () => {
+    const pdf = await createSchedulePackagePdf({
+      branchName: "Kharis Church Freetown",
+      serviceTitle: "Sunday Service",
+      serviceDate: "2026-08-23",
+      notes: null,
+      assignments: [
+        {
+          departmentName: "Praise Team",
+          gender: "female",
+          combinationName: "Praise Ladies",
+          imageUrl: null,
+          items: [{ label: "White Shirt" }, { label: "Green Pencil Skirt" }],
+        },
+        {
+          departmentName: "Praise Team",
+          gender: "male",
+          combinationName: "Praise Men",
+          imageUrl: null,
+          items: [{ label: "White Shirt" }, { label: "Black Suit Jacket" }, { label: "Black Trousers" }],
+        },
+      ],
+    });
+
+    const text = Buffer.from(pdf).toString("latin1");
+    assert.match(text, /Kharis Church Freetown/);
+    assert.match(text, /Praise Team/);
+    assert.match(text, /Sunday Service - Sunday, 23 August 2026/);
+    assert.match(text, /Ladies/);
+    assert.match(text, /Men/);
+    assert.match(text, /White Shirt/);
+    assert.match(text, /Green Pencil Skirt/);
+    assert.match(text, /Black Suit Jacket/);
+    assert.doesNotMatch(text, /Praise Team - Female/);
+  });
 });
