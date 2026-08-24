@@ -18,12 +18,12 @@ import {
 } from "lucide-react";
 import type { Gender, InventoryAssignmentStatus } from "@/types/database";
 
-type Tab = "items" | "assignments" | "history";
+type Tab = "items" | "assignments" | "history" | "categories";
 type Department = { id: string; name: string };
 type Schedule = { id: string; service_date: string; title: string };
 type Member = { id: string; person_id: string; name: string; gender: Gender; created_at: string };
 type Person = { id: string; name: string; gender: Gender };
-type Category = { id: string; name: string };
+type Category = { id: string; name: string; created_at: string };
 type InventoryItem = {
   id: string;
   category_id: string;
@@ -127,6 +127,8 @@ export default function InventoryPageClient() {
 
   const [categoryName, setCategoryName] = useState("");
   const [savingCategory, setSavingCategory] = useState(false);
+  const [categorySuccess, setCategorySuccess] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   const [selectedScheduleId, setSelectedScheduleId] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
@@ -206,6 +208,12 @@ export default function InventoryPageClient() {
   }, []);
 
   useEffect(() => {
+    if (!categorySuccess) return;
+    const timer = window.setTimeout(() => setCategorySuccess(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [categorySuccess]);
+
+  useEffect(() => {
     setSelectedPersonId("");
     setSelectedItems([]);
     setSuggestions([]);
@@ -245,6 +253,8 @@ export default function InventoryPageClient() {
   async function createCategory() {
     if (!categoryName.trim()) return;
     setSavingCategory(true);
+    setCategorySuccess(null);
+    setCategoryError(null);
     const res = await fetch("/api/branch/inventory/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -255,7 +265,10 @@ export default function InventoryPageClient() {
     if (res.ok) {
       setCategories((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
       setItemCategoryId(data.id);
+      setCategorySuccess(`${data.name} category created`);
       setCategoryName("");
+    } else {
+      setCategoryError(data.error ?? "Failed to create category");
     }
   }
 
@@ -466,6 +479,7 @@ export default function InventoryPageClient() {
         <div className="ward-toggle">
           <button className={tab === "items" ? "on" : ""} onClick={() => setTab("items")}>Items</button>
           <button className={tab === "assignments" ? "on" : ""} onClick={() => setTab("assignments")}>Assignments</button>
+          <button className={tab === "categories" ? "on" : ""} onClick={() => setTab("categories")}>Categories</button>
           <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
         </div>
         {tab === "items" && (
@@ -483,18 +497,6 @@ export default function InventoryPageClient() {
 
       {tab === "items" && (
         <section>
-          <div className="card" style={{ padding: "1rem", marginBottom: "1rem" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "end" }}>
-              <div>
-                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>New category</label>
-                <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} placeholder="e.g. Ties, Pins, Bows" style={inputStyle} />
-              </div>
-              <button className="btn-secondary" style={{ padding: "0.65rem 1rem" }} disabled={savingCategory || !categoryName.trim()} onClick={createCategory}>
-                {savingCategory ? "Saving..." : "Add category"}
-              </button>
-            </div>
-          </div>
-
           {items.length === 0 ? (
             <div style={{ textAlign: "center", padding: "4rem 2rem" }}>
               <Package size={34} color="var(--color-text-faint)" />
@@ -539,6 +541,64 @@ export default function InventoryPageClient() {
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {tab === "categories" && (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          <div className="card" style={{ padding: "1rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "end" }}>
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>New category</label>
+                <input
+                  value={categoryName}
+                  onChange={(e) => {
+                    setCategoryName(e.target.value);
+                    setCategorySuccess(null);
+                    setCategoryError(null);
+                  }}
+                  placeholder="e.g. Ties, Pins, Bows"
+                  style={inputStyle}
+                />
+              </div>
+              <button className="btn-secondary" style={{ padding: "0.65rem 1rem" }} disabled={savingCategory || !categoryName.trim()} onClick={createCategory}>
+                {savingCategory ? "Saving..." : "Add category"}
+              </button>
+            </div>
+            {categorySuccess && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginTop: "0.85rem", color: "var(--color-sage)", fontSize: "0.82rem", fontWeight: 700 }}>
+                <CheckCircle2 size={15} /> {categorySuccess}
+              </div>
+            )}
+            {categoryError && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginTop: "0.85rem", color: "var(--color-error)", fontSize: "0.82rem", fontWeight: 700 }}>
+                <AlertTriangle size={15} /> {categoryError}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ padding: "1.25rem" }}>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.35rem" }}>Categories</div>
+            {categories.length === 0 ? (
+              <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", margin: 0 }}>No categories have been created yet.</p>
+            ) : (
+              <div style={{ display: "grid", gap: "0.6rem" }}>
+                {categories.map((category) => (
+                  <div key={category.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "center", borderBottom: "1px solid var(--color-border)", paddingBottom: "0.6rem" }}>
+                    <div>
+                      <div style={{ fontSize: "0.9rem", fontWeight: 700 }}>{category.name}</div>
+                      <div style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
+                        Created {new Date(category.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.25rem 0.6rem" }}>
+                      {items.filter((item) => item.category_id === category.id).length} items
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       )}
 
