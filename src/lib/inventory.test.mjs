@@ -6,6 +6,7 @@ import {
   isOverdueAssignmentLine,
   resolvedWasOverdue,
   stockDeltaForResolution,
+  withStockSummary,
 } from "./inventory.ts";
 
 test("availableQuantity subtracts unresolved assignments", () => {
@@ -94,4 +95,20 @@ test("resolvedWasOverdue preserves previous overdue state and detects late resol
     }),
     false
   );
+});
+
+test("withStockSummary adds assigned and available quantities to item rows", () => {
+  const rows = [
+    { id: "orange", name: "Orange tie", quantity: 10 },
+    { id: "blue", name: "Blue tie", quantity: 3 },
+  ];
+  const assigned = new Map([
+    ["orange", 4],
+    ["blue", 9],
+  ]);
+
+  assert.deepEqual(withStockSummary(rows, assigned), [
+    { id: "orange", name: "Orange tie", quantity: 10, assigned_quantity: 4, available_quantity: 6 },
+    { id: "blue", name: "Blue tie", quantity: 3, assigned_quantity: 9, available_quantity: 0 },
+  ]);
 });

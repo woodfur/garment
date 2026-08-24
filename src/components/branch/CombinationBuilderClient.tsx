@@ -114,6 +114,7 @@ export default function CombinationBuilderClient() {
       gender: activeGender,
       zone: activeZone,
       uniform_id: uniform.id,
+      inventory_item_id: null,
       created_at: new Date().toISOString(),
       uniform,
     };

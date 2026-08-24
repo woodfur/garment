@@ -99,3 +99,27 @@ export function resolvedWasOverdue({
 }): boolean {
   return existingWasOverdue || serviceUtcDay(serviceDate) < startOfUtcDay(now);
 }
+
+export type InventoryStockRow = {
+  id: string;
+  quantity: number;
+  assigned_quantity: number;
+  available_quantity: number;
+};
+
+export function withStockSummary<T extends { id: string; quantity: number }>(
+  rows: T[],
+  assignedByItemId: Map<string, number>
+): Array<T & InventoryStockRow> {
+  return rows.map((row) => {
+    const assigned = assignedByItemId.get(row.id) ?? 0;
+    return {
+      ...row,
+      assigned_quantity: assigned,
+      available_quantity: availableQuantity({
+        quantity: row.quantity,
+        unresolvedQuantity: assigned,
+      }),
+    };
+  });
+}
