@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { Gender, InventoryAssignmentStatus } from "@/types/database";
 
-type Tab = "items" | "assignments" | "history" | "categories";
+type Tab = "items" | "assignments" | "history" | "categories" | "members";
 type Department = { id: string; name: string };
 type Schedule = { id: string; service_date: string; title: string };
 type Member = { id: string; person_id: string; name: string; gender: Gender; created_at: string };
@@ -114,6 +114,7 @@ export default function InventoryPageClient() {
   const [assignments, setAssignments] = useState<InventoryAssignment[]>([]);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [membersByDepartment, setMembersByDepartment] = useState<Record<string, Member[]>>({});
   const [people, setPeople] = useState<Person[]>([]);
   const [suggestions, setSuggestions] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +147,14 @@ export default function InventoryPageClient() {
   const [useExistingPerson, setUseExistingPerson] = useState(false);
   const [existingPersonId, setExistingPersonId] = useState("");
   const [savingMember, setSavingMember] = useState(false);
+  const [memberDepartmentId, setMemberDepartmentId] = useState("");
+  const [memberTabName, setMemberTabName] = useState("");
+  const [memberTabGender, setMemberTabGender] = useState<Gender>("male");
+  const [memberTabUseExisting, setMemberTabUseExisting] = useState(false);
+  const [memberTabExistingPersonId, setMemberTabExistingPersonId] = useState("");
+  const [savingMemberTab, setSavingMemberTab] = useState(false);
+  const [memberSuccess, setMemberSuccess] = useState<string | null>(null);
+  const [memberError, setMemberError] = useState<string | null>(null);
 
   const loadItems = useCallback(async () => {
     const res = await fetch("/api/branch/inventory/items?include_archived=false");
@@ -183,6 +192,7 @@ export default function InventoryPageClient() {
       setItems(Array.isArray(itemData) ? itemData : []);
       setCategories(Array.isArray(categoryData) ? categoryData : []);
       setDepartments(Array.isArray(deptData) ? deptData : []);
+      if (Array.isArray(deptData) && deptData[0]) setMemberDepartmentId((current) => current || deptData[0].id);
       setSchedules(Array.isArray(scheduleData) ? scheduleData : []);
       setAssignments(Array.isArray(assignmentData) ? assignmentData : []);
       setHistory(Array.isArray(historyData) ? historyData : []);
@@ -200,9 +210,30 @@ export default function InventoryPageClient() {
     if (!selectedDepartmentId) { setMembers([]); return; }
     fetch(`/api/branch/departments/${selectedDepartmentId}/members`)
       .then((res) => res.json())
-      .then((data) => setMembers(Array.isArray(data) ? data : []))
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setMembers(list);
+        setMembersByDepartment((prev) => ({ ...prev, [selectedDepartmentId]: list }));
+      })
       .catch(() => setMembers([]));
   }, [selectedDepartmentId]);
+
+  useEffect(() => {
+    if (departments.length === 0) { setMembersByDepartment({}); return; }
+    let cancelled = false;
+    Promise.all(departments.map(async (department) => {
+      try {
+        const res = await fetch(`/api/branch/departments/${department.id}/members`);
+        const data = await res.json();
+        return [department.id, Array.isArray(data) ? data : []] as const;
+      } catch {
+        return [department.id, []] as const;
+      }
+    })).then((entries) => {
+      if (!cancelled) setMembersByDepartment(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+  }, [departments]);
 
   useEffect(() => {
     fetch("/api/branch/inventory/people")
@@ -216,6 +247,12 @@ export default function InventoryPageClient() {
     const timer = window.setTimeout(() => setCategorySuccess(null), 3500);
     return () => window.clearTimeout(timer);
   }, [categorySuccess]);
+
+  useEffect(() => {
+    if (!memberSuccess) return;
+    const timer = window.setTimeout(() => setMemberSuccess(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [memberSuccess]);
 
   useEffect(() => {
     setSelectedPersonId("");
@@ -405,28 +442,94 @@ export default function InventoryPageClient() {
     setSelectedItems((prev) => prev.map((item) => item.inventory_item_id === itemId ? { ...item, quantity } : item));
   }
 
-  async function saveMember() {
-    if (!selectedDepartmentId) return;
-    setSavingMember(true);
-    const body = useExistingPerson
-      ? { department_id: selectedDepartmentId, person_id: existingPersonId }
-      : { name: newMemberName.trim(), gender: newMemberGender };
-    const url = useExistingPerson
+  function addMemberLocally(departmentId: string, member: Member) {
+    const merge = (list: Member[]) => (
+      [...list.filter((item) => item.person_id !== member.person_id), member]
+        .sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setMembersByDepartment((prev) => ({ ...prev, [departmentId]: merge(prev[departmentId] ?? []) }));
+    if (selectedDepartmentId === departmentId) setMembers((prev) => merge(prev));
+    setPeople((prev) => (
+      prev.some((person) => person.id === member.person_id)
+        ? prev
+        : [...prev, { id: member.person_id, name: member.name, gender: member.gender }].sort((a, b) => a.name.localeCompare(b.name))
+    ));
+  }
+
+  async function createOrLinkMember({
+    departmentId,
+    useExisting,
+    personId,
+    name,
+    gender,
+  }: {
+    departmentId: string;
+    useExisting: boolean;
+    personId?: string;
+    name?: string;
+    gender?: Gender;
+  }): Promise<Member> {
+    const body = useExisting
+      ? { department_id: departmentId, person_id: personId }
+      : { name: name?.trim(), gender };
+    const url = useExisting
       ? "/api/branch/inventory/department-memberships"
-      : `/api/branch/departments/${selectedDepartmentId}/members`;
+      : `/api/branch/departments/${departmentId}/members`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    setSavingMember(false);
-    if (res.ok) {
-      setMembers((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-      setSelectedPersonId(data.person_id);
+    if (!res.ok) throw new Error(data.error ?? "Failed to save member");
+    addMemberLocally(departmentId, data);
+    return data;
+  }
+
+  async function saveMember() {
+    if (!selectedDepartmentId) return;
+    setSavingMember(true);
+    try {
+      const member = await createOrLinkMember({
+        departmentId: selectedDepartmentId,
+        useExisting: useExistingPerson,
+        personId: existingPersonId,
+        name: newMemberName,
+        gender: newMemberGender,
+      });
+      setSelectedPersonId(member.person_id);
       setNewMemberName("");
       setExistingPersonId("");
       setUseExistingPerson(false);
+    } catch {
+      // The compact assignment form keeps errors out of the main flow; the Members tab
+      // shows detailed feedback for roster maintenance.
+    } finally {
+      setSavingMember(false);
+    }
+  }
+
+  async function saveMemberFromTab() {
+    if (!memberDepartmentId) return;
+    setSavingMemberTab(true);
+    setMemberSuccess(null);
+    setMemberError(null);
+    try {
+      const member = await createOrLinkMember({
+        departmentId: memberDepartmentId,
+        useExisting: memberTabUseExisting,
+        personId: memberTabExistingPersonId,
+        name: memberTabName,
+        gender: memberTabGender,
+      });
+      setMemberSuccess(`${member.name} added to ${departments.find((department) => department.id === memberDepartmentId)?.name ?? "department"}`);
+      setMemberTabName("");
+      setMemberTabExistingPersonId("");
+      setMemberTabUseExisting(false);
+    } catch (err) {
+      setMemberError(err instanceof Error ? err.message : "Failed to save member");
+    } finally {
+      setSavingMemberTab(false);
     }
   }
 
@@ -493,6 +596,7 @@ export default function InventoryPageClient() {
           <button className={tab === "items" ? "on" : ""} onClick={() => setTab("items")}>Items</button>
           <button className={tab === "assignments" ? "on" : ""} onClick={() => setTab("assignments")}>Assignments</button>
           <button className={tab === "categories" ? "on" : ""} onClick={() => setTab("categories")}>Categories</button>
+          <button className={tab === "members" ? "on" : ""} onClick={() => setTab("members")}>Members</button>
           <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
         </div>
         {tab === "items" && (
@@ -609,6 +713,124 @@ export default function InventoryPageClient() {
                     </span>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {tab === "members" && (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          <div className="card" style={{ padding: "1rem" }}>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.35rem" }}>Members</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.75rem" }}>
+              <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-text-secondary)" }}>Add department member</span>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
+                <input
+                  type="checkbox"
+                  checked={memberTabUseExisting}
+                  onChange={(e) => {
+                    setMemberTabUseExisting(e.target.checked);
+                    setMemberSuccess(null);
+                    setMemberError(null);
+                  }}
+                />
+                Existing person
+              </label>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr) auto", gap: "0.6rem", alignItems: "end" }}>
+              <Select label="Department" value={memberDepartmentId} onChange={setMemberDepartmentId} options={departments.map((department) => ({ value: department.id, label: department.name }))} />
+              {memberTabUseExisting ? (
+                <label style={{ display: "block" }}>
+                  <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Person</span>
+                  <select
+                    value={memberTabExistingPersonId}
+                    onChange={(e) => {
+                      setMemberTabExistingPersonId(e.target.value);
+                      setMemberSuccess(null);
+                      setMemberError(null);
+                    }}
+                    style={inputStyle}
+                  >
+                    <option value="">Select person...</option>
+                    {people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.gender}</option>)}
+                  </select>
+                </label>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: "0.6rem" }}>
+                  <label style={{ display: "block" }}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Name</span>
+                    <input
+                      value={memberTabName}
+                      onChange={(e) => {
+                        setMemberTabName(e.target.value);
+                        setMemberSuccess(null);
+                        setMemberError(null);
+                      }}
+                      placeholder="e.g. Ken"
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: "block" }}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender</span>
+                    <select value={memberTabGender} onChange={(e) => setMemberTabGender(e.target.value as Gender)} style={inputStyle}>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+              <button
+                className="btn-secondary"
+                style={{ padding: "0.65rem 1rem" }}
+                disabled={savingMemberTab || !memberDepartmentId || (memberTabUseExisting ? !memberTabExistingPersonId : !memberTabName.trim())}
+                onClick={saveMemberFromTab}
+              >
+                {savingMemberTab ? "Saving..." : memberTabUseExisting ? "Link" : "Add"}
+              </button>
+            </div>
+            {memberSuccess && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginTop: "0.85rem", color: "var(--color-sage)", fontSize: "0.82rem", fontWeight: 700 }}>
+                <CheckCircle2 size={15} /> {memberSuccess}
+              </div>
+            )}
+            {memberError && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginTop: "0.85rem", color: "var(--color-error)", fontSize: "0.82rem", fontWeight: 700 }}>
+                <AlertTriangle size={15} /> {memberError}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ padding: "1.25rem" }}>
+            <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.35rem" }}>Department members</div>
+            {departments.length === 0 ? (
+              <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", margin: 0 }}>No departments have been created yet.</p>
+            ) : (
+              <div style={{ display: "grid", gap: "1rem" }}>
+                {departments.map((department) => {
+                  const list = membersByDepartment[department.id] ?? [];
+                  return (
+                    <div key={department.id} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.85rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", marginBottom: list.length > 0 ? "0.65rem" : 0 }}>
+                        <div style={{ fontSize: "0.92rem", fontWeight: 800 }}>{department.name}</div>
+                        <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.25rem 0.6rem" }}>
+                          {list.length} members
+                        </span>
+                      </div>
+                      {list.length === 0 ? (
+                        <p style={{ color: "var(--color-text-muted)", fontSize: "0.8rem", margin: 0 }}>No members yet.</p>
+                      ) : (
+                        <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+                          {list.map((member) => (
+                            <span key={member.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.3rem 0.65rem", background: "var(--color-bg-elevated)" }}>
+                              {member.name} <span style={{ color: "var(--color-text-muted)", textTransform: "capitalize" }}>{member.gender}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
