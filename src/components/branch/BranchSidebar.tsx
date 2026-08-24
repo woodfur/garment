@@ -17,7 +17,7 @@ interface BranchSidebarProps {
 const navItems: Array<{ href: string; label: string; ix: string }> = [
   // Labels come from BRANCH_NAV so desktop and mobile cannot drift; the roman
   // numerals are a desktop-only flourish.
-  ...BRANCH_NAV.map((item, index) => ({ ...item, ix: ["i", "ii", "iii", "iv"][index] })),
+  ...BRANCH_NAV.map((item, index) => ({ ...item, ix: ["i", "ii", "iii", "iv", "v"][index] })),
 ];
 
 export default function BranchSidebar({ branchName, leaderName }: BranchSidebarProps) {
