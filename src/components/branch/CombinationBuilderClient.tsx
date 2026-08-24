@@ -6,13 +6,21 @@ import Image from "next/image";
 import { DepartmentChips } from "./PieceScopeFields";
 import { ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES, zoneLabel } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
-import type { Uniform, Department, CombinationZoneItemWithUniform } from "@/types/database";
+import type { Uniform, Department, InventoryItem, CombinationZoneItemWithSource } from "@/types/database";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type ZoneMap = Partial<Record<BodyZone, CombinationZoneItemWithUniform>>;
+type ZoneMap = Partial<Record<BodyZone, CombinationZoneItemWithSource>>;
 type OutfitState = { male: ZoneMap; female: ZoneMap };
+type InventoryAccessory = InventoryItem & {
+  category_name?: string;
+  assigned_quantity?: number;
+  available_quantity?: number;
+};
+type PickerPiece =
+  | { source: "uniform"; data: Uniform }
+  | { source: "inventory"; data: InventoryAccessory };
 
 type Step = 1 | 2 | 3;
 
@@ -22,6 +30,22 @@ function textOn(hex: string): string {
   if (c.length < 6) return "#211C19";
   const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#211C19" : "#FBF9F4";
+}
+
+function isAccessoryZone(zone: BodyZone | null): boolean {
+  return !!zone && zone.startsWith("accessory_");
+}
+
+function pieceName(item: CombinationZoneItemWithSource): string {
+  return item.uniform?.name ?? item.inventory_item?.name ?? "[Deleted]";
+}
+
+function pieceImage(item: CombinationZoneItemWithSource): string | null {
+  return item.uniform?.image_url ?? item.inventory_item?.image_url ?? null;
+}
+
+function pieceBgRemoved(item: CombinationZoneItemWithSource): boolean {
+  return item.uniform?.bg_removed ?? item.inventory_item?.bg_removed ?? true;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +61,7 @@ export default function CombinationBuilderClient() {
 
   // Step 2: Zone assignment
   const [uniforms, setUniforms] = useState<Uniform[]>([]);
+  const [inventoryAccessories, setInventoryAccessories] = useState<InventoryAccessory[]>([]);
   const [outfit, setOutfit] = useState<OutfitState>({ male: {}, female: {} });
   const [activeGender, setActiveGender] = useState<Gender>("male");
   const [genderLocked, setGenderLocked] = useState(false);
@@ -92,15 +117,31 @@ export default function CombinationBuilderClient() {
       .catch(console.error);
   }, [selectedDept, activeGender, genderLocked]);
 
-  // Uniforms filtered to active zone category
+  // Inventory accessories are branch-wide and gender-neutral; they are shown only in accessory zones.
+  useEffect(() => {
+    if (!genderLocked) return;
+    fetch("/api/branch/inventory/items?include_archived=false")
+      .then((r) => r.json())
+      .then((d) => setInventoryAccessories(Array.isArray(d) ? d : []))
+      .catch(console.error);
+  }, [genderLocked]);
+
+  // Picker pieces filtered to the active zone. Inventory accessories are not stock-filtered here;
+  // assignment availability is enforced when pieces are issued for a service.
   const filteredUniforms = activeZone
     ? uniforms.filter((u) => u.category === ZONE_CATEGORIES[activeZone])
     : uniforms;
+  const pickerPieces: PickerPiece[] = [
+    ...filteredUniforms.map((u) => ({ source: "uniform" as const, data: u })),
+    ...(isAccessoryZone(activeZone)
+      ? inventoryAccessories.map((item) => ({ source: "inventory" as const, data: item }))
+      : []),
+  ];
 
   // Has bg_removed issues
   const bgWarnings = (() => {
-    const all = Object.values(outfit[activeGender]) as CombinationZoneItemWithUniform[];
-    return all.filter((item) => item?.uniform && item.uniform.image_url && !item.uniform.bg_removed).map((item) => item.uniform!.name);
+    const all = Object.values(outfit[activeGender]) as CombinationZoneItemWithSource[];
+    return all.filter((item) => pieceImage(item) && !pieceBgRemoved(item)).map(pieceName);
   })();
 
   // ---------------------------------------------------------------------------
@@ -108,7 +149,7 @@ export default function CombinationBuilderClient() {
   // ---------------------------------------------------------------------------
   const assignUniform = useCallback((uniform: Uniform) => {
     if (!activeZone) return;
-    const fakeItem: CombinationZoneItemWithUniform = {
+    const fakeItem: CombinationZoneItemWithSource = {
       id: `temp-${Date.now()}`,
       combination_id: "",
       gender: activeGender,
@@ -117,6 +158,26 @@ export default function CombinationBuilderClient() {
       inventory_item_id: null,
       created_at: new Date().toISOString(),
       uniform,
+      inventory_item: null,
+    };
+    setOutfit((prev) => ({
+      ...prev,
+      [activeGender]: { ...prev[activeGender], [activeZone]: fakeItem },
+    }));
+  }, [activeGender, activeZone]);
+
+  const assignInventoryAccessory = useCallback((item: InventoryAccessory) => {
+    if (!activeZone || !isAccessoryZone(activeZone)) return;
+    const fakeItem: CombinationZoneItemWithSource = {
+      id: `temp-${Date.now()}`,
+      combination_id: "",
+      gender: activeGender,
+      zone: activeZone,
+      uniform_id: null,
+      inventory_item_id: item.id,
+      created_at: new Date().toISOString(),
+      uniform: null,
+      inventory_item: item,
     };
     setOutfit((prev) => ({
       ...prev,
@@ -177,7 +238,12 @@ export default function CombinationBuilderClient() {
       }
 
       const allItems = [
-        ...Object.entries(outfit[activeGender]).map(([zone, item]) => ({ gender: activeGender, zone: zone as BodyZone, uniform_id: item!.uniform_id })),
+        ...Object.entries(outfit[activeGender]).map(([zone, item]) => ({
+          gender: activeGender,
+          zone: zone as BodyZone,
+          uniform_id: item!.uniform_id,
+          inventory_item_id: item!.inventory_item_id,
+        })),
       ];
 
       // GAP-5 FIX: Sequential inserts instead of Promise.all.
@@ -365,27 +431,29 @@ export default function CombinationBuilderClient() {
               if (!activeZone) {
                 return <div className="fit-stage-empty"><span>Select a zone above</span></div>;
               }
-              if (assigned?.uniform) {
+              if (assigned && (assigned.uniform || assigned.inventory_item)) {
+                const imageUrl = pieceImage(assigned);
+                const name = pieceName(assigned);
                 return (
                   <div className="fit-stage-filled">
                     <div className="fit-stage-frame">
-                      {assigned.uniform.image_url ? (
+                      {imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={assigned.uniform.image_url} alt={assigned.uniform.name} className="fit-stage-img" />
-                      ) : assigned.uniform.color ? (
+                        <img src={imageUrl} alt={name} className="fit-stage-img" />
+                      ) : assigned.uniform?.color ? (
                         <div style={{ width: "100%", height: "100%", background: assigned.uniform.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: textOn(assigned.uniform.color), background: "rgba(0,0,0,0.12)", padding: "0.25rem 0.6rem", borderRadius: 999 }}>
                             {assigned.uniform.color_label || assigned.uniform.color}
                           </span>
                         </div>
                       ) : (
-                        <span className="fit-stage-initial">{assigned.uniform.name[0]}</span>
+                        <span className="fit-stage-initial">{name[0]}</span>
                       )}
                     </div>
                     <div className="fit-stage-meta">
                       <span className="eyebrow eyebrow-accent">{zoneLabel(activeZone, activeGender)}</span>
-                      <span className="fit-stage-name">{assigned.uniform.name}</span>
-                      {assigned.uniform.image_url && !assigned.uniform.bg_removed && (
+                      <span className="fit-stage-name">{name}</span>
+                      {imageUrl && !pieceBgRemoved(assigned) && (
                         <span className="fit-stage-warn">⚠️ Background not removed</span>
                       )}
                       <button
@@ -413,7 +481,7 @@ export default function CombinationBuilderClient() {
               <div className="fit-picker-empty">
                 <p>Select a gender above to show matching pieces.</p>
               </div>
-            ) : filteredUniforms.length === 0 ? (
+            ) : pickerPieces.length === 0 ? (
               <div className="fit-picker-empty">
                 <p style={{ marginBottom: "0.75rem" }}>
                   {activeZone
@@ -430,26 +498,34 @@ export default function CombinationBuilderClient() {
               </div>
             ) : (
               <div className="fit-picker-grid">
-                {filteredUniforms.map((u) => {
-                  const selected = !!activeZone && outfit[activeGender][activeZone]?.uniform_id === u.id;
+                {pickerPieces.map((piece) => {
+                  const selected = !!activeZone && (
+                    piece.source === "uniform"
+                      ? outfit[activeGender][activeZone]?.uniform_id === piece.data.id
+                      : outfit[activeGender][activeZone]?.inventory_item_id === piece.data.id
+                  );
+                  const imageUrl = piece.data.image_url;
                   return (
                     <button
-                      key={u.id}
+                      key={`${piece.source}-${piece.data.id}`}
                       className={`fit-piece ${selected ? "on" : ""}`}
-                      onClick={() => activeZone && assignUniform(u)}
+                      onClick={() => piece.source === "uniform" ? assignUniform(piece.data) : assignInventoryAccessory(piece.data)}
                     >
                       <div className="fit-piece-frame">
-                        {u.image_url ? (
-                          <Image src={u.image_url} alt={u.name} fill sizes="(max-width: 560px) 45vw, 140px" className="fit-piece-img" />
-                        ) : u.color ? (
-                          <div style={{ position: "absolute", inset: 0, background: u.color }} />
+                        {imageUrl ? (
+                          <Image src={imageUrl} alt={piece.data.name} fill sizes="(max-width: 560px) 45vw, 140px" className="fit-piece-img" />
+                        ) : piece.source === "uniform" && piece.data.color ? (
+                          <div style={{ position: "absolute", inset: 0, background: piece.data.color }} />
                         ) : (
-                          <span className="fit-piece-initial">{u.name[0]}</span>
+                          <span className="fit-piece-initial">{piece.data.name[0]}</span>
                         )}
                         {selected && <span className="fit-piece-check">✓</span>}
-                        {u.image_url && !u.bg_removed && <span className="fit-piece-warn" title="Background not removed">⚠️</span>}
+                        {imageUrl && !piece.data.bg_removed && <span className="fit-piece-warn" title="Background not removed">⚠️</span>}
                       </div>
-                      <span className="fit-piece-name">{u.name}</span>
+                      <span className="fit-piece-name">{piece.data.name}</span>
+                      {piece.source === "inventory" && (
+                        <span className="fit-piece-source">{piece.data.category_name ?? "Inventory"}</span>
+                      )}
                     </button>
                   );
                 })}
@@ -484,11 +560,11 @@ export default function CombinationBuilderClient() {
             <div className="summary-card">
               <h4 className="summary-gender">{activeGender === "male" ? "♂ Male look" : "♀ Female look"}</h4>
               <ul className="summary-list">
-                {(Object.entries(outfit[activeGender]) as [BodyZone, CombinationZoneItemWithUniform][]).map(([zone, item]) => (
+                {(Object.entries(outfit[activeGender]) as [BodyZone, CombinationZoneItemWithSource][]).map(([zone, item]) => (
                   <li key={zone} className="summary-item">
                     <span className="summary-zone">{zoneLabel(zone, activeGender)}</span>
-                    <span className="summary-uniform">{item.uniform?.name ?? "[Deleted]"}</span>
-                    {item.uniform && item.uniform.image_url && !item.uniform.bg_removed && <span className="summary-warn">⚠️</span>}
+                    <span className="summary-uniform">{pieceName(item)}</span>
+                    {pieceImage(item) && !pieceBgRemoved(item) && <span className="summary-warn">⚠️</span>}
                   </li>
                 ))}
               </ul>

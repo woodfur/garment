@@ -21,7 +21,8 @@ const ESTIMATED_SECONDS = 90;
 type CombinationZoneItem = {
   gender: Gender;
   zone: string;
-  uniform_id: string;
+  uniform_id: string | null;
+  inventory_item_id: string | null;
   uniform: {
     id: string;
     name: string;
@@ -30,6 +31,12 @@ type CombinationZoneItem = {
     category: string;
     color: string | null;
     color_label: string | null;
+  } | null;
+  inventory_item: {
+    id: string;
+    name: string;
+    image_url: string | null;
+    bg_removed: boolean;
   } | null;
 };
 
@@ -45,12 +52,16 @@ type PreviewDb = { from(table: string): PreviewQuery };
 /** Photo pieces drive layering; colour pieces are described in the prompt instead. */
 function orderedPhotoItems(items: CombinationZoneItem[]): LookPhotoItem[] {
   return ZONE_LAYER_ORDER.flatMap((zone) => {
-    const item = items.find((candidate) => candidate.zone === zone && candidate.uniform?.image_url);
+    const item = items.find((candidate) => {
+      const source = candidate.uniform ?? candidate.inventory_item;
+      return candidate.zone === zone && source?.image_url;
+    });
     if (!item) return [];
+    const source = item.uniform ?? item.inventory_item;
     return [{
       zone: item.zone,
-      uniformName: item.uniform!.name,
-      imageUrl: item.uniform!.image_url!,
+      uniformName: source!.name,
+      imageUrl: source!.image_url!,
     }];
   });
 }
@@ -106,7 +117,7 @@ export async function POST(
 
   const { data: zoneItems, error: zoneErr } = await db
     .from("combination_zone_items")
-    .select("*, uniform:uniforms(id, name, image_url, bg_removed, category, color, color_label)")
+    .select("*, uniform:uniforms(id, name, image_url, bg_removed, category, color, color_label), inventory_item:inventory_accessories(id, name, image_url, bg_removed)")
     .eq("combination_id", combinationId) as unknown as {
       data: CombinationZoneItem[] | null;
       error: { message: string } | null;
@@ -139,10 +150,13 @@ export async function POST(
       );
     }
 
-    const missingBg = genderItems.filter((item) => item.uniform?.image_url && !item.uniform.bg_removed);
+    const missingBg = genderItems.filter((item) => {
+      const source = item.uniform ?? item.inventory_item;
+      return source?.image_url && !source.bg_removed;
+    });
     if (missingBg.length > 0) {
       warnings.push(
-        `${gender}: ${missingBg.map((item) => item.uniform?.name).join(", ")} have not had background removed. Preview quality may be affected.`
+        `${gender}: ${missingBg.map((item) => (item.uniform ?? item.inventory_item)?.name).join(", ")} have not had background removed. Preview quality may be affected.`
       );
     }
   }
