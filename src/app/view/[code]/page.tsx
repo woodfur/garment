@@ -2,7 +2,13 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/server";
 
-type ZoneItemRow = { combination_id: string; gender: string; zone: string; uniform: { name: string } | null };
+type ZoneItemRow = {
+  combination_id: string;
+  gender: string;
+  zone: string;
+  uniform: { name: string } | null;
+  inventory_item: { name: string } | null;
+};
 type ViewerCombination = {
   id: string;
   name: string;
@@ -109,15 +115,15 @@ export default async function PublicViewerPage({ params, searchParams }: PagePro
   const { data: zoneItems } = comboIds.length
     ? await admin
         .from("combination_zone_items")
-        .select("combination_id, gender, zone, uniform:uniforms(name)")
+        .select("combination_id, gender, zone, uniform:uniforms(name), inventory_item:inventory_accessories(name)")
         .in("combination_id", comboIds) as { data: ZoneItemRow[] | null }
     : { data: [] as ZoneItemRow[] };
 
   const piecesFor = (combinationId: string | undefined, gender: string | null): string[] => {
     if (!combinationId || !gender) return [];
     return (zoneItems ?? [])
-      .filter((z) => z.combination_id === combinationId && z.gender === gender && z.uniform?.name)
-      .map((z) => z.uniform!.name);
+      .filter((z) => z.combination_id === combinationId && z.gender === gender && (z.uniform?.name || z.inventory_item?.name))
+      .map((z) => z.uniform?.name ?? z.inventory_item!.name);
   };
 
   const paletteFor = (combination: ViewerCombination | null | undefined): string[] =>

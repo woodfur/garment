@@ -49,6 +49,7 @@ type ZoneItemRow = {
   gender: Gender;
   zone: string;
   uniform: { name: string } | null;
+  inventory_item: { name: string } | null;
 };
 
 async function downloadImage(url: string | null): Promise<Buffer | null> {
@@ -105,14 +106,14 @@ export async function GET(
   const combinationIds = [...new Set(forDepartment.map((a) => a.combination!.id))];
   const { data: zoneItems } = await db
     .from("combination_zone_items")
-    .select("combination_id, gender, zone, uniform:uniforms(name)")
+    .select("combination_id, gender, zone, uniform:uniforms(name), inventory_item:inventory_accessories(name)")
     .in("combination_id", combinationIds) as { data: ZoneItemRow[] | null };
 
   const itemsFor = (combinationId: string, gender: Gender): ShareCardItem[] =>
     (zoneItems ?? [])
-      .filter((item) => item.combination_id === combinationId && item.gender === gender && item.uniform?.name)
+      .filter((item) => item.combination_id === combinationId && item.gender === gender && (item.uniform?.name || item.inventory_item?.name))
       .sort((a, b) => ZONE_LAYER_ORDER.indexOf(a.zone as never) - ZONE_LAYER_ORDER.indexOf(b.zone as never))
-      .map((item) => ({ label: item.uniform!.name }));
+      .map((item) => ({ label: item.uniform?.name ?? item.inventory_item!.name }));
 
   const columns: ShareCardColumn[] = [];
   for (const assignment of forDepartment) {

@@ -16,6 +16,7 @@ export const BRANCH_NAV: BranchNavItem[] = [
   { href: "/branch/dashboard", label: "Studio" },
   { href: "/branch/departments", label: "Departments" },
   { href: "/branch/uniforms", label: "Wardrobe" },
+  { href: "/branch/inventory", label: "Inventory" },
   { href: "/branch/schedule", label: "Schedule" },
 ];
 

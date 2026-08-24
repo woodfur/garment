@@ -7,7 +7,7 @@
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Shirt, Calendar, Users, Plus } from "lucide-react";
+import { LayoutGrid, Shirt, Calendar, Users, Plus, Package } from "lucide-react";
 import { branchNavItem } from "@/lib/branch-nav";
 
 // Order is mobile-specific — the two highest-traffic tabs sit left of the compose
@@ -16,6 +16,7 @@ const TABS = [
   { ...branchNavItem("/branch/dashboard"), icon: LayoutGrid },
   { ...branchNavItem("/branch/uniforms"), icon: Shirt },
   { ...branchNavItem("/branch/departments"), icon: Users },
+  { ...branchNavItem("/branch/inventory"), icon: Package },
   { ...branchNavItem("/branch/schedule"), icon: Calendar },
 ];
 

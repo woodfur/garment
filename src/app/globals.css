@@ -827,6 +827,11 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.8rem; font-weight: 600; color: var(--color-text-primary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.fit-piece-source {
+  font-size: 0.68rem; font-weight: 700; color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* Step 3 summary */
 .summary-grid {
