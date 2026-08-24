@@ -33,6 +33,22 @@ test("buildPalettePrompt locks generation to exact hex and RGB values without la
   assert.doesNotMatch(prompt, /\bBrown\b/);
 });
 
+test("buildPalettePrompt styles palette looks as Wednesday smart casual instead of formal Sunday wear", () => {
+  const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
+  const male = buildPalettePrompt({ departmentName: "Ushers", gender: "male", palette });
+  const female = buildPalettePrompt({ departmentName: "Choir", gender: "female", palette });
+
+  assert.match(male, /Wednesday service smart-casual church outfit/);
+  assert.match(male, /untucked collared shirt/);
+  assert.match(male, /sneakers, trainers, loafers/);
+  assert.doesNotMatch(male, /closed-toe dress shoes/);
+
+  assert.match(female, /Wednesday service smart-casual church outfit/);
+  assert.match(female, /jean trousers, wide-leg trousers, dress pants/);
+  assert.match(female, /sneakers, trainers, flats, loafers/);
+  assert.doesNotMatch(female, /clearly separate blouse plus knee-to-mid-calf skirt/);
+});
+
 test("colorPromptPhrase adds model-readable color semantics from the hex value", () => {
   assert.equal(colorPromptPhrase("#94DBFF"), "powder blue / sky blue #94DBFF RGB(148, 219, 255)");
   assert.equal(colorPromptPhrase("#00143D"), "deep navy #00143D RGB(0, 20, 61)");
@@ -129,7 +145,7 @@ test("an unnamed palette look is named after its dominant colour", () => {
 test("the department clause is dropped when there is no single department", () => {
   const palette = [{ hex: "#94DBFF", label: null }, { hex: "#00143D", label: null }];
   const shared = buildPalettePrompt({ gender: "female", palette });
-  assert.match(shared, /wearing a coordinated church service uniform outfit,/);
+  assert.match(shared, /wearing a coordinated Wednesday service smart-casual church outfit,/);
   assert.doesNotMatch(shared, /department/);
 
   const named = buildPalettePrompt({ departmentName: "Choir", gender: "female", palette });
