@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { DepartmentChips } from "./PieceScopeFields";
+import { MAX_LOOK_NOTES } from "@/lib/look-prompt";
 import { ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES, zoneLabel } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 import type { Uniform, Department, InventoryItem, CombinationZoneItemWithSource } from "@/types/database";
@@ -77,6 +78,7 @@ export default function CombinationBuilderClient() {
   const savedComboIdRef = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
   // Which departments may use the finished look. Defaults to the one it was built for;
   // adding more here reuses this render rather than paying for another.
   const [shareScope, setShareScope] = useState<{ departmentIds: string[]; allDepartments: boolean }>({
@@ -206,12 +208,14 @@ export default function CombinationBuilderClient() {
       // 1. Create combination — use savedComboIdRef for idempotency across retries
       let comboId = savedComboIdRef.current ?? combinationId;
       if (!comboId) {
+        const trimmedNotes = notes.trim();
         const res = await fetch("/api/branch/combinations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: name.trim(),
             description: description.trim() || null,
+            canvas_data: trimmedNotes ? { mode: "pieces", notes: trimmedNotes } : null,
             department_ids: shareScope.departmentIds,
             all_departments: shareScope.allDepartments,
             gender: activeGender,
@@ -608,6 +612,16 @@ export default function CombinationBuilderClient() {
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+            />
+
+            <label className="form-label">Extra direction</label>
+            <textarea
+              className="form-input"
+              placeholder="e.g. relaxed Wednesday styling, untucked linen shirt, clean loafers"
+              rows={2}
+              maxLength={MAX_LOOK_NOTES}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
             />
 
             <div style={{ marginTop: "1rem" }}>

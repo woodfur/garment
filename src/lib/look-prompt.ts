@@ -1,6 +1,6 @@
 // Explicit .ts extension so this module resolves both under Turbopack and under
 // `node --test`, which cannot map a .js specifier onto a .ts file.
-import { colorPromptPhrase } from "./palette-prompt.ts";
+import { MAX_PALETTE_NOTES, colorPromptPhrase } from "./palette-prompt.ts";
 import type { Gender } from "@/types/database";
 
 /**
@@ -33,6 +33,9 @@ export type LookPlan = {
   slots: ReferenceSlot[];
   prompt: string;
 };
+
+/** Same free-text cap as palette looks, used for uploaded-piece render direction. */
+export const MAX_LOOK_NOTES = MAX_PALETTE_NOTES;
 
 /** Reference images are addressed by ordinal in the prompt, so the words must be stable. */
 const ORDINALS = [
@@ -79,6 +82,12 @@ export function zoneToCategory(zone: string): string {
   return zone;
 }
 
+export function sanitizeLookNotes(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, MAX_LOOK_NOTES);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
 function structureRule(gender: Gender, categories: Set<string>): string {
   const twoPiece = categories.has("top") && categories.has("bottom") && !categories.has("full_body");
   if (!twoPiece) {
@@ -94,11 +103,14 @@ export function planLook({
   colorItems,
   photoItems,
   hasFigureReference,
+  notes = null,
 }: {
   gender: Gender;
   colorItems: LookColorItem[];
   photoItems: LookPhotoItem[];
   hasFigureReference: boolean;
+  /** Optional free-text styling direction from the branch leader. */
+  notes?: string | null;
 }): LookPlan {
   if (colorItems.length === 0 && photoItems.length === 0) {
     throw new Error("planLook requires at least one colour or photo item");
@@ -149,6 +161,14 @@ export function planLook({
     ...colorItems.map((item) => zoneToCategory(item.zone)),
     ...photoItems.map((item) => zoneToCategory(item.zone)),
   ]);
+  const cleanedNotes = sanitizeLookNotes(notes);
+
+  if (cleanedNotes) {
+    lines.push(
+      `additional styling direction: ${cleanedNotes}`,
+      "apply that direction only when it does not conflict with the selected garment references or modest church styling rules"
+    );
+  }
 
   lines.push(
     structureRule(gender, categories),

@@ -39,6 +39,8 @@ export type RenderLookInput = {
   /** Already sorted by ZONE_LAYER_ORDER — planLook addresses these by position. */
   photoItems: LookPhotoItem[];
   baseFigureUrl: string | null;
+  /** Optional free-text styling direction from the branch leader. */
+  notes?: string | null;
 };
 
 export async function renderLookImage({
@@ -46,12 +48,14 @@ export async function renderLookImage({
   colorItems,
   photoItems,
   baseFigureUrl,
+  notes = null,
 }: RenderLookInput): Promise<Buffer> {
   const { slots, prompt } = planLook({
     gender,
     colorItems,
     photoItems,
     hasFigureReference: !!baseFigureUrl,
+    notes,
   });
 
   if (slots.length > MAX_REFERENCE_IMAGES) {

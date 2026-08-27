@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Archive,
   CheckCircle2,
+  ChevronDown,
   History,
   Loader2,
   Package,
@@ -20,6 +21,7 @@ import {
 import type { Gender, InventoryAssignmentStatus } from "@/types/database";
 
 type Tab = "items" | "assignments" | "history" | "categories" | "members";
+type MemberMobileStep = "source" | "person" | "departments" | "confirm";
 type Department = { id: string; name: string };
 type Schedule = { id: string; service_date: string; title: string };
 type Member = { id: string; person_id: string; name: string; gender: Gender; created_at: string };
@@ -154,11 +156,13 @@ export default function InventoryPageClient() {
   const [memberTabGender, setMemberTabGender] = useState<Gender>("male");
   const [memberTabUseExisting, setMemberTabUseExisting] = useState(false);
   const [memberTabExistingPersonId, setMemberTabExistingPersonId] = useState("");
+  const [memberMobileStep, setMemberMobileStep] = useState<MemberMobileStep>("source");
   const [savingMemberTab, setSavingMemberTab] = useState(false);
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
   const [memberDeleteTarget, setMemberDeleteTarget] = useState<MemberDeleteTarget | null>(null);
   const [memberSuccess, setMemberSuccess] = useState<string | null>(null);
   const [memberError, setMemberError] = useState<string | null>(null);
+  const [openRosterDepartmentIds, setOpenRosterDepartmentIds] = useState<string[]>([]);
 
   const loadItems = useCallback(async () => {
     const res = await fetch("/api/branch/inventory/items?include_archived=false");
@@ -257,6 +261,14 @@ export default function InventoryPageClient() {
     const timer = window.setTimeout(() => setMemberSuccess(null), 3500);
     return () => window.clearTimeout(timer);
   }, [memberSuccess]);
+
+  useEffect(() => {
+    setOpenRosterDepartmentIds((current) => {
+      const validIds = current.filter((id) => departments.some((department) => department.id === id));
+      if (validIds.length > 0) return validIds;
+      return departments[0] ? [departments[0].id] : [];
+    });
+  }, [departments]);
 
   useEffect(() => {
     setSelectedPersonId("");
@@ -452,6 +464,7 @@ export default function InventoryPageClient() {
         .sort((a, b) => a.name.localeCompare(b.name))
     );
     setMembersByDepartment((prev) => ({ ...prev, [departmentId]: merge(prev[departmentId] ?? []) }));
+    setOpenRosterDepartmentIds((prev) => prev.includes(departmentId) ? prev : [...prev, departmentId]);
     if (selectedDepartmentId === departmentId) setMembers((prev) => merge(prev));
     setPeople((prev) => (
       prev.some((person) => person.id === member.person_id)
@@ -550,6 +563,7 @@ export default function InventoryPageClient() {
       setMemberTabName("");
       setMemberTabExistingPersonId("");
       setMemberTabUseExisting(false);
+      setMemberMobileStep("source");
     } catch (err) {
       setMemberError(err instanceof Error ? err.message : "Failed to save member");
     } finally {
@@ -619,7 +633,7 @@ export default function InventoryPageClient() {
   if (loading) return null;
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+    <div className="inventory-page" style={{ maxWidth: 1080, margin: "0 auto" }}>
       <div className="dash-mast">
         <div>
           <div className="eyebrow eyebrow-accent">Inventory</div>
@@ -631,8 +645,8 @@ export default function InventoryPageClient() {
         </div>
       </div>
 
-      <div className="ward-head">
-        <div className="ward-toggle">
+      <div className="ward-head inventory-head">
+        <div className="ward-toggle inventory-tabs">
           <button className={tab === "items" ? "on" : ""} onClick={() => setTab("items")}>Items</button>
           <button className={tab === "assignments" ? "on" : ""} onClick={() => setTab("assignments")}>Assignments</button>
           <button className={tab === "categories" ? "on" : ""} onClick={() => setTab("categories")}>Categories</button>
@@ -640,7 +654,7 @@ export default function InventoryPageClient() {
           <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
         </div>
         {tab === "items" && (
-          <button className="btn-primary" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem" }} onClick={() => setShowItemForm(true)}>
+          <button className="btn-primary inventory-add-item" style={{ padding: "0.65rem 1.2rem", fontSize: "0.85rem" }} onClick={() => setShowItemForm(true)}>
             <Plus size={15} /> Add item
           </button>
         )}
@@ -661,10 +675,10 @@ export default function InventoryPageClient() {
               <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>Create a category, then add the first accessory.</p>
             </div>
           ) : (
-            <div className="ward-gallery">
+            <div className="ward-gallery inventory-items-grid">
               {items.map((item) => (
-                <article key={item.id} className="card" style={{ padding: 0, overflow: "hidden" }}>
-                  <div style={{ height: 170, background: item.bg_removed ? "repeating-conic-gradient(#e9e3d7 0% 25%, #fbf9f4 0% 50%) 0 0 / 20px 20px" : "var(--color-bg-elevated)", position: "relative", display: "grid", placeItems: "center" }}>
+                <article key={item.id} className="card inventory-item-card" style={{ padding: 0, overflow: "hidden" }}>
+                  <div className="inventory-item-media" style={{ height: 170, background: item.bg_removed ? "repeating-conic-gradient(#e9e3d7 0% 25%, #fbf9f4 0% 50%) 0 0 / 20px 20px" : "var(--color-bg-elevated)", position: "relative", display: "grid", placeItems: "center" }}>
                     {item.image_url ? (
                       <Image src={item.image_url} alt={item.name} fill style={{ objectFit: "contain", padding: "0.65rem" }} unoptimized />
                     ) : (
@@ -677,13 +691,13 @@ export default function InventoryPageClient() {
                     )}
                     {item._bgError && <span style={{ position: "absolute", left: 8, right: 8, bottom: 8, background: "var(--color-error-bg)", color: "var(--color-error)", padding: "0.3rem 0.45rem", borderRadius: "var(--radius-md)", fontSize: "0.68rem", fontWeight: 700 }}>{item._bgError}</span>}
                   </div>
-                  <div style={{ padding: "0.875rem" }}>
+                  <div className="inventory-item-body" style={{ padding: "0.875rem" }}>
                     <div style={{ fontWeight: 700, fontSize: "0.9rem", marginBottom: "0.3rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
                     <div style={{ color: "var(--color-text-muted)", fontSize: "0.76rem", marginBottom: "0.7rem" }}>{item.category_name ?? "Uncategorised"}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.45rem", marginBottom: "0.8rem" }}>
-                      <StockBox label="Total" value={item.quantity} />
-                      <StockBox label="Out" value={item.assigned_quantity} />
-                      <StockBox label="Ready" value={item.available_quantity} />
+                    <div className="inventory-stock-line" style={{ display: "grid", gap: "0.12rem", color: "var(--color-text-secondary)", fontSize: "0.76rem", marginBottom: "0.8rem", lineHeight: 1.45, textAlign: "left" }}>
+                      <span><b style={{ color: "var(--color-text-primary)" }}>{item.quantity}</b> total</span>
+                      <span><b style={{ color: "var(--color-text-primary)" }}>{item.assigned_quantity}</b> out</span>
+                      <span><b style={{ color: "var(--color-text-primary)" }}>{item.available_quantity}</b> ready</span>
                     </div>
                     <div style={{ display: "flex", gap: "0.4rem" }}>
                       <button className="btn-back" style={{ flex: 1, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.45rem", fontSize: "0.75rem" }} onClick={() => adjustQuantity(item)}>
@@ -704,7 +718,7 @@ export default function InventoryPageClient() {
       {tab === "categories" && (
         <section style={{ display: "grid", gap: "1rem" }}>
           <div className="card" style={{ padding: "1rem" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "end" }}>
+            <div className="inventory-category-form" style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "end" }}>
               <div>
                 <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>New category</label>
                 <input
@@ -741,7 +755,7 @@ export default function InventoryPageClient() {
             ) : (
               <div style={{ display: "grid", gap: "0.6rem" }}>
                 {categories.map((category) => (
-                  <div key={category.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "center", borderBottom: "1px solid var(--color-border)", paddingBottom: "0.6rem" }}>
+                  <div key={category.id} className="inventory-list-row" style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "center", borderBottom: "1px solid var(--color-border)", paddingBottom: "0.6rem" }}>
                     <div>
                       <div style={{ fontSize: "0.9rem", fontWeight: 700 }}>{category.name}</div>
                       <div style={{ fontSize: "0.74rem", color: "var(--color-text-muted)" }}>
@@ -763,106 +777,249 @@ export default function InventoryPageClient() {
         <section style={{ display: "grid", gap: "1rem" }}>
           <div className="card" style={{ padding: "1rem" }}>
             <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.35rem" }}>Members</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.75rem" }}>
-              <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-text-secondary)" }}>Add department member</span>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
-                <input
-                  type="checkbox"
-                  checked={memberTabUseExisting}
-                  onChange={(e) => {
-                    setMemberTabUseExisting(e.target.checked);
-                    setMemberSuccess(null);
-                    setMemberError(null);
-                  }}
-                />
-                Existing person
-              </label>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 2fr) auto", gap: "0.6rem", alignItems: "end" }}>
-              <div>
-                <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Departments</span>
-                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.45rem", background: "var(--color-bg-elevated)", minHeight: 43 }}>
-                  {departments.map((department) => {
-                    const active = memberDepartmentIds.includes(department.id);
-                    return (
-                      <button
-                        key={department.id}
-                        type="button"
-                        onClick={() => {
-                          setMemberDepartmentIds((prev) =>
-                            active
-                              ? prev.filter((id) => id !== department.id)
-                              : [...prev, department.id]
-                          );
-                          setMemberSuccess(null);
-                          setMemberError(null);
-                        }}
-                        style={{
-                          border: active ? "1px solid var(--color-primary-dark)" : "1px solid var(--color-border)",
-                          borderRadius: "var(--radius-full)",
-                          background: active ? "var(--color-primary-dark)" : "transparent",
-                          color: active ? "#fff" : "var(--color-text-muted)",
-                          padding: "0.3rem 0.65rem",
-                          font: "inherit",
-                          fontSize: "0.76rem",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {department.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              {memberTabUseExisting ? (
-                <label style={{ display: "block" }}>
-                  <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Person</span>
-                  <select
-                    value={memberTabExistingPersonId}
-                    onChange={(e) => {
-                      setMemberTabExistingPersonId(e.target.value);
-                      setMemberSuccess(null);
-                      setMemberError(null);
-                    }}
-                    style={inputStyle}
-                  >
-                    <option value="">Select person...</option>
-                    {people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.gender}</option>)}
-                  </select>
-                </label>
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: "0.6rem" }}>
-                  <label style={{ display: "block" }}>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Name</span>
-                    <input
-                      value={memberTabName}
-                      onChange={(e) => {
-                        setMemberTabName(e.target.value);
+            <div className="inventory-member-mobile-flow">
+              <div className="inventory-flow-step">Step {memberMobileStep === "source" ? 1 : memberMobileStep === "person" ? 2 : memberMobileStep === "departments" ? 3 : 4} of 4</div>
+              {memberMobileStep === "source" && (
+                <>
+                  <h3>Who are you adding?</h3>
+                  <div className="inventory-flow-options">
+                    <button
+                      type="button"
+                      className={!memberTabUseExisting ? "on" : ""}
+                      onClick={() => {
+                        setMemberTabUseExisting(false);
                         setMemberSuccess(null);
                         setMemberError(null);
                       }}
-                      placeholder="e.g. Ken"
+                    >
+                      New person
+                    </button>
+                    <button
+                      type="button"
+                      className={memberTabUseExisting ? "on" : ""}
+                      onClick={() => {
+                        setMemberTabUseExisting(true);
+                        setMemberSuccess(null);
+                        setMemberError(null);
+                      }}
+                    >
+                      Existing person
+                    </button>
+                  </div>
+                  <button type="button" className="btn-primary inventory-flow-primary" onClick={() => setMemberMobileStep("person")}>Continue</button>
+                </>
+              )}
+              {memberMobileStep === "person" && (
+                <>
+                  <h3>{memberTabUseExisting ? "Select the person" : "Enter their details"}</h3>
+                  {memberTabUseExisting ? (
+                    <select
+                      value={memberTabExistingPersonId}
+                      onChange={(e) => {
+                        setMemberTabExistingPersonId(e.target.value);
+                        setMemberSuccess(null);
+                        setMemberError(null);
+                      }}
                       style={inputStyle}
-                    />
-                  </label>
+                    >
+                      <option value="">Select person...</option>
+                      {people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.gender}</option>)}
+                    </select>
+                  ) : (
+                    <div style={{ display: "grid", gap: "0.75rem" }}>
+                      <input
+                        value={memberTabName}
+                        onChange={(e) => {
+                          setMemberTabName(e.target.value);
+                          setMemberSuccess(null);
+                          setMemberError(null);
+                        }}
+                        placeholder="e.g. Ken"
+                        style={inputStyle}
+                      />
+                      <select value={memberTabGender} onChange={(e) => setMemberTabGender(e.target.value as Gender)} style={inputStyle}>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </div>
+                  )}
+                  <div className="inventory-flow-nav">
+                    <button type="button" className="btn-back" onClick={() => setMemberMobileStep("source")}>Back</button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={memberTabUseExisting ? !memberTabExistingPersonId : !memberTabName.trim()}
+                      onClick={() => setMemberMobileStep("departments")}
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </>
+              )}
+              {memberMobileStep === "departments" && (
+                <>
+                  <h3>Choose departments</h3>
+                  <div className="inventory-flow-chips">
+                    {departments.map((department) => {
+                      const active = memberDepartmentIds.includes(department.id);
+                      return (
+                        <button
+                          key={department.id}
+                          type="button"
+                          className={active ? "on" : ""}
+                          onClick={() => {
+                            setMemberDepartmentIds((prev) =>
+                              active
+                                ? prev.filter((id) => id !== department.id)
+                                : [...prev, department.id]
+                            );
+                            setMemberSuccess(null);
+                            setMemberError(null);
+                          }}
+                        >
+                          {department.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="inventory-flow-nav">
+                    <button type="button" className="btn-back" onClick={() => setMemberMobileStep("person")}>Back</button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={memberDepartmentIds.length === 0}
+                      onClick={() => setMemberMobileStep("confirm")}
+                    >
+                      Review
+                    </button>
+                  </div>
+                </>
+              )}
+              {memberMobileStep === "confirm" && (
+                <>
+                  <h3>Confirm member</h3>
+                  <div className="inventory-flow-summary">
+                    <span>Name</span>
+                    <b>{memberTabUseExisting ? people.find((person) => person.id === memberTabExistingPersonId)?.name ?? "Selected person" : memberTabName}</b>
+                    <span>Departments</span>
+                    <b>{departments.filter((department) => memberDepartmentIds.includes(department.id)).map((department) => department.name).join(", ")}</b>
+                  </div>
+                  <div className="inventory-flow-nav">
+                    <button type="button" className="btn-back" onClick={() => setMemberMobileStep("departments")}>Back</button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={savingMemberTab || memberDepartmentIds.length === 0 || (memberTabUseExisting ? !memberTabExistingPersonId : !memberTabName.trim())}
+                      onClick={saveMemberFromTab}
+                    >
+                      {savingMemberTab ? "Saving..." : memberTabUseExisting ? "Link member" : "Add member"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="inventory-member-desktop-form">
+              <div className="inventory-card-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-text-secondary)" }}>Add department member</span>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
+                  <input
+                    type="checkbox"
+                    checked={memberTabUseExisting}
+                    onChange={(e) => {
+                      setMemberTabUseExisting(e.target.checked);
+                      setMemberSuccess(null);
+                      setMemberError(null);
+                    }}
+                  />
+                  Existing person
+                </label>
+              </div>
+              <div className="inventory-member-form" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 2fr) auto", gap: "0.6rem", alignItems: "end" }}>
+                <div>
+                  <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Departments</span>
+                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.45rem", background: "var(--color-bg-elevated)", minHeight: 43 }}>
+                    {departments.map((department) => {
+                      const active = memberDepartmentIds.includes(department.id);
+                      return (
+                        <button
+                          key={department.id}
+                          type="button"
+                          onClick={() => {
+                            setMemberDepartmentIds((prev) =>
+                              active
+                                ? prev.filter((id) => id !== department.id)
+                                : [...prev, department.id]
+                            );
+                            setMemberSuccess(null);
+                            setMemberError(null);
+                          }}
+                          style={{
+                            border: active ? "1px solid var(--color-primary-dark)" : "1px solid var(--color-border)",
+                            borderRadius: "var(--radius-full)",
+                            background: active ? "var(--color-primary-dark)" : "transparent",
+                            color: active ? "#fff" : "var(--color-text-muted)",
+                            padding: "0.3rem 0.65rem",
+                            font: "inherit",
+                            fontSize: "0.76rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {department.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {memberTabUseExisting ? (
                   <label style={{ display: "block" }}>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender</span>
-                    <select value={memberTabGender} onChange={(e) => setMemberTabGender(e.target.value as Gender)} style={inputStyle}>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Person</span>
+                    <select
+                      value={memberTabExistingPersonId}
+                      onChange={(e) => {
+                        setMemberTabExistingPersonId(e.target.value);
+                        setMemberSuccess(null);
+                        setMemberError(null);
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="">Select person...</option>
+                      {people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.gender}</option>)}
                     </select>
                   </label>
-                </div>
-              )}
-              <button
-                className="btn-secondary"
-                style={{ padding: "0.65rem 1rem" }}
-                disabled={savingMemberTab || memberDepartmentIds.length === 0 || (memberTabUseExisting ? !memberTabExistingPersonId : !memberTabName.trim())}
-                onClick={saveMemberFromTab}
-              >
-                {savingMemberTab ? "Saving..." : memberTabUseExisting ? "Link" : "Add"}
-              </button>
+                ) : (
+                  <div className="inventory-member-fields" style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: "0.6rem" }}>
+                    <label style={{ display: "block" }}>
+                      <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Name</span>
+                      <input
+                        value={memberTabName}
+                        onChange={(e) => {
+                          setMemberTabName(e.target.value);
+                          setMemberSuccess(null);
+                          setMemberError(null);
+                        }}
+                        placeholder="e.g. Ken"
+                        style={inputStyle}
+                      />
+                    </label>
+                    <label style={{ display: "block" }}>
+                      <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-secondary)", display: "block", marginBottom: "0.35rem" }}>Gender</span>
+                      <select value={memberTabGender} onChange={(e) => setMemberTabGender(e.target.value as Gender)} style={inputStyle}>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+                <button
+                  className="btn-secondary"
+                  style={{ padding: "0.65rem 1rem" }}
+                  disabled={savingMemberTab || memberDepartmentIds.length === 0 || (memberTabUseExisting ? !memberTabExistingPersonId : !memberTabName.trim())}
+                  onClick={saveMemberFromTab}
+                >
+                  {savingMemberTab ? "Saving..." : memberTabUseExisting ? "Link" : "Add"}
+                </button>
+              </div>
             </div>
             {memberSuccess && (
               <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginTop: "0.85rem", color: "var(--color-sage)", fontSize: "0.82rem", fontWeight: 700 }}>
@@ -881,46 +1038,70 @@ export default function InventoryPageClient() {
             {departments.length === 0 ? (
               <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", margin: 0 }}>No departments have been created yet.</p>
             ) : (
-              <div style={{ display: "grid", gap: "1rem" }}>
+              <div className="inventory-roster-list" style={{ display: "grid", gap: "1rem" }}>
                 {departments.map((department) => {
                   const list = membersByDepartment[department.id] ?? [];
+                  const isOpen = openRosterDepartmentIds.includes(department.id);
+                  const panelId = `inventory-roster-${department.id}`;
                   return (
-                    <div key={department.id} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.85rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", marginBottom: list.length > 0 ? "0.65rem" : 0 }}>
-                        <div style={{ fontSize: "0.92rem", fontWeight: 800 }}>{department.name}</div>
-                        <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.25rem 0.6rem" }}>
-                          {list.length} members
+                    <div key={department.id} className="inventory-department-members" style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.85rem" }}>
+                      <button
+                        type="button"
+                        className="inventory-roster-toggle"
+                        aria-expanded={isOpen}
+                        aria-controls={panelId}
+                        onClick={() => {
+                          setOpenRosterDepartmentIds((prev) =>
+                            prev.includes(department.id)
+                              ? prev.filter((id) => id !== department.id)
+                              : [...prev, department.id]
+                          );
+                        }}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", width: "100%", border: 0, background: "transparent", color: "inherit", padding: 0, textAlign: "left", font: "inherit", cursor: "pointer" }}
+                      >
+                        <span className="inventory-roster-department" style={{ fontSize: "0.92rem", fontWeight: 800 }}>{department.name}</span>
+                        <span className="inventory-roster-meta">
+                          <span className="inventory-roster-count" style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.25rem 0.6rem" }}>
+                            {list.length} {list.length === 1 ? "member" : "members"}
+                          </span>
+                          <ChevronDown className="inventory-roster-chevron" size={15} aria-hidden="true" />
                         </span>
-                      </div>
-                      {list.length === 0 ? (
-                        <p style={{ color: "var(--color-text-muted)", fontSize: "0.8rem", margin: 0 }}>No members yet.</p>
-                      ) : (
-                        <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
-                          {list.map((member) => (
-                            <span key={member.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.25rem 0.35rem 0.25rem 0.65rem", background: "var(--color-bg-elevated)" }}>
-                              {member.name} <span style={{ color: "var(--color-text-muted)", textTransform: "capitalize" }}>{member.gender}</span>
-                              <button
-                                type="button"
-                                title={`Remove ${member.name}`}
-                                onClick={() => setMemberDeleteTarget({ departmentId: department.id, departmentName: department.name, member })}
-                                disabled={deletingMemberId === member.id}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: 22,
-                                  height: 22,
-                                  border: "1px solid var(--color-border)",
-                                  borderRadius: "50%",
-                                  background: "transparent",
-                                  color: "var(--color-text-muted)",
-                                  cursor: deletingMemberId === member.id ? "default" : "pointer",
-                                }}
-                              >
-                                {deletingMemberId === member.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                              </button>
-                            </span>
-                          ))}
+                      </button>
+                      {isOpen && (
+                        <div id={panelId} className="inventory-roster-panel">
+                          {list.length === 0 ? (
+                            <p className="inventory-roster-empty" style={{ color: "var(--color-text-muted)", fontSize: "0.8rem", margin: 0 }}>No members yet.</p>
+                          ) : (
+                            <div className="inventory-roster-members" style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+                              {list.map((member) => (
+                                <span key={member.id} className="inventory-roster-member" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "0.25rem 0.35rem 0.25rem 0.65rem", background: "var(--color-bg-elevated)" }}>
+                                  <span className="inventory-roster-name">{member.name}</span>
+                                  <span className="inventory-roster-gender" style={{ color: "var(--color-text-muted)", textTransform: "capitalize" }}>{member.gender}</span>
+                                  <button
+                                    type="button"
+                                    className="inventory-roster-delete"
+                                    title={`Remove ${member.name}`}
+                                    onClick={() => setMemberDeleteTarget({ departmentId: department.id, departmentName: department.name, member })}
+                                    disabled={deletingMemberId === member.id}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      width: 22,
+                                      height: 22,
+                                      border: "1px solid var(--color-border)",
+                                      borderRadius: "50%",
+                                      background: "transparent",
+                                      color: "var(--color-text-muted)",
+                                      cursor: deletingMemberId === member.id ? "default" : "pointer",
+                                    }}
+                                  >
+                                    {deletingMemberId === member.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -936,7 +1117,7 @@ export default function InventoryPageClient() {
         <section style={{ display: "grid", gap: "1rem" }}>
           <div className="card" style={{ padding: "1.25rem" }}>
             <div className="eyebrow eyebrow-accent" style={{ marginBottom: "0.35rem" }}>Issue items</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
+            <div className="inventory-assignment-selects" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
               <Select label="Service" value={selectedScheduleId} onChange={setSelectedScheduleId} options={upcomingSchedules.map((s) => ({ value: s.id, label: `${dateLabel(s.service_date)} - ${s.title}` }))} />
               <Select label="Department" value={selectedDepartmentId} onChange={setSelectedDepartmentId} options={departments.map((d) => ({ value: d.id, label: d.name }))} />
               <Select label="Member" value={selectedPersonId} onChange={setSelectedPersonId} options={members.map((m) => ({ value: m.person_id, label: `${m.name} · ${m.gender}` }))} />
@@ -944,7 +1125,7 @@ export default function InventoryPageClient() {
 
             {selectedDepartmentId && (
               <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.8rem", marginBottom: "1rem", background: "var(--color-bg-elevated)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.65rem" }}>
+                <div className="inventory-card-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.65rem" }}>
                   <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--color-text-secondary)" }}><UserPlus size={14} /> Add member</span>
                   <label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
                     <input type="checkbox" checked={useExistingPerson} onChange={(e) => setUseExistingPerson(e.target.checked)} />
@@ -952,7 +1133,7 @@ export default function InventoryPageClient() {
                   </label>
                 </div>
                 {useExistingPerson ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.6rem" }}>
+                  <div className="inventory-inline-form" style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.6rem" }}>
                     <select value={existingPersonId} onChange={(e) => setExistingPersonId(e.target.value)} style={inputStyle}>
                       <option value="">Select person...</option>
                       {people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.gender}</option>)}
@@ -960,7 +1141,7 @@ export default function InventoryPageClient() {
                     <button className="btn-secondary" style={{ padding: "0.65rem 1rem" }} disabled={savingMember || !existingPersonId} onClick={saveMember}>Link</button>
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 130px auto", gap: "0.6rem" }}>
+                  <div className="inventory-inline-form inventory-new-member-form" style={{ display: "grid", gridTemplateColumns: "1fr 130px auto", gap: "0.6rem" }}>
                     <input value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Name" style={inputStyle} />
                     <select value={newMemberGender} onChange={(e) => setNewMemberGender(e.target.value as Gender)} style={inputStyle}>
                       <option value="male">Male</option>
@@ -985,11 +1166,11 @@ export default function InventoryPageClient() {
               </div>
             )}
 
-            <div className="ward-gallery" style={{ marginBottom: "1rem" }}>
+            <div className="ward-gallery inventory-picker-grid" style={{ marginBottom: "1rem" }}>
               {items.map((item) => {
                 const selected = selectedItems.find((selection) => selection.inventory_item_id === item.id);
                 return (
-                  <button key={item.id} className="card" style={{ padding: "0.75rem", textAlign: "left", cursor: item.available_quantity > 0 ? "pointer" : "not-allowed", borderColor: selected ? "var(--color-primary-dark)" : "var(--color-border)", opacity: item.available_quantity > 0 ? 1 : 0.55 }} disabled={item.available_quantity <= 0} onClick={() => toggleSelection(item.id)}>
+                  <button key={item.id} className="card inventory-picker-card" style={{ padding: "0.75rem", textAlign: "left", cursor: item.available_quantity > 0 ? "pointer" : "not-allowed", borderColor: selected ? "var(--color-primary-dark)" : "var(--color-border)", opacity: item.available_quantity > 0 ? 1 : 0.55 }} disabled={item.available_quantity <= 0} onClick={() => toggleSelection(item.id)}>
                     <div style={{ display: "flex", gap: "0.65rem", alignItems: "center" }}>
                       <div style={{ width: 54, height: 54, borderRadius: "var(--radius-md)", background: "var(--color-bg-elevated)", position: "relative", flexShrink: 0, overflow: "hidden", display: "grid", placeItems: "center" }}>
                         {item.image_url ? <Image src={item.image_url} alt={item.name} fill style={{ objectFit: "contain" }} unoptimized /> : <Package size={20} />}
@@ -1016,7 +1197,7 @@ export default function InventoryPageClient() {
             </div>
 
             {assignmentError && <p style={{ color: "var(--color-error)", fontSize: "0.82rem", margin: "0 0 0.75rem" }}>{assignmentError}</p>}
-            <button className="btn-primary" style={{ padding: "0.75rem 1.2rem" }} disabled={assigning || !selectedScheduleId || !selectedDepartmentId || !selectedPersonId || selectedItems.length === 0} onClick={createAssignment}>
+            <button className="btn-primary inventory-submit" style={{ padding: "0.75rem 1.2rem" }} disabled={assigning || !selectedScheduleId || !selectedDepartmentId || !selectedPersonId || selectedItems.length === 0} onClick={createAssignment}>
               {assigning ? <><Loader2 size={15} className="animate-spin" /> Assigning...</> : <><CheckCircle2 size={15} /> Assign selected items</>}
             </button>
           </div>
@@ -1028,7 +1209,7 @@ export default function InventoryPageClient() {
             ) : (
               <div style={{ display: "grid", gap: "0.65rem" }}>
                 {openLines.map(({ assignment, line }) => (
-                  <div key={line.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "center", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.75rem" }}>
+                  <div key={line.id} className="inventory-return-row" style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "center", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "0.75rem" }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>{line.item?.name ?? "Inventory item"} × {line.quantity}</div>
                       <div style={{ color: "var(--color-text-muted)", fontSize: "0.76rem" }}>
@@ -1036,7 +1217,7 @@ export default function InventoryPageClient() {
                         {line.is_overdue && <span style={{ color: "var(--color-error)", fontWeight: 700 }}> · Overdue</span>}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <div className="inventory-return-actions" style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
                       <ResolveButton label="Returned" onClick={() => resolveLine(line.id, "returned")} />
                       <ResolveButton label="Damaged" onClick={() => resolveLine(line.id, "damaged")} />
                       <ResolveButton label="Missing" onClick={() => resolveLine(line.id, "missing")} />
@@ -1058,7 +1239,7 @@ export default function InventoryPageClient() {
           ) : (
             <div style={{ display: "grid", gap: "0.6rem" }}>
               {history.map((event) => (
-                <div key={event.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: "0.75rem", alignItems: "center", borderBottom: "1px solid var(--color-border)", paddingBottom: "0.6rem" }}>
+                <div key={event.id} className="inventory-history-row" style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: "0.75rem", alignItems: "center", borderBottom: "1px solid var(--color-border)", paddingBottom: "0.6rem" }}>
                   <History size={15} color="var(--color-text-muted)" />
                   <div>
                     <div style={{ fontSize: "0.86rem", fontWeight: 700 }}>{event.item?.name ?? "Inventory item"} · {event.event_type.replace("_", " ")}</div>
@@ -1162,15 +1343,6 @@ export default function InventoryPageClient() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function StockBox({ label, value }: { label: string; value: number }) {
-  return (
-    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "0.45rem", textAlign: "center", background: "var(--color-bg-elevated)" }}>
-      <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>{value}</div>
-      <div style={{ fontSize: "0.62rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
     </div>
   );
 }
