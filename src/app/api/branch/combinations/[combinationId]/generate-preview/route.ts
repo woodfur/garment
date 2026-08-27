@@ -7,7 +7,7 @@ import {
   markPreviewFailed,
   renderAndPersistLook,
 } from "@/lib/preview-render";
-import type { LookColorItem, LookPhotoItem } from "@/lib/look-prompt";
+import { sanitizeLookNotes, type LookColorItem, type LookPhotoItem } from "@/lib/look-prompt";
 import { baseFigureUrlFor } from "@/lib/mannequin-config";
 import { ZONE_LAYER_ORDER } from "@/types/zones";
 import type { Gender } from "@/types/database";
@@ -48,6 +48,13 @@ type PreviewQuery = {
 };
 
 type PreviewDb = { from(table: string): PreviewQuery };
+
+function notesFromCanvasData(canvasData: unknown): string | null {
+  if (!canvasData || typeof canvasData !== "object") return null;
+  const data = canvasData as { mode?: unknown; notes?: unknown };
+  if (data.mode !== "pieces") return null;
+  return sanitizeLookNotes(data.notes);
+}
 
 /** Photo pieces drive layering; colour pieces are described in the prompt instead. */
 function orderedPhotoItems(items: CombinationZoneItem[]): LookPhotoItem[] {
@@ -101,9 +108,9 @@ export async function POST(
 
   const { data: combo } = await db
     .from("combinations")
-    .select("id, branch_id, preview_status")
+    .select("id, branch_id, preview_status, canvas_data")
     .eq("id", combinationId)
-    .single() as { data: { id: string; branch_id: string; preview_status: string } | null };
+    .single() as { data: { id: string; branch_id: string; preview_status: string; canvas_data: unknown } | null };
 
   if (!combo || combo.branch_id !== auth.branchId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -176,7 +183,7 @@ export async function POST(
   // freezing the instance before it settles, and is a documented no-op off-platform (so
   // `npm run dev` behaves the same). The catch is required either way — an unhandled
   // rejection would otherwise take down the dev server.
-  const render = renderAll(combinationId, genders, typedZoneItems).catch((error) => {
+  const render = renderAll(combinationId, genders, typedZoneItems, notesFromCanvasData(combo.canvas_data)).catch((error) => {
     console.error(`[generate-preview] Background render crashed for ${combinationId}:`, error);
   });
   waitUntil(render);
@@ -191,7 +198,8 @@ export async function POST(
 async function renderAll(
   combinationId: string,
   genders: Gender[],
-  zoneItems: CombinationZoneItem[]
+  zoneItems: CombinationZoneItem[],
+  notes: string | null
 ): Promise<void> {
   const results = await Promise.allSettled(
     genders.map((gender) => {
@@ -204,6 +212,7 @@ async function renderAll(
         colorItems: colorItemsFor(genderItems),
         photoItems: orderedPhotoItems(genderItems),
         baseFigureUrl: baseFigureUrlFor(gender, isTwoPiece),
+        notes,
       });
     })
   );

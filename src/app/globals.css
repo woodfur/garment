@@ -118,10 +118,13 @@ body::before {
 @keyframes atblink { 50% { opacity: 0.3; } }
 
 /* Mobile redesign: swap desktop sidebar/topbar for the atelier bottom tab bar ≤768px */
+.at-mobile-compose-fab { display: none; }
+
 @media (max-width: 768px) {
   .branch-sidebar,
   .branch-topbar { display: none !important; }
   .at-mobile-tabbar { display: flex !important; }
+  .at-mobile-compose-fab { display: flex; }
 
   /* Whole mobile canvas sits on bone, in the atelier UI font.
      The desktop topbar is hidden on mobile, so <main> must supply its own
@@ -1260,4 +1263,320 @@ h1, h2, h3, h4, h5, h6 {
   .dash-sec h2 { font-size: 1.4rem; }
   .dash-gallery { grid-template-columns: 1fr 1fr; gap: 0.875rem; }
   .g-lg, .g-md, .g-sm { grid-column: span 1; }
+}
+
+/* ─── Inventory: mobile stock desk ─── */
+.inventory-page .inventory-tabs { max-width: 100%; }
+.inventory-member-mobile-flow { display: none; }
+.inventory-roster-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+.inventory-roster-chevron {
+  color: var(--color-text-muted);
+  transition: transform 0.16s ease;
+}
+.inventory-roster-toggle[aria-expanded="true"] .inventory-roster-chevron {
+  transform: rotate(180deg);
+}
+.inventory-roster-panel {
+  margin-top: 0.65rem;
+}
+
+@media (max-width: 768px) {
+  .inventory-page {
+    overflow-x: hidden;
+    padding-bottom: 5.5rem;
+  }
+
+  .inventory-page .dash-mast {
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .inventory-page .dash-mast .issue {
+    max-width: 13rem;
+    line-height: 1.45;
+    letter-spacing: 0.09em;
+  }
+
+  .inventory-page .inventory-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.7rem;
+    flex-wrap: nowrap;
+    margin-bottom: 1rem;
+  }
+
+  .inventory-page .inventory-tabs {
+    width: 100%;
+    margin-bottom: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: var(--radius-lg);
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .inventory-page .inventory-tabs::-webkit-scrollbar { display: none; }
+
+  .inventory-page .inventory-tabs button {
+    flex: 0 0 auto;
+    padding: 0.48rem 0.88rem;
+    white-space: nowrap;
+  }
+
+  .inventory-page .inventory-add-item,
+  .inventory-page .inventory-submit {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .inventory-page .inventory-items-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+  }
+
+  .inventory-page .inventory-item-media { height: 122px !important; }
+  .inventory-page .inventory-item-body { padding: 0.65rem !important; }
+
+  .inventory-page .inventory-item-card .btn-back {
+    min-width: 0;
+    justify-content: center;
+    padding: 0.42rem 0.5rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .inventory-page .inventory-category-form,
+  .inventory-page .inventory-member-form,
+  .inventory-page .inventory-member-fields,
+  .inventory-page .inventory-assignment-selects,
+  .inventory-page .inventory-inline-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  .inventory-page .inventory-list-row {
+    grid-template-columns: 1fr !important;
+    align-items: flex-start !important;
+  }
+
+  .inventory-page .inventory-list-row > span {
+    justify-self: flex-start;
+  }
+
+  .inventory-page .inventory-card-head {
+    align-items: flex-start !important;
+  }
+
+  .inventory-page .inventory-department-members {
+    padding: 0.85rem 0 !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    border-radius: 0 !important;
+  }
+
+  .inventory-page .inventory-department-members:last-child {
+    border-bottom: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .inventory-page .inventory-roster-list {
+    gap: 0 !important;
+  }
+
+  .inventory-page .inventory-roster-department {
+    font-size: 0.95rem !important;
+  }
+
+  .inventory-page .inventory-roster-count {
+    border: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    color: var(--color-text-muted) !important;
+    font-size: 0.72rem !important;
+  }
+
+  .inventory-page .inventory-roster-panel {
+    margin-top: 0.55rem;
+  }
+
+  .inventory-page .inventory-roster-empty {
+    padding: 0.35rem 0 0 !important;
+  }
+
+  .inventory-page .inventory-roster-members {
+    display: grid !important;
+    gap: 0.35rem !important;
+  }
+
+  .inventory-page .inventory-roster-member {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center !important;
+    width: 100%;
+    gap: 0.45rem !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0.42rem 0 !important;
+    background: transparent !important;
+  }
+
+  .inventory-page .inventory-roster-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-primary);
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inventory-page .inventory-roster-gender {
+    font-size: 0.74rem;
+  }
+
+  .inventory-page .inventory-roster-delete {
+    width: 28px !important;
+    height: 28px !important;
+    border: 0 !important;
+    background: var(--color-bg-elevated) !important;
+  }
+
+  .inventory-page .inventory-member-desktop-form { display: none; }
+  .inventory-page .inventory-member-mobile-flow {
+    display: block;
+    padding-top: 0.2rem;
+  }
+
+  .inventory-page .inventory-member-mobile-flow h3 {
+    margin: 0 0 1rem;
+    color: var(--color-text-primary);
+    font-size: 1.2rem;
+    font-family: var(--font-heading);
+    font-weight: 500;
+  }
+
+  .inventory-page .inventory-flow-step {
+    margin-bottom: 0.6rem;
+    color: var(--color-text-faint);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .inventory-page .inventory-flow-options,
+  .inventory-page .inventory-flow-chips {
+    display: grid;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+  }
+
+  .inventory-page .inventory-flow-options button,
+  .inventory-page .inventory-flow-chips button {
+    width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-secondary);
+    padding: 0.9rem 1rem;
+    font: inherit;
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .inventory-page .inventory-flow-options button.on,
+  .inventory-page .inventory-flow-chips button.on {
+    border-color: var(--color-primary-dark);
+    background: var(--color-primary-dark);
+    color: #fff;
+  }
+
+  .inventory-page .inventory-flow-primary,
+  .inventory-page .inventory-flow-nav .btn-primary,
+  .inventory-page .inventory-flow-nav .btn-back {
+    width: 100%;
+    justify-content: center;
+    padding: 0.78rem 1rem !important;
+  }
+
+  .inventory-page .inventory-flow-nav {
+    display: grid;
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 0.65rem;
+    margin-top: 1rem;
+  }
+
+  .inventory-page .inventory-flow-summary {
+    display: grid;
+    gap: 0.35rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-elevated);
+    padding: 0.9rem;
+  }
+
+  .inventory-page .inventory-flow-summary span {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .inventory-page .inventory-flow-summary b {
+    margin-bottom: 0.45rem;
+    color: var(--color-text-primary);
+    font-size: 0.92rem;
+  }
+
+  .inventory-page .inventory-picker-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.65rem !important;
+  }
+
+  .inventory-page .inventory-picker-card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .inventory-page .inventory-return-row {
+    grid-template-columns: 1fr !important;
+    align-items: flex-start !important;
+  }
+
+  .inventory-page .inventory-return-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch !important;
+    width: 100%;
+  }
+
+  .inventory-page .inventory-return-actions button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .inventory-page .inventory-history-row {
+    grid-template-columns: auto 1fr !important;
+    align-items: flex-start !important;
+  }
+
+  .inventory-page .inventory-history-row > div:last-child {
+    grid-column: 2;
+    text-align: left !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .inventory-page .dash-mast {
+    flex-direction: column;
+  }
+
+  .inventory-page .dash-mast .issue {
+    max-width: none;
+    text-align: left;
+  }
 }

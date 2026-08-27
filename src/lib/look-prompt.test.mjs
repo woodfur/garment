@@ -126,6 +126,18 @@ test("a male top is not pinned to short sleeves, so it can sit under a suit jack
   assert.match(prompt, /tailored church uniform jacket or blazer/);
 });
 
+test("uploaded-piece looks include optional styling direction", () => {
+  const { prompt } = planLook({
+    gender: "male",
+    colorItems: [],
+    photoItems: [photo("top", "White linen shirt")],
+    hasFigureReference: true,
+    notes: "relaxed Wednesday styling, untucked shirt, clean loafers",
+  });
+
+  assert.match(prompt, /additional styling direction: relaxed Wednesday styling, untucked shirt, clean loafers/);
+});
+
 test("a male full-body piece renders as a suit, a female one as a dress", () => {
   const male = planLook({
     gender: "male",
