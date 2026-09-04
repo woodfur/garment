@@ -36,6 +36,8 @@ export type LookPlan = {
 
 /** Same free-text cap as palette looks, used for uploaded-piece render direction. */
 export const MAX_LOOK_NOTES = MAX_PALETTE_NOTES;
+export const UPLOADED_FOOTWEAR_REQUIRED_MESSAGE =
+  "Select an uploaded footwear piece before saving or generating this look.";
 
 /** Reference images are addressed by ordinal in the prompt, so the words must be stable. */
 const ORDINALS = [
@@ -71,7 +73,7 @@ function garmentClause(gender: Gender, category: string, descriptor: string): st
   if (category === "bottom") return `${descriptor} tailored church uniform trousers`;
   if (category === "full_body") return `${descriptor} coordinated modest church uniform suit or matching two-piece outfit`;
   if (category === "outer") return `${descriptor} tailored church uniform jacket or blazer`;
-  if (category === "footwear") return `${descriptor} glossy black closed-toe dress shoes`;
+  if (category === "footwear") return `${descriptor} polished closed-toe dress shoes`;
   if (category === "head") return `${descriptor} modest church hat`;
   return `${descriptor} modest church uniform accessory`;
 }
@@ -80,6 +82,10 @@ function garmentClause(gender: Gender, category: string, descriptor: string): st
 export function zoneToCategory(zone: string): string {
   if (zone.startsWith("accessory_")) return "accessory";
   return zone;
+}
+
+export function hasUploadedFootwearPhoto(items: Array<{ zone: string; imageUrl: string | null }>): boolean {
+  return items.some((item) => zoneToCategory(item.zone) === "footwear" && !!item.imageUrl);
 }
 
 export function sanitizeLookNotes(raw: unknown): string | null {
@@ -104,6 +110,7 @@ export function planLook({
   photoItems,
   hasFigureReference,
   notes = null,
+  requireUploadedFootwear = false,
 }: {
   gender: Gender;
   colorItems: LookColorItem[];
@@ -111,9 +118,14 @@ export function planLook({
   hasFigureReference: boolean;
   /** Optional free-text styling direction from the branch leader. */
   notes?: string | null;
+  /** Uploaded-piece looks must include a real shoe photo so footwear never falls back. */
+  requireUploadedFootwear?: boolean;
 }): LookPlan {
   if (colorItems.length === 0 && photoItems.length === 0) {
     throw new Error("planLook requires at least one colour or photo item");
+  }
+  if (requireUploadedFootwear && !hasUploadedFootwearPhoto(photoItems)) {
+    throw new Error(UPLOADED_FOOTWEAR_REQUIRED_MESSAGE);
   }
 
   const slots: ReferenceSlot[] = [];
@@ -156,6 +168,12 @@ export function planLook({
       `the ${ordinal(index)} reference image is a photograph of the real garment "${slot.item.uniformName}", reproduce its exact fabric color, pattern, and detailing as ${clause} worn by the model`
     );
   });
+
+  if (photoItems.some((item) => zoneToCategory(item.zone) === "footwear")) {
+    lines.push(
+      "STRICT UPLOADED FOOTWEAR LOCK: shoes must match the footwear reference image exactly, including shoe color, material, finish, shape, and detailing; do not substitute black shoes unless the uploaded footwear is black"
+    );
+  }
 
   const categories = new Set([
     ...colorItems.map((item) => zoneToCategory(item.zone)),
