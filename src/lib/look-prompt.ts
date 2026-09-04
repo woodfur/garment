@@ -71,7 +71,7 @@ function garmentClause(gender: Gender, category: string, descriptor: string): st
   if (category === "bottom") return `${descriptor} tailored church uniform trousers`;
   if (category === "full_body") return `${descriptor} coordinated modest church uniform suit or matching two-piece outfit`;
   if (category === "outer") return `${descriptor} tailored church uniform jacket or blazer`;
-  if (category === "footwear") return `${descriptor} glossy black closed-toe dress shoes`;
+  if (category === "footwear") return `${descriptor} polished closed-toe dress shoes`;
   if (category === "head") return `${descriptor} modest church hat`;
   return `${descriptor} modest church uniform accessory`;
 }
@@ -156,6 +156,12 @@ export function planLook({
       `the ${ordinal(index)} reference image is a photograph of the real garment "${slot.item.uniformName}", reproduce its exact fabric color, pattern, and detailing as ${clause} worn by the model`
     );
   });
+
+  if (photoItems.some((item) => zoneToCategory(item.zone) === "footwear")) {
+    lines.push(
+      "STRICT UPLOADED FOOTWEAR LOCK: shoes must match the footwear reference image exactly, including shoe color, material, finish, shape, and detailing; do not substitute black shoes unless the uploaded footwear is black"
+    );
+  }
 
   const categories = new Set([
     ...colorItems.map((item) => zoneToCategory(item.zone)),

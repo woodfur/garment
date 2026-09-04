@@ -48,6 +48,20 @@ test("prompt ordinals match each garment's actual slot position", () => {
   assert.match(prompt, /the fourth reference image is a photograph of the real garment "Brown shoes"/);
 });
 
+test("uploaded male footwear is color-locked to the shoe photo, not a black default", () => {
+  const { prompt } = planLook({
+    gender: "male",
+    colorItems: [],
+    photoItems: [photo("footwear", "Brown leather shoes")],
+    hasFigureReference: true,
+  });
+
+  assert.match(prompt, /Brown leather shoes/);
+  assert.match(prompt, /STRICT UPLOADED FOOTWEAR LOCK/);
+  assert.match(prompt, /must match the footwear reference image exactly/);
+  assert.doesNotMatch(prompt, /glossy black closed-toe dress shoes/);
+});
+
 test("ordinals shift when there is no base figure", () => {
   const { prompt } = planLook({
     gender: "male",
