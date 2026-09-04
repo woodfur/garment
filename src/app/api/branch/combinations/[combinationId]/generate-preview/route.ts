@@ -7,7 +7,13 @@ import {
   markPreviewFailed,
   renderAndPersistLook,
 } from "@/lib/preview-render";
-import { sanitizeLookNotes, type LookColorItem, type LookPhotoItem } from "@/lib/look-prompt";
+import {
+  UPLOADED_FOOTWEAR_REQUIRED_MESSAGE,
+  hasUploadedFootwearPhoto,
+  sanitizeLookNotes,
+  type LookColorItem,
+  type LookPhotoItem,
+} from "@/lib/look-prompt";
 import { baseFigureUrlFor } from "@/lib/mannequin-config";
 import { ZONE_LAYER_ORDER } from "@/types/zones";
 import type { Gender } from "@/types/database";
@@ -54,6 +60,11 @@ function notesFromCanvasData(canvasData: unknown): string | null {
   const data = canvasData as { mode?: unknown; notes?: unknown };
   if (data.mode !== "pieces") return null;
   return sanitizeLookNotes(data.notes);
+}
+
+function isPiecesMode(canvasData: unknown): boolean {
+  if (!canvasData || typeof canvasData !== "object") return false;
+  return (canvasData as { mode?: unknown }).mode === "pieces";
 }
 
 /** Photo pieces drive layering; colour pieces are described in the prompt instead. */
@@ -147,6 +158,7 @@ export async function POST(
   }
 
   const warnings: string[] = [];
+  const requireUploadedFootwear = isPiecesMode(combo.canvas_data);
   for (const gender of genders) {
     const genderItems = typedZoneItems.filter((item) => item.gender === gender);
     const coreItems = genderItems.filter((item) => !item.zone.startsWith("accessory_"));
@@ -155,6 +167,9 @@ export async function POST(
         { error: `No core zone items for ${gender} outfit. Assign at least one item (dress, top, bottom, footwear, head, or outer).` },
         { status: 400 }
       );
+    }
+    if (requireUploadedFootwear && !hasUploadedFootwearPhoto(orderedPhotoItems(genderItems))) {
+      return NextResponse.json({ error: UPLOADED_FOOTWEAR_REQUIRED_MESSAGE }, { status: 400 });
     }
 
     const missingBg = genderItems.filter((item) => {
@@ -183,7 +198,13 @@ export async function POST(
   // freezing the instance before it settles, and is a documented no-op off-platform (so
   // `npm run dev` behaves the same). The catch is required either way — an unhandled
   // rejection would otherwise take down the dev server.
-  const render = renderAll(combinationId, genders, typedZoneItems, notesFromCanvasData(combo.canvas_data)).catch((error) => {
+  const render = renderAll(
+    combinationId,
+    genders,
+    typedZoneItems,
+    notesFromCanvasData(combo.canvas_data),
+    requireUploadedFootwear
+  ).catch((error) => {
     console.error(`[generate-preview] Background render crashed for ${combinationId}:`, error);
   });
   waitUntil(render);
@@ -199,7 +220,8 @@ async function renderAll(
   combinationId: string,
   genders: Gender[],
   zoneItems: CombinationZoneItem[],
-  notes: string | null
+  notes: string | null,
+  requireUploadedFootwear: boolean
 ): Promise<void> {
   const results = await Promise.allSettled(
     genders.map((gender) => {
@@ -213,6 +235,7 @@ async function renderAll(
         photoItems: orderedPhotoItems(genderItems),
         baseFigureUrl: baseFigureUrlFor(gender, isTwoPiece),
         notes,
+        requireUploadedFootwear,
       });
     })
   );

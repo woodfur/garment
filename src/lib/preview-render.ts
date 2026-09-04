@@ -41,6 +41,8 @@ export type RenderLookInput = {
   baseFigureUrl: string | null;
   /** Optional free-text styling direction from the branch leader. */
   notes?: string | null;
+  /** Uploaded-piece looks must include a footwear photo before rendering. */
+  requireUploadedFootwear?: boolean;
 };
 
 export async function renderLookImage({
@@ -49,6 +51,7 @@ export async function renderLookImage({
   photoItems,
   baseFigureUrl,
   notes = null,
+  requireUploadedFootwear = false,
 }: RenderLookInput): Promise<Buffer> {
   const { slots, prompt } = planLook({
     gender,
@@ -56,6 +59,7 @@ export async function renderLookImage({
     photoItems,
     hasFigureReference: !!baseFigureUrl,
     notes,
+    requireUploadedFootwear,
   });
 
   if (slots.length > MAX_REFERENCE_IMAGES) {

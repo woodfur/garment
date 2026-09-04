@@ -4,7 +4,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { DepartmentChips } from "./PieceScopeFields";
-import { MAX_LOOK_NOTES } from "@/lib/look-prompt";
+import {
+  MAX_LOOK_NOTES,
+  UPLOADED_FOOTWEAR_REQUIRED_MESSAGE,
+  hasUploadedFootwearPhoto,
+} from "@/lib/look-prompt";
 import { ZONE_CATEGORIES, STANDARD_ZONES, ACCESSORY_ZONES, zoneLabel } from "@/types/zones";
 import type { BodyZone, Gender } from "@/types/database";
 import type { Uniform, Department, InventoryItem, CombinationZoneItemWithSource } from "@/types/database";
@@ -201,6 +205,10 @@ export default function CombinationBuilderClient() {
   // ---------------------------------------------------------------------------
   const saveCombination = async (generatePreview: boolean) => {
     if (!name.trim() || !selectedDept) return;
+    if (!hasRequiredFootwear) {
+      setError(UPLOADED_FOOTWEAR_REQUIRED_MESSAGE);
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -215,7 +223,7 @@ export default function CombinationBuilderClient() {
           body: JSON.stringify({
             name: name.trim(),
             description: description.trim() || null,
-            canvas_data: trimmedNotes ? { mode: "pieces", notes: trimmedNotes } : null,
+            canvas_data: { mode: "pieces", notes: trimmedNotes || null },
             department_ids: shareScope.departmentIds,
             all_departments: shareScope.allDepartments,
             gender: activeGender,
@@ -301,8 +309,12 @@ export default function CombinationBuilderClient() {
     ? [...STANDARD_ZONES, ...ACCESSORY_ZONES]
     : STANDARD_ZONES;
 
-  const totalAssigned = Object.keys(outfit[activeGender]).length;
-  const canProceed = totalAssigned > 0;
+  const activeOutfitEntries = Object.entries(outfit[activeGender]) as [BodyZone, CombinationZoneItemWithSource][];
+  const totalAssigned = activeOutfitEntries.length;
+  const hasRequiredFootwear = hasUploadedFootwearPhoto(
+    activeOutfitEntries.map(([zone, item]) => ({ zone, imageUrl: pieceImage(item) }))
+  );
+  const canProceed = totalAssigned > 0 && hasRequiredFootwear;
 
   return (
     <div className="builder-root">
@@ -537,6 +549,12 @@ export default function CombinationBuilderClient() {
             )}
           </div>
 
+          {genderLocked && totalAssigned > 0 && !hasRequiredFootwear && (
+            <div className="builder-warning">
+              {UPLOADED_FOOTWEAR_REQUIRED_MESSAGE}
+            </div>
+          )}
+
           <div className="builder-nav">
             <button className="btn-back" onClick={() => setStep(1)}>← Back</button>
             <button
@@ -544,7 +562,9 @@ export default function CombinationBuilderClient() {
               disabled={!genderLocked || !canProceed}
               onClick={() => setStep(3)}
             >
-              Continue → ({totalAssigned} placed)
+              {genderLocked && totalAssigned > 0 && !hasRequiredFootwear
+                ? "Select footwear to continue"
+                : `Continue → (${totalAssigned} placed)`}
             </button>
           </div>
         </div>
@@ -582,6 +602,12 @@ export default function CombinationBuilderClient() {
           )}
 
           {error && <div className="builder-error">{error}</div>}
+
+          {!hasRequiredFootwear && (
+            <div className="builder-warning">
+              {UPLOADED_FOOTWEAR_REQUIRED_MESSAGE}
+            </div>
+          )}
 
           {warnings.length > 0 && (
             <div className="builder-warning">
@@ -640,14 +666,14 @@ export default function CombinationBuilderClient() {
             <button className="btn-back" onClick={() => setStep(2)}>← Back</button>
             <button
               className="btn-ghost"
-              disabled={!name.trim() || saving}
+              disabled={!name.trim() || saving || !hasRequiredFootwear}
               onClick={() => saveCombination(false)}
             >
               {saving ? "Saving…" : "Save without preview"}
             </button>
             <button
               className="btn-primary"
-              disabled={!name.trim() || saving || generating}
+              disabled={!name.trim() || saving || generating || !hasRequiredFootwear}
               onClick={() => saveCombination(true)}
             >
               {saving || generating ? "Saving & generating…" : "💫 Save & generate AI preview"}

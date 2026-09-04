@@ -36,6 +36,8 @@ export type LookPlan = {
 
 /** Same free-text cap as palette looks, used for uploaded-piece render direction. */
 export const MAX_LOOK_NOTES = MAX_PALETTE_NOTES;
+export const UPLOADED_FOOTWEAR_REQUIRED_MESSAGE =
+  "Select an uploaded footwear piece before saving or generating this look.";
 
 /** Reference images are addressed by ordinal in the prompt, so the words must be stable. */
 const ORDINALS = [
@@ -82,6 +84,10 @@ export function zoneToCategory(zone: string): string {
   return zone;
 }
 
+export function hasUploadedFootwearPhoto(items: Array<{ zone: string; imageUrl: string | null }>): boolean {
+  return items.some((item) => zoneToCategory(item.zone) === "footwear" && !!item.imageUrl);
+}
+
 export function sanitizeLookNotes(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, MAX_LOOK_NOTES);
@@ -104,6 +110,7 @@ export function planLook({
   photoItems,
   hasFigureReference,
   notes = null,
+  requireUploadedFootwear = false,
 }: {
   gender: Gender;
   colorItems: LookColorItem[];
@@ -111,9 +118,14 @@ export function planLook({
   hasFigureReference: boolean;
   /** Optional free-text styling direction from the branch leader. */
   notes?: string | null;
+  /** Uploaded-piece looks must include a real shoe photo so footwear never falls back. */
+  requireUploadedFootwear?: boolean;
 }): LookPlan {
   if (colorItems.length === 0 && photoItems.length === 0) {
     throw new Error("planLook requires at least one colour or photo item");
+  }
+  if (requireUploadedFootwear && !hasUploadedFootwearPhoto(photoItems)) {
+    throw new Error(UPLOADED_FOOTWEAR_REQUIRED_MESSAGE);
   }
 
   const slots: ReferenceSlot[] = [];

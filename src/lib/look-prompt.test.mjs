@@ -54,12 +54,26 @@ test("uploaded male footwear is color-locked to the shoe photo, not a black defa
     colorItems: [],
     photoItems: [photo("footwear", "Brown leather shoes")],
     hasFigureReference: true,
+    requireUploadedFootwear: true,
   });
 
   assert.match(prompt, /Brown leather shoes/);
   assert.match(prompt, /STRICT UPLOADED FOOTWEAR LOCK/);
   assert.match(prompt, /must match the footwear reference image exactly/);
   assert.doesNotMatch(prompt, /glossy black closed-toe dress shoes/);
+});
+
+test("uploaded-piece rendering rejects looks without an uploaded footwear photo", () => {
+  assert.throws(
+    () => planLook({
+      gender: "female",
+      colorItems: [color("top", "#FFFFFF")],
+      photoItems: [photo("bottom", "Navy skirt")],
+      hasFigureReference: true,
+      requireUploadedFootwear: true,
+    }),
+    /Select an uploaded footwear piece/
+  );
 });
 
 test("ordinals shift when there is no base figure", () => {
