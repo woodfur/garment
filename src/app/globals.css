@@ -1225,13 +1225,112 @@ h1, h2, h3, h4, h5, h6 {
 .ward-toggle button { border: none; background: transparent; font: inherit; font-size: 0.82rem; font-weight: 600; color: var(--color-text-muted); padding: 0.45rem 1.15rem; border-radius: var(--radius-full); cursor: pointer; transition: background 0.18s, color 0.18s; }
 .ward-toggle button.on { background: var(--color-primary-dark); color: #fff; }
 .ward-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1.25rem; }
-.ward-plate { position: relative; aspect-ratio: 3/4; }
-.ward-plate-actions { position: absolute; top: 0.7rem; right: 0.7rem; display: flex; gap: 0.3rem; z-index: 3; opacity: 0; transition: opacity 0.15s; }
-.ward-plate:hover .ward-plate-actions { opacity: 1; }
-.ward-plate-actions button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--color-border); background: rgba(251,249,244,0.92); backdrop-filter: blur(6px); display: grid; place-items: center; color: var(--color-text-secondary); cursor: pointer; }
-.ward-plate-actions button:hover { color: var(--color-primary-dark); }
-.ward-plate .pl-initial { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-heading); font-style: italic; font-size: 2.5rem; color: var(--color-text-faint); }
 @media (max-width: 560px) { .ward-gallery { grid-template-columns: 1fr 1fr; gap: 0.875rem; } }
+
+/* ─── The rack: looks hang on a rail and overlap the way clothes do ───
+   Cards deliberately sit under one another (negative margin). Hovering — or
+   tabbing to — a hanger lifts it and opens the gap it needs, so the occlusion
+   is always resolvable by both pointer and keyboard. Below 768px the whole
+   conceit is dropped for a two-column grid: overlap needs hover to undo, and
+   touch has none. Same markup either way, so nothing switches on viewport
+   in JS. */
+.ward-rackwrap {
+  position: relative;
+  background: linear-gradient(180deg, #EFEAE0, var(--color-bg-board));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0 1.5rem 1.75rem;
+}
+.ward-rackhead { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 1rem 0 0; }
+.ward-rackhead .hint { font-size: 0.68rem; color: var(--color-text-faint); }
+.ward-rail {
+  height: 9px;
+  background: linear-gradient(180deg, #C6BCA6, #8E8474);
+  border-radius: var(--radius-full);
+  box-shadow: 0 3px 8px rgba(40, 30, 25, 0.22);
+  margin: 0 -0.75rem;
+  position: relative; top: 1.6rem; z-index: 1;
+}
+.ward-rack {
+  display: flex;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+}
+.ward-hang {
+  flex: 0 0 152px;
+  margin-right: -36px;
+  padding-top: 0.5rem;
+  position: relative;
+  z-index: 1;
+  scroll-snap-align: start;
+  transition: transform 0.3s, margin-right 0.3s;
+}
+.ward-hang:last-child { margin-right: 0; }
+.ward-hang:hover,
+.ward-hang:focus-within { transform: translateY(-10px); margin-right: 12px; z-index: 5; }
+.ward-hook {
+  display: block; width: 26px; height: 26px;
+  border: 2.5px solid #8E8474; border-bottom: none;
+  border-radius: 50% 50% 0 0 / 70% 70% 0 0;
+  margin: 0 auto -3px; position: relative; z-index: 2;
+}
+.ward-hang-card {
+  display: block; text-decoration: none; color: inherit; position: relative;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  /* Square at the shoulder where the hanger meets it, rounded at the hem. */
+  border-radius: 4px 4px var(--radius-lg) var(--radius-lg);
+  box-shadow: 0 10px 22px -14px rgba(40, 30, 25, 0.55);
+  overflow: hidden;
+  transition: box-shadow 0.25s;
+}
+.ward-hang:hover .ward-hang-card,
+.ward-hang:focus-within .ward-hang-card { box-shadow: 0 22px 40px -18px rgba(40, 30, 25, 0.6); }
+.ward-hang-media {
+  position: relative; overflow: hidden; aspect-ratio: 2/3;
+  background: linear-gradient(180deg, #F7F4ED, #E1DACB);
+}
+/* Renders are 2:3, which is this frame exactly — but a legacy square preview
+   still has to crop from the top so the head survives. */
+.ward-hang-media img,
+.ward-hang-media video { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.ward-hang-media .pl-initial {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--font-heading); font-style: italic; font-size: 2.2rem; color: var(--color-text-faint);
+}
+.ward-hang-tag { padding: 0.55rem 0.6rem 0.7rem; border-top: 1px solid var(--color-border-subtle); }
+.ward-hang-tag .t {
+  font-family: var(--font-heading); font-size: 0.85rem; font-weight: 500; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ward-hang-tag .d {
+  font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-faint);
+  margin-top: 0.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ward-hang-actions { position: absolute; top: 0.45rem; right: 0.45rem; display: flex; gap: 0.25rem; z-index: 3; opacity: 0; transition: opacity 0.15s; }
+.ward-hang:hover .ward-hang-actions,
+.ward-hang:focus-within .ward-hang-actions { opacity: 1; }
+.ward-hang-actions button {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--color-border); background: rgba(251, 249, 244, 0.94); backdrop-filter: blur(6px);
+  display: grid; place-items: center; color: var(--color-text-secondary); cursor: pointer;
+}
+.ward-hang-actions button:hover { color: var(--color-primary-dark); }
+
+@media (max-width: 768px) {
+  .ward-rackwrap { background: none; border: none; padding: 0; }
+  .ward-rackhead, .ward-rail, .ward-hook { display: none; }
+  .ward-rack { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; overflow: visible; }
+  .ward-hang { margin-right: 0; padding-top: 0; }
+  .ward-hang:hover, .ward-hang:focus-within { transform: none; margin-right: 0; }
+  .ward-hang-card { border-radius: var(--radius-lg); }
+  .ward-hang-actions { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ward-hang, .ward-hang-card { transition: none; }
+}
 
 /* ─── Dashboard: tablet/mobile ─── */
 @media (max-width: 860px) {

@@ -87,9 +87,9 @@ function StatusBadge({ status }: { status: PreviewStatus }) {
   );
 }
 
-// ─── A single combined look (plate with live preview) ───────────────────────────
-function LookPlate({ combo, idx, onDelete, onPreviewUpdate, onAssign }: {
-  combo: Combination; idx: number;
+// ─── A single look, hanging on the rack (live preview) ─────────────────────────
+function LookHanger({ combo, onDelete, onPreviewUpdate, onAssign }: {
+  combo: Combination;
   onDelete: (id: string) => void;
   onPreviewUpdate: (id: string, s: PreviewStatusResponse) => void;
   onAssign: (combo: Combination) => void;
@@ -149,45 +149,50 @@ function LookPlate({ combo, idx, onDelete, onPreviewUpdate, onAssign }: {
   const image = combo.preview_url ?? combo.male_composite_url ?? combo.female_composite_url;
   const gif = combo.male_gif_url ?? combo.female_gif_url;
   const ready = combo.preview_status === "ready" && (image || gif);
-  const roman = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"][idx] ?? String(idx + 1);
 
   return (
-    <Link href={`/branch/combinations/${combo.id}`} className="plate-look ward-plate">
-      <span className="no">{roman}</span>
-
-      <div className="ward-plate-actions">
-        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAssign(combo); }} disabled={busy} title="Assign to service">
-          <CalendarPlus size={13} />
-        </button>
-        {(combo.preview_status === "none" || combo.preview_status === "failed") && (
-          <button onClick={(e) => handleGenerate(e, combo.preview_status === "failed")} disabled={busy} title="Generate AI preview">
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+    /* The hanger is the hover/focus target, not the card: it owns the lift and the
+       gap it opens in the rack, so a keyboard tab through the looks pulls the
+       focused card clear of the ones overlapping it. */
+    <div className="ward-hang" role="listitem">
+      <span className="ward-hook" aria-hidden="true" />
+      <Link href={`/branch/combinations/${combo.id}`} className="ward-hang-card">
+        <div className="ward-hang-actions">
+          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAssign(combo); }} disabled={busy} title="Assign to service">
+            <CalendarPlus size={13} />
           </button>
-        )}
-        {combo.preview_status === "ready" && (
-          <button onClick={(e) => handleGenerate(e, true)} disabled={busy} title="Regenerate"><RefreshCw size={13} /></button>
-        )}
-        <button onClick={handleDelete} disabled={busy} title="Delete"><Trash2 size={13} /></button>
-      </div>
+          {(combo.preview_status === "none" || combo.preview_status === "failed") && (
+            <button onClick={(e) => handleGenerate(e, combo.preview_status === "failed")} disabled={busy} title="Generate AI preview">
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            </button>
+          )}
+          {combo.preview_status === "ready" && (
+            <button onClick={(e) => handleGenerate(e, true)} disabled={busy} title="Regenerate"><RefreshCw size={13} /></button>
+          )}
+          <button onClick={handleDelete} disabled={busy} title="Delete"><Trash2 size={13} /></button>
+        </div>
 
-      {ready && image ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="pl-media" src={image} alt={combo.name} />
-      ) : ready && gif ? (
-        <video className="pl-media" src={gif!} autoPlay loop muted playsInline />
-      ) : combo.preview_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="pl-media" src={combo.preview_url} alt="" />
-      ) : (
-        <span className="pl-initial">{combo.name.charAt(0)}</span>
-      )}
+        <div className="ward-hang-media">
+          {ready && image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt={combo.name} />
+          ) : ready && gif ? (
+            <video src={gif!} autoPlay loop muted playsInline />
+          ) : combo.preview_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={combo.preview_url} alt="" />
+          ) : (
+            <span className="pl-initial">{combo.name.charAt(0)}</span>
+          )}
+        </div>
 
-      <div className="cap">
-        <StatusBadge status={combo.preview_status ?? "none"} />
-        <div className="t">{combo.name}</div>
-        {combo.department_names.length > 0 && <div className="d">{combo.department_names.join(" · ")}</div>}
-      </div>
-    </Link>
+        <div className="ward-hang-tag">
+          <StatusBadge status={combo.preview_status ?? "none"} />
+          <div className="t" title={combo.name}>{combo.name}</div>
+          {combo.department_names.length > 0 && <div className="d">{combo.department_names.join(" · ")}</div>}
+        </div>
+      </Link>
+    </div>
   );
 }
 
@@ -572,10 +577,17 @@ export default function UniformsPageClient() {
             </button>
           </div>
         ) : (
-          <div className="ward-gallery">
-            {looks.map((c, i) => (
-              <LookPlate key={c.id} combo={c} idx={i} onDelete={handleDeleteLook} onPreviewUpdate={handlePreviewUpdate} onAssign={openAssignLook} />
-            ))}
+          <div className="ward-rackwrap">
+            <div className="ward-rackhead">
+              <div className="eyebrow">{looks.length} hanging{filterDept !== "all" ? ` · ${departments.find((d) => d.id === filterDept)?.name ?? ""}` : ""}</div>
+              <div className="hint">Hover a look to pull it off the rail</div>
+            </div>
+            <div className="ward-rail" aria-hidden="true" />
+            <div className="ward-rack" role="list" aria-label="Looks on the rack">
+              {looks.map((c) => (
+                <LookHanger key={c.id} combo={c} onDelete={handleDeleteLook} onPreviewUpdate={handlePreviewUpdate} onAssign={openAssignLook} />
+              ))}
+            </div>
           </div>
         )
       ) : (
