@@ -1128,11 +1128,7 @@ export default function SchedulePageClient() {
           margin-top: 5px; line-height: 1.55;
         }
 
-        /* Following services */
-        .spc-strip-heading {
-          font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
-          color: var(--color-text-muted); font-weight: 700; margin: 0 0 10px;
-        }
+        /* Following services — unlabelled, they read as a continuation of the featured card */
         .spc-strip-item { border-top: 1px solid var(--color-border-subtle); }
         .spc-strip-row {
           display: flex; align-items: center; gap: 18px; padding: 20px 2px; flex-wrap: wrap;
@@ -1469,7 +1465,6 @@ export default function SchedulePageClient() {
             </section>
           )}
 
-          <h3 className="spc-strip-heading">Services after that</h3>
           {groupedByDate.filter((g) => g.id !== featured?.id).map((group) => {
             const isDeleting = group.ids.some((id) => deletingIds.has(id));
             const dressed = assignmentsByDepartment(group).length;
