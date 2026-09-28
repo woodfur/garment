@@ -41,12 +41,27 @@ function localDateStr(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function nextRegularServicesThroughEndOfSeptember(fromDate = new Date()) {
+/**
+ * How far ahead regular services are materialised. A rolling window rather than the
+ * whole calendar: every date this returns is auto-created as a real schedule row and
+ * gets a line in the coverage grid, so filling 2029 up front would mean ~345 rows and
+ * ~345 writes on one page load. The window rolls forward as time passes, so the
+ * schedule never runs dry; anything further out is a one-off special service.
+ */
+export const SERVICE_HORIZON_DAYS = 90;
+
+/** Hard stop for the regular Sunday/Wednesday calendar. */
+export const SERVICE_CALENDAR_END_YEAR = 2029;
+
+export function upcomingRegularServices(fromDate = new Date()) {
   const out = [];
   const today = new Date(fromDate);
   today.setHours(0, 0, 0, 0);
 
-  const end = new Date(today.getFullYear(), 8, 30);
+  const horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + SERVICE_HORIZON_DAYS);
+  const calendarEnd = new Date(SERVICE_CALENDAR_END_YEAR, 11, 31);
+  const end = horizon < calendarEnd ? horizon : calendarEnd;
   if (today > end) return out;
 
   for (const d = new Date(today); d <= end; d.setDate(d.getDate() + 1)) {
