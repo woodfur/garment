@@ -343,11 +343,25 @@ function localDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Mirrors upcomingRegularServices() in src/lib/flow-rules.mjs — keep the two in step.
+// (.mjs is outside tsconfig's include, so it cannot be imported here.)
+const SERVICE_HORIZON_DAYS = 90;
+const SERVICE_CALENDAR_END_YEAR = 2029;
+
+/**
+ * The regular Sunday/Wednesday services to auto-create. A rolling 90-day window that
+ * moves forward with today, hard-stopped at the end of 2029 — every date returned here
+ * becomes a real schedule row and a coverage-grid line, so materialising the whole
+ * calendar up front would be ~345 rows and ~345 writes on a single page load.
+ */
 function nextRegularServices(): { date: string; title: string }[] {
   const out: { date: string; title: string }[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const end = new Date(today.getFullYear(), 8, 30);
+  const horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + SERVICE_HORIZON_DAYS);
+  const calendarEnd = new Date(SERVICE_CALENDAR_END_YEAR, 11, 31);
+  const end = horizon < calendarEnd ? horizon : calendarEnd;
   if (today > end) return out;
   for (const d = new Date(today); d <= end; d.setDate(d.getDate() + 1)) {
     const day = d.getDay(); // 0 = Sunday, 3 = Wednesday

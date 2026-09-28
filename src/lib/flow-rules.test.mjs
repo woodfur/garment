@@ -5,7 +5,7 @@ import {
   CREATE_LOOK_MODES,
   filterAssignableCombinations,
   filterPiecesForLook,
-  nextRegularServicesThroughEndOfSeptember,
+  upcomingRegularServices,
 } from "./flow-rules.mjs";
 
 describe("flow rules", () => {
@@ -151,12 +151,32 @@ describe("flow rules", () => {
     );
   });
 
-  it("generates regular services through September 30", () => {
-    const services = nextRegularServicesThroughEndOfSeptember(new Date("2026-07-13T12:00:00Z"));
+  it("generates only Sundays and Wednesdays, across a year boundary", () => {
+    const services = upcomingRegularServices(new Date(2026, 10, 16, 12));
 
-    assert.equal(services.at(-1)?.date, "2026-09-30");
-    assert.equal(services.at(-1)?.title, "Wednesday Service");
-    assert.ok(services.some((service) => service.date === "2026-08-16"));
-    assert.ok(services.some((service) => service.date === "2026-09-27"));
+    assert.ok(services.length > 0);
+    for (const service of services) {
+      const day = new Date(`${service.date}T12:00:00`).getDay();
+      assert.ok(day === 0 || day === 3, `${service.date} is neither Sunday nor Wednesday`);
+      assert.equal(service.title, day === 0 ? "Sunday Service" : "Wednesday Service");
+    }
+    // The window rolls past the end of the year rather than stopping at December 31.
+    assert.ok(services.some((service) => service.date.startsWith("2027-")));
+  });
+
+  it("keeps rolling long after September — the old hard stop", () => {
+    const services = upcomingRegularServices(new Date(2027, 8, 29, 12));
+
+    assert.ok(services.length >= 20, `expected a full window, got ${services.length}`);
+    assert.ok(services.some((service) => service.date > "2027-09-30"));
+  });
+
+  it("stops at the end of 2029", () => {
+    const nearTheEnd = upcomingRegularServices(new Date(2029, 11, 1, 12));
+    assert.ok(nearTheEnd.length > 0);
+    assert.ok(nearTheEnd.every((service) => service.date <= "2029-12-31"));
+    assert.equal(nearTheEnd.at(-1)?.date, "2029-12-30");
+
+    assert.deepEqual(upcomingRegularServices(new Date(2030, 0, 2, 12)), []);
   });
 });
